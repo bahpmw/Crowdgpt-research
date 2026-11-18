@@ -4,6 +4,7 @@ Private backup of the local `Crowd-v1.5` working folder.
 
 ## Contents
 
+- `ROADMAP-v2.md`: the short v2 roadmap (draft).
 - `research/`: paper survey and lab experiments.
 - `archived/crowd-v1.5/`: the archived v1.5 client and coordinator code.
 - `archived/crowdgpt-v2/`: the first v2 scoping draft. Start at `00-GAMEPLAN.md`.

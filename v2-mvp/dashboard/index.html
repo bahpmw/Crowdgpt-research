@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrowdGPT v2 network</title>
+<style>
+  :root { --fg:#1b1f24; --muted:#4b5563; --bg:#ffffff; --panel:#f4f6f8; --line:#d0d7de;
+          --final:#11603a; --prov:#8a4b00; --bad:#a1171f; --live:#0b5cad; }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg);
+         background: var(--bg); margin: 0; }
+  header, main { padding: 0 1.25rem; }
+  header { border-bottom: 1px solid var(--line); }
+  h1 { font-size: 1.3rem; margin: .8rem 0 .2rem; }
+  h2 { font-size: 1.05rem; margin: 0 0 .5rem; }
+  .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); margin: 1rem 0; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .8rem 1rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem .8rem; margin: 0; }
+  dt { color: var(--muted); } dd { margin: 0; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  caption { text-align: left; color: var(--muted); padding-bottom: .3rem; }
+  th, td { border-bottom: 1px solid var(--line); padding: .25rem .4rem; text-align: left; vertical-align: top; }
+  th[scope=col] { background: #e8ecf0; }
+  .verified { border-left: 3px solid var(--final); }
+  .claimed { border-left: 3px dashed var(--muted); }
+  .state { font-weight: 600; }
+  .final { color: var(--final); } .provisional { color: var(--prov); } .live { color: var(--live); }
+  .stale, .registered { color: var(--muted); } .banned, .down { color: var(--bad); } .up { color: var(--final); }
+  code { font-size: .85rem; }
+  #events { max-height: 18rem; overflow: auto; margin: 0; padding-left: 1.1rem; font-size: .85rem; }
+  svg { width: 100%; height: 220px; background: #fff; border: 1px solid var(--line); }
+  button, select { font: inherit; padding: .2rem .6rem; }
+  :focus-visible { outline: 3px solid #0b5cad; outline-offset: 2px; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CrowdGPT v2 — live network</h1>
+  <p>Values marked <strong class="final">final</strong> are co-signed by a quorum of orchestrators;
+     <strong class="provisional">provisional</strong> have fewer signatures; <strong class="live">live</strong>
+     is the round in progress. Columns with a solid green edge are <em>verified</em> (recomputed from the
+     signed record); dashed columns are <em>self-reported</em> by clients and not checked.</p>
+  <p><button id="pause" type="button" aria-pressed="false">Pause updates</button>
+     <span id="conn" role="status">connecting…</span></p>
+</header>
+<main>
+  <div class="grid">
+    <section aria-labelledby="ov-h">
+      <h2 id="ov-h">Network overview</h2>
+      <dl id="overview"></dl>
+    </section>
+    <section aria-labelledby="orch-h">
+      <h2 id="orch-h">Orchestrators</h2>
+      <table><caption>Liveness as seen by this orchestrator</caption>
+        <thead><tr><th scope="col">Key</th><th scope="col">State</th><th scope="col">Head round</th><th scope="col">Recorded down</th></tr></thead>
+        <tbody id="orchs"></tbody></table>
+    </section>
+  </div>
+  <section aria-labelledby="loss-h">
+    <h2 id="loss-h">Held-out loss per round (verified)</h2>
+    <svg id="loss" role="img" aria-labelledby="loss-title loss-desc" viewBox="0 0 600 220" preserveAspectRatio="none">
+      <title id="loss-title">Held-out loss curve</title><desc id="loss-desc">No data yet</desc></svg>
+  </section>
+  <div class="grid">
+    <section aria-labelledby="c-h" class="scroll">
+      <h2 id="c-h">Contributors</h2>
+      <table><caption>Accepted/rejected/strikes come from the signed record; train loss and seconds are self-reported.</caption>
+        <thead><tr><th scope="col">Key</th><th scope="col">Module</th>
+          <th scope="col" class="verified">Accepted (final)</th><th scope="col" class="verified">Rejected</th>
+          <th scope="col" class="verified">Strikes</th><th scope="col" class="verified">Last status</th>
+          <th scope="col" class="claimed">Train loss</th><th scope="col" class="claimed">Train s</th>
+          <th scope="col">Last seen</th><th scope="col">State</th></tr></thead>
+        <tbody id="contribs"></tbody></table>
+    </section>
+    <section aria-labelledby="r-h" class="scroll">
+      <h2 id="r-h">Record tail</h2>
+      <table><caption>Newest entries last; signatures are counted against the quorum.</caption>
+        <thead><tr><th scope="col">#</th><th scope="col">Type</th><th scope="col">Round</th><th scope="col">Sigs</th><th scope="col">State</th><th scope="col">Summary</th></tr></thead>
+        <tbody id="tail"></tbody></table>
+    </section>
+  </div>
+  <section aria-labelledby="ev-h">
+    <h2 id="ev-h">Live events</h2>
+    <ol id="events" aria-live="polite" aria-relevant="additions"></ol>
+  </section>
+</main>
+<script>
+"use strict";
+let paused = false;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cell = (v, cls = "") => `<td class="${cls}">${esc(v)}</td>`;
+const ago = (t) => t ? `${Math.max(0, Math.round(Date.now() / 1000 - t))} s ago` : "—";
+
+function renderOverview(s) {
+  const r = s.round, c = s.chain;
+  const rows = [["Round (live)", `${r.round} — ${r.phase}`], ["Leader for round", r.leader],
+    ["Head recorded round", c.head_round], ["Entries", `${c.entries} (${c.final} final, ${c.provisional} provisional)`],
+    ["Quorum", `${c.quorum} of ${s.orchestrators.length}`], ["Model", `${s.hyper.preset}, K=${s.hyper.K}, H=${s.hyper.H}`],
+    ["Replay thresholds", `cos ≥ ${s.thresholds.cos_min}, ratio ${s.thresholds.ratio_lo}–${s.thresholds.ratio_hi}`],
+    ["This orchestrator", s.orchestrator]];
+  $("overview").innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  $("orchs").innerHTML = s.orchestrators.map((o) => `<tr>${cell(o.key + (o.self ? " (this)" : ""))}` +
+    `${cell(o.up ? "up" : "down", "state " + (o.up ? "up" : "down"))}${cell(o.round)}${cell(o.recorded_down ? "yes" : "no")}</tr>`).join("");
+}
+
+function renderLoss(points) {
+  const svg = $("loss"), W = 600, H = 220, P = 30;
+  if (!points.length) return;
+  const ys = points.map((p) => p.loss), lo = Math.min(...ys), hi = Math.max(...ys), span = (hi - lo) || 1;
+  const maxR = Math.max(1, ...points.map((p) => p.round));
+  const x = (r) => P + (W - 2 * P) * r / maxR, y = (v) => H - P - (H - 2 * P) * (v - lo) / span;
+  const path = points.map((p, i) => `${i ? "L" : "M"}${x(p.round).toFixed(1)},${y(p.loss).toFixed(1)}`).join(" ");
+  const dots = points.map((p) => `<circle cx="${x(p.round)}" cy="${y(p.loss)}" r="4" fill="${p.state === "final" ? "#11603a" : "#8a4b00"}"><title>round ${p.round}: ${p.loss} (${p.state}${p.rolled_back ? ", rolled back" : ""})</title></circle>`).join("");
+  svg.innerHTML = `<title id="loss-title">Held-out loss curve</title><desc id="loss-desc">Loss from ${ys[0]} at round 0 to ${ys[ys.length - 1]} at round ${points[points.length - 1].round}</desc>` +
+    `<text x="4" y="${P}" font-size="11">${hi.toFixed(3)}</text><text x="4" y="${H - P}" font-size="11">${lo.toFixed(3)}</text>` +
+    `<text x="${W - P}" y="${H - 8}" font-size="11" text-anchor="end">round ${maxR}</text>` +
+    `<path d="${path}" fill="none" stroke="#0b5cad" stroke-width="2"/>${dots}`;
+}
+
+function renderContribs(rows) {
+  $("contribs").innerHTML = rows.map((c) => `<tr>${cell(c.key)}${cell(c.live_module ?? c.module ?? "—")}` +
+    `${cell(`${c.accepted} (${c.accepted_final})`, "verified")}${cell(c.rejected, "verified")}${cell(c.strikes, "verified")}` +
+    `${cell(c.last_status ?? "—", "verified")}${cell(c.self_reported.train_loss?.toFixed?.(3) ?? "—", "claimed")}` +
+    `${cell(c.self_reported.train_seconds ?? "—", "claimed")}${cell(ago(c.last_seen))}${cell(c.state, "state " + c.state)}</tr>`).join("");
+}
+
+function renderTail(rows) {
+  $("tail").innerHTML = rows.map((e) => `<tr>${cell(e.n)}${cell(e.type)}${cell(e.round)}${cell(e.sigs)}` +
+    `${cell(e.state, "state " + e.state)}${cell(e.summary)}</tr>`).join("");
+}
+
+async function poll() {
+  if (!paused) {
+    try {
+      const s = await (await fetch("/v2/status")).json();
+      renderOverview(s); renderLoss(s.loss); renderContribs(s.contributors); renderTail(s.record_tail);
+    } catch (err) { $("conn").textContent = "status poll failed: " + err; }
+  }
+  setTimeout(poll, 2000);
+}
+
+function addEvent(ev) {
+  if (paused) return;
+  const li = document.createElement("li");
+  const { type, t, node, ...rest } = ev;
+  li.textContent = `${new Date(t * 1000).toLocaleTimeString()} ${type} ${JSON.stringify(rest)}`;
+  const list = $("events");
+  list.appendChild(li);
+  while (list.children.length > 200) list.removeChild(list.firstChild);
+  list.scrollTop = list.scrollHeight;
+}
+
+const es = new EventSource("/v2/events");
+es.onopen = () => { $("conn").textContent = "live (events connected)"; };
+es.onerror = () => { $("conn").textContent = "event stream reconnecting…"; };
+for (const type of ["round_open", "assigned", "commit", "upload", "audit_sample", "audit", "verdict",
+                    "round_final", "round_provisional", "entry_final", "rollback", "register",
+                    "orchestrator_down", "orchestrator_up"]) {
+  es.addEventListener(type, (m) => addEvent(JSON.parse(m.data)));
+}
+$("pause").addEventListener("click", (e) => {
+  paused = !paused;
+  e.currentTarget.textContent = paused ? "Resume updates" : "Pause updates";
+  e.currentTarget.setAttribute("aria-pressed", String(paused));
+});
+poll();
+</script>
+</body>
+</html>

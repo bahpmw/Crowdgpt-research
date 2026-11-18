@@ -1,0 +1,16 @@
+{
+  "name": "attacks",
+  "orchestrators": 3,
+  "hyper": {"preset": "10m", "seq": 128, "H": 30, "batch": 8, "K": 2},
+  "p_audit": 0.5,
+  "calib_devices": ["mps"],
+  "timing": {"open": 4.0, "commit": 120.0, "upload": 30.0, "audit": 150.0, "propose_timeout": 8.0, "final_timeout": 15.0},
+  "rounds": 8,
+  "clients": [
+    {"behaviour": "honest", "count": 2},
+    {"behaviour": "flip"}, {"behaviour": "scale"}, {"behaviour": "noise"}, {"behaviour": "zero"},
+    {"behaviour": "copy"}, {"behaviour": "wrongdata"}, {"behaviour": "stale"}
+  ],
+  "base_port": 8711,
+  "max_minutes": 20
+}

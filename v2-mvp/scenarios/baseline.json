@@ -1,0 +1,12 @@
+{
+  "name": "baseline",
+  "orchestrators": 3,
+  "hyper": {"preset": "10m", "seq": 128, "H": 30, "batch": 8, "K": 2},
+  "p_audit": 0.5,
+  "calib_devices": ["mps"],
+  "timing": {"open": 4.0, "commit": 120.0, "upload": 30.0, "audit": 150.0, "propose_timeout": 8.0, "final_timeout": 15.0},
+  "rounds": 10,
+  "clients": [{"behaviour": "honest", "count": 7}, {"behaviour": "honest", "device": "mps"}],
+  "base_port": 8701,
+  "max_minutes": 20
+}

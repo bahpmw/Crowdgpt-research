@@ -1,0 +1,1839 @@
+Preprint.
+LACCO: LOCAL ACCUMULATION WITH COMPUTA-
+TION–COMMUNICATION OVERLAP
+Daniele Kopyshevskiy1 Benjamin Thérien2,3 Nicolas Pinto4,5 Edouard Oyallon1,6
+1Sorbonne Université, ISIR 2MILA 3Université de Montréal
+4Cygni Labs 5Keytsugi 6CNRS
+daniele.kopyshevskiy@sorbonne-universite.fr
+ABSTRACT
+Training language models across low-bandwidth networks requires reducing syn-
+chronization overhead. Local optimization methods such as DiLoCo communicate
+only after several local steps, but outer gradient averaging and the outer update
+remain on the critical path. Existing computation–communication overlap methods
+avoid this stall through delayed or replica-local updates, which can degrade conver-
+gence or cause replicas to drift. We propose LACCO (Local Accumulation with
+Computation–Communication Overlap), a two-stage algorithm that overlaps global
+communication with local computation while applying globally aggregated updates
+shared by every replica, without introducing staleness in the outer update. We
+establish convergence guarantees for smooth non-convex objectives. Experiments
+on language-model pre-training with FineWeb show that LACCO consistently out-
+performs communication-overlapped baselines such as Eager and Delayed DiLoCo.
+These gains remain robust as model size scales up to 0.5B parameters and across
+a range of communication intervals and numbers of replicas up to 16 workers,
+while incurring only negligible—or fully overlappable—computational or memory
+overhead, which demonstrates the strength of LACCO.
+1 INTRODUCTION
+Training large language models (LLMs) at scale requires distributing computation across hundreds or
+thousands of accelerators. This is typically achieved through multi-dimensional parallelism (Shoeybi
+et al., 2019; Narayanan et al., 2021), which balances computation, communication, and memory
+requirements (Narayanan et al., 2021; Rajbhandari et al., 2020). For example, in distributed data-
+parallel training (DDP), multiple workers process different mini-batches concurrently and periodically
+synchronize their updates. At large scale, however, this synchronization can become a major bottle-
+neck (Li et al., 2020; Rajbhandari et al., 2020), as communicating gradients or parameters across
+workers is costly, particularly when training spans multiple clusters or geographically distributed data
+centers (Douillard et al., 2023; Diskin et al., 2021). A broad range of techniques has been developed
+to reduce this communication overhead. Gradient compression methods, such as quantization (Al-
+istarh et al., 2017) and sparsification (Aji & Heafield, 2017; Ahmed & Oyallon, 2026), reduce the
+volume of data exchanged at each synchronization step. Beyond standard compression, zeroth-order
+optimization methods can reduce communication costs by transmitting scalar directional-derivative
+estimates and reconstructing perturbation directions from shared random seeds (Qin et al., 2024;
+Li et al., 2025; Feng et al., 2024), while LoRA-based methods communicate compact low-rank
+factors (Hu et al., 2022; Wang et al., 2024; Babakniya et al., 2023). An alternative and complementary
+approach is to communicate less frequently: Local SGD (Stich, 2019; Lin et al., 2020) follows this
+principle by allowing replicas to perform several local optimization steps before synchronizing their
+models. Besides reducing communication frequency, this approach can make distributed training
+more practical in heterogeneous or bandwidth-constrained environments (McMahan et al., 2017;
+Douillard et al., 2023; Cagnasso et al., 2026).
+Yet, reducing the frequency of synchronization does not remove communication from the critical
+path. In conventional training, workers still remain idle while waiting for a global communication
+1
+arXiv:2611.17991v1  [cs.AI]  13 Nov 2026
+Preprint.
+round to complete (Dean et al., 2012; Li et al., 2020). Modern distributed training systems partially
+mitigate this by overlapping communication with computation, transmitting each parameter or
+gradient shard (Rajbhandari et al., 2020; Douillard et al., 2025) as soon as it becomes available (Li
+et al., 2020; PyTorch Team, 2020). By exploiting this natural staggering, these approaches reduce
+synchronization stalls without altering the underlying optimization. Overlapping communication in
+Local SGD (Stich, 2019) raises a separate challenge: a communication round spans several local
+steps, during which local parameters keep evolving, so the communicated update may be stale by
+the time it is applied (Liu et al., 2024b; Kale et al., 2025). Streaming DiLoCo (Douillard et al.,
+2025), for instance, staggers updates across parameter fragments, but merges each averaged update
+into local parameters that have already advanced, which in practice limits the overlap to a few
+steps. More generally, naively applying delayed updates degrades convergence (Kale et al., 2025),
+while compensating for staleness generally requires additional synchronization (Kale et al., 2025),
+memory (Ren et al., 2021), or computation (Zheng et al., 2017). In particular, methods designed
+primarily to overlap optimizer computation seek to mitigate the interaction between delayed global
+updates and multiple intervening local steps, rather than eliminating staleness altogether.
+In this work, we pursue this latter direction by combining Local SGD (Stich, 2019) with a computation–
+communication overlap mechanism inspired by Nabli et al. (2025). We introduce LACCO (Local
+Accumulation with Computation–Communication Overlap), an algorithm that overlaps global com-
+munication with local optimization without introducing parameter staleness. Existing read–write
+locking approaches execute communication and computation on separate streams and therefore re-
+quire two buffers to maintain distinct parameter states (Nabli et al., 2025; Ren et al., 2021). Standard
+methods (Ren et al., 2021) manage these buffers independently, effectively decoupling communica-
+tion from local computation, yet introducing staleness. In contrast, the key idea behind LACCO is
+to swap the communication and local-computation buffers, i.e. two parameter states, between two
+successive communication stages, while allowing each replica to make local progress. This design
+has the potential to hide communication latency behind computation while preserving a formulation
+that enables removal of staleness, and thereby good accuracy as well as simple convergence analysis.
+Our main contributions are as follows: (a) Replica consistency and no staleness. We propose
+LACCO, an algorithm that fully overlaps the outer step with local computation. Thanks to our novel
+two-stage mechanism for pseudo-gradients, replicas remain consistent, without staleness from outer
+updates. (b) Theoretical convergence analysis. We provide a theoretical convergence analysis for
+smooth non-convex objectives in the Local SGD setting. (c) Consistent scaling. Across models up
+to 0.5B parameters, communication intervals, replica counts, and matched compute budgets, LACCO
+achieves the lowest evaluation loss among overlapping methods. It is the first method to fully overlap
+the outer step with local inner steps while remaining replica-consistent and staleness-free, improving
+significantly over DiLoCo variants designed for communication–computation overlap, while incurring
+a limited overhead. Our source code can be found at https://github.com/kopyshevskiy/lacco.
+2 RELATED WORK
+Communication-Efficient Distributed Training. The standard approach to training LLMs is
+DDP (Li et al., 2020), in which each worker maintains a full copy of the model, computes gradients
+independently, and synchronizes them at every iteration, leading to communication overhead. One
+line of work mitigates this overhead by reducing the amount of information exchanged at each
+training step. Examples include compression (Seide et al., 2014; Lin et al., 2018; Janson et al., 2026;
+Team et al., 2026), quantization (Alistarh et al., 2017; Bernstein et al., 2018), sparsification (Aji
+& Heafield, 2017; Wangni et al., 2018), low-rank updates (Hu et al., 2022; Wang et al., 2024;
+Babakniya et al., 2023), zeroth-order optimization using shared random seeds (Qin et al., 2024;
+Li et al., 2025; Feng et al., 2024), and decentralized synchronous (Koloskova et al., 2020) and
+asynchronous (Nabli & Oyallon, 2023) methods that communicate only with a subset of neighboring
+replicas. These techniques can significantly reduce bandwidth requirements, but they modify the
+underlying optimization or communication procedure and may introduce additional variance. Our
+method is orthogonal to such approaches: it requires no modification to their underlying mechanisms
+and can be combined with them to further reduce communication overhead.
+Local updates. A complementary line of work, on which we build, reduces communication over-
+head by synchronizing less frequently (McMahan et al., 2017). In Local SGD (Stich, 2019), replicas
+2
+Preprint.
+perform multiple local optimization steps before averaging their model parameters. FedOpt (Reddi
+et al., 2021) generalizes this procedure through a bilevel optimization perspective: model averaging
+is interpreted as an outer server update, and the negative average displacement of the local models is
+treated as an outer gradient, or “pseudo-gradient”. More recently, DiLoCo (Douillard et al., 2023;
+Belilovsky et al., 2026) adapted this framework to LLM pre-training for low-bandwidth networks.
+It devotes significant design effort to the outer update, and in particular the choice of Nesterov
+SGD (Nesterov, 1983; Sutskever et al., 2013) and its hyperparameters, yielding stronger empirical
+convergence than vanilla Local SGD. Nevertheless, while these methods reduce communication
+frequency, replicas must wait for the outer gradients to be aggregated and the outer update to be
+applied before beginning the next sequence of local steps. Our method extends DiLoCo by fully
+overlapping this outer iteration with the subsequent local computation, thereby hiding communication
+latency without introducing staleness.
+Asynchronous Training. One way to hide communication latency is asynchronous training, which
+removes global synchronization entirely, and thus the straggler effect (Dean et al., 2012; Lian et al.,
+2015; Nabli et al., 2023). In parameter-server architectures (Agarwal & Duchi, 2011; Zhang et al.,
+2013; Mishchenko et al., 2022), each replica updates the global model on the server as soon as it
+completes a single step. However, this introduces gradient staleness: gradients computed on an older
+version of the model are applied to a model that has since been updated by other workers. As a
+consequence, extensive research has addressed this via delay compensation (Zheng et al., 2017),
+polynomial staleness decay (Xie et al., 2019), delay-dependent learning rates (Barkai et al., 2019),
+and weight-space lookahead correction (Hakimi et al., 2019). Recently, Liu et al. (2024b) extended
+asynchrony to the DiLoCo framework through delayed Nesterov updates and dynamic local updates,
+showing that some existing asynchronous approaches (Zheng et al., 2017; Xie et al., 2019) transfer
+poorly to this setting. In a similar vein, Ajanthan et al. (2025) alleviate staleness via a lookahead
+delay correction mechanism that extrapolates in the negative direction of momentum. All these
+methods apply delayed updates and then correct for them; in contrast, our two-stage mechanism never
+applies an outer gradient from a previous outer iteration, and thus avoids staleness by design. Beyond
+staleness, Decoupled DiLoCo (Decoupled DiLoCo Team, 2026) uses asynchrony for fault tolerance,
+through quorum-based fragment aggregation that relaxes replica consistency to tolerate stragglers
+and failures. Our method does not address stragglers or failures, which we leave for future work:
+merging our framework with asynchronous methods to handle network fluctuations and stragglers is
+entirely possible, with no fundamental restrictions in doing so, although we consider it beyond the
+scope of this work.
+Table 1: Comparison of outer computation–communication overlap methods among Local SGD
+methods. Full outer overlap denotes overlapping a complete outer communication round with a
+local phase. Replica consistency means that replicas share identical outer model parameters after
+each outer update; No “local” sync means that the next outer update does not require outer gradients
+from the ongoing local phase.
+Method Comm
+quantity
+Full outer
+overlap
+Replica
+consistency
+No “local”
+sync
+Staleness
+free
+Convergence
+guarantees
+Overlap-Local SGD Parameters ✗ ✓ ✗ ✗ ✓
+CO2 Parameters ✓ ✓ ✗ ✗ ✓
+DiLoCo Outer grads ✗ ✓ ✓ ✓ ✓
+Streaming DiLoCo Outer grads ✗ ✗ ✗ ✗ ?
+Delayed DiLoCo Outer grads ✓ ✗ ✓ ✗ ?
+Eager DiLoCo Outer grads ✓ ✗ ✗ ✗ ?
+LACCO Outer grads ✓ ✓ ✓ ✓ ✓
+Overlapping Communication and Computation. We do not discuss the part of the literature
+that focuses on overlapping communication and computation across stages associated with other
+forms of parallelism, such as pipeline parallelism (Liu et al., 2024a; Rivaud et al., 2025) or tensor
+parallelism (Zhang et al., 2025; Singh et al., 2025). Instead, we restrict our focus to DDP. Unlike
+3
+Preprint.
+asynchronous methods, computation–communication overlap methods preserve an explicit outer-step
+structure: replicas perform local steps while communication is in flight and, once it completes, all
+receive the same update before proceeding. Among them, an early framework is Overlap-Local
+SGD (Wang et al., 2020), where replicas perform local steps and are then pulled toward an anchor
+model, computed as the average of the replicas delayed by one communication round. Building on the
+same idea, CO2 (Sun et al., 2024) updates the global model with averaged parameters delayed by one
+outer iteration, but mitigates the resulting staleness through momentum clipping and a staleness-gap
+penalty. Crucially, both methods introduce delays, which hurts convergence. To retain DiLoCo’s
+outer momentum, Streaming DiLoCo (Douillard et al., 2025) overlaps outer gradient averaging of
+parameter subsets with subsequent local steps, and its authors report negligible degradation up to
+five steps. Similarly, Maziane et al. (2026) relies on sparse model averaging with delay-corrected
+synchronization and is evaluated exclusively on non-LLM tasks. By contrast, our method widens the
+overlap to all local steps and does not introduce staleness. A simple way to achieve a full overlap
+with all the local steps, discussed by Kale et al. (2025) as Delayed DiLoCo, is to use outer gradients
+delayed by one outer iteration. Nonetheless, applying only this delayed outer gradient comes at the
+cost of worse convergence. To address this, Eager DiLoCo (Kale et al., 2025) mixes each replica’s
+fresh local outer gradient with the averaged outer gradient from the previous outer iteration. While
+this improves training convergence, relying on each replica’s own local outer gradient can introduce
+replica drift and requires a “local” synchronization step, as replicas must wait for the inner steps to
+finish before computing the outer iteration. Our method is compatible with this correction, but on
+its own it is more robust than Eager DiLoCo as the number of replicas increases and removes the
+need for this “local” synchronization step. Moreover, Factored Gossip DiLoCo (Koneputugodage
+et al., 2026) similarly overlaps communication, but by relaxing exact synchronization through a
+mixing/gossip step, a setting we do not address. Table 1 summarizes the differences between the
+above methods. Finally, our work builds on Nabli et al. (2025), but differs in two important respects:
+ACCO can be viewed as operating in the H = 1 regime, whereas our setting considers multiple local
+optimization steps. As a result, the standard ACCO formulation cannot directly rely on an inner–outer
+loop decomposition. Second, optimizer offloading is not feasible in our setting because the interval
+between consecutive gradient steps is too short to effectively hide the associated overhead. These
+differences require a substantially different treatment and constitute a significant extension beyond
+the original ACCO setting.
+3 METHOD
+3.1 LOCAL SGD SETUP
+We consider the minimization of a differentiable objective f : Rd → R of the form
+min
+θ∈Rd
+f (θ), f (θ) = Eξ∼D [F (θ; ξ)] , (1)
+where θ ∈ Rd denotes the global model, ξ ∼ D is a random sample from a dataset D, and F (θ; ξ) is
+the sample loss. We consider a distributed, data-homogeneous setting with K replicas, each sampling
+data from the same distribution D. Let θt ∈ Rd denote the global model at outer iteration t, and
+θi t,h ∈ Rd denote the local model of replica i after h local optimization steps at outer iteration t.
+Initially, we assume that θi 0,0 = θ0 for all i = 1, . . . , K. Within each outer iteration t, replicas
+perform H local steps using an inner optimizer, denoted by InnerOpt, typically AdamW (Loshchilov
+& Hutter, 2019). We denote these updates, for ξi t,h ∼ D independently sampled for each worker,
+θi t,h+1 = InnerOpt   θi t,h, ∇F   θi t,h; ξi t,h  , h = 0, . . . , H − 1, (2)
+where the initialization θi t,0 for t > 0 depends on the specific method under consideration.
+3.2 BACKGROUND
+DiLoCo. At each outer iteration t, replica i initializes θi t,0 = θt and performs H inner steps. It then
+computes its outer gradient gi t, which is averaged across replicas to obtain gt. The averaged gradient
+is applied to θt using an outer optimizer, denoted by OuterOpt. The resulting update is
+gi t = θt − θi t,H ,
+θt+1 = OuterOpt(θt, gt), with gt = 1 K
+KX
+i=1
+gi t. (3)
+4
+Preprint.
+Synchronizing the outer gradient gt forces all replicas to be idle before updating θt+1 and starting
+the next H inner steps. A simple way to avoid this waiting is to use the outer gradient gt−1 from the
+previous outer iteration, which we discuss below.
+Delayed DiLoCo. Delayed DiLoCo (Kale et al., 2025) delays outer updates by one iteration to
+overlap communication with computation. Each replica initializes θi t,0 = θi t (with equal θi 0 across
+replicas), performs the inner steps, and asynchronously communicates its local outer gradient. At
+t = 0, replicas proceed directly to the next inner steps, while for t > 0, they first apply the previously
+communicated gradient gt−1 to θi t,0. The resulting update is
+
+
+
+gi t = θi t − θi t,H ,
+θi t+1 =
+θi t,H , t = 0,
+OuterOpt(θi t, gt−1), t > 0,
+with gt−1 = 1 K
+KX
+i=1
+gi t−1. (4)
+This allows the communication of gi t to overlap with the next local steps, thereby hiding com-
+munication latency. However, applying the one-step-delayed outer gradient gt−1 to the current
+model introduces staleness, which can degrade convergence in both local and non-local training
+settings (Kale et al., 2025; Nabli et al., 2025; Nabli & Oyallon, 2025), as we will also see in Section 4.
+Eager DiLoCo. To correct the staleness introduced by gt−1, Eager DiLoCo (Kale et al., 2025)
+replaces each replica’s stale contribution with its fresh outer gradient gi t, available at the end of the H
+inner steps on worker i. The resulting update is:
+
+
+
+gi t = θi t − θi t,H ,
+θi t+1 =
+θi t,H , t = 0,
+OuterOpt(θi t, ˆgi t), t > 0,
+with gt−1 = 1 K
+KX
+i=1
+gi t−1, (5)
+where for t > 0, we define
+ˆgi t = gt−1 + 1 K   gi t − gi t−1  = 1 K   gi t + X j̸=i gj t−1). (6)
+Because the correction depends on the replica, replicas apply different outer updates and can drift
+apart over time. Our method, by contrast, preserves consistency across replicas and does not require
+the computation of local steps to be finished before applying the outer step.
+3.3 LACCO: LOCAL ACCUMULATION WITH COMPUTATION–COMMUNICATION OVERLAP
+Following Nabli et al. (2025), and in contrast to DiLoCo variants, we maintain a pair of parameters
+(θt, ˜θt), for both communication and computation. At each time step t, (i) the roles of the two
+parameters are swapped, after which (ii) a lookahead stage and (iii) a main stage are performed, each
+comprising H inner steps. This yields the update sequence (θt, ˜θt) → (θt, ˜θt+1) → (θt+1, ˜θt+1). As
+in DiLoCo (Douillard et al., 2023), LACCO communicates an outer gradient every H inner steps,
+preserving the number of samples processed between communication rounds. We adjust the total
+number of steps accordingly so that the overall number of communications (and thus computations)
+remains unchanged. Figure 1 highlights the resulting difference with DiLoCo. Accordingly, each
+replica maintains two inner optimizers, InnerOptM and InnerOptL, and two outer optimizers,
+OuterOptM and OuterOptL, associated with θt and ˜θt, respectively.
+Lookahead stage. Each replica i initializes θi t,0 = θt and performs H inner steps, defined as
+θi t,h+1 = InnerOptM   θi t,h, ∇F   θi t,h; ξi t,h  , h = 0, . . . , H − 1, (7)
+where ξi t,h ∼ D. It then computes its local outer gradient gi t and communicates it asynchronously to
+obtain gt. During these steps, communication of ˜gt, computed from ˜θt, completes. We apply this
+gradient to θt to construct the ˜θt+1. Formally, the resulting update is thus
+gi t = θt − θi t,H ,
+˜θt+1 = OuterOptL(θt, ˜gt), with gt = 1 K
+KX
+i=1
+gi t. (8)
+5
+Preprint.
+LACCO
+DiLoCo
+(θ0 , ̃θ0 ) (θ0 , ̃θ1 ) (θ1 , ̃θ1 ) (θ1 , ̃θ2 ) (θ2 , ̃θ2 )
+θ DiLoCo 0 θ DiLoCo 1 θ DiLoCo 2 θ DiLoCo 3 θ DiLoCo 4
+Lookahead stage
+H inner steps
+H inner steps
+Main stage
+H inner steps
+H inner steps
+Lookahead stage
+H inner steps
+H inner steps
+Main stage
+H inner steps
+H inner steps
+Communication launch Main update Lookahead update
+0 H(B/K) 2H(B/K) 3H(B/K) 4H(B/K)
+Samples processed per replica
+Figure 1: Timeline of outer updates in LACCO and DiLoCo. Vertical marks indicate communica-
+tion launches of outer gradients. B is the global batch size and K is the number of replicas.
+Main stage. Each replica i initializes ˜θi t+1,0 = ˜θt+1 and performs H inner steps, defined as
+˜θi t+1,h+1 = InnerOptL
+
+˜θi t+1,h, ∇F  ˜θi t+1,h; ˜ξi t+1,h  , h = 0, . . . , H − 1, (9)
+where ˜ξi t+1,h ∼ D. It then computes its local outer gradient ˜gi t+1 and launches its asynchronous
+communication. Once gt is available, we mix it with ˜gt to update the θt+1, so that
+˜gi t+1 = ˜θt+1 − ˜θi t+1,H ,
+θt+1 = OuterOptM(θt, 1 2 (gt + ˜gt)), with ˜gt+1 = 1 K
+KX
+i=1
+˜gi t+1. (10)
+Implementation. Each stage launches asynchronous communication of the outer gradient, overlap-
+ping it with local computation in the subsequent stage, as illustrated in Figure 2. Each stage maintains
+separate outer and inner optimizer states; for the inner optimizers, we found it beneficial to average
+their momentum states at the end of each iteration (see Appendix E.2). While maintaining two sets
+of parameters and optimizer states introduces additional memory overhead relative to DiLoCo and
+its variants, only one inner trajectory is active at a time. The inactive AdamW state can therefore be
+offloaded to CPU memory and prefetched before the next stage. The outer Nesterov momentum is
+similarly well suited for offloading, as it is accessed only during outer updates rather than at every
+local step. This allows most of the additional memory cost to be shifted from GPU to CPU memory,
+with only a small timing overhead, quantified in Section 4.1. Complete pseudocode is provided in
+Appendix 1.
+Outer Opt.
+Inner Opt.
+Outer Opt.
+Inner Opt.
+Outer Opt.
+Inner Opt.
+Outer Opt.
+Inner Opt.
+Outer streamInner stream
+⋯
+⋯
+⋯
+⋯
+⋯
+⋯
+⋯
+gt − 1 θt
+̃θ1 t, 0 ̃θ1 t, H
+̃θ2 t, 0 ̃θ2 t, H
+̃θ3 t, 0 ̃θ3 t, H
+̃θ4 t, 0 ̃θ4 t, H
+̃gt ̃θt + 1
+θ 1 t, 0 θ 1 t, H
+θ 2 t, 0 θ 2 t, H
+θ 3 t, 0 θ 3 t, H
+θ 4 t, 0 θ 4 t, H
+gt θt + 1
+̃θ1 t + 1, 0 ̃θ1 t + 1, H
+̃θ2 t + 1, 0 ̃θ2 t + 1, H
+̃θ3 t + 1, 0 ̃θ3 t + 1, H
+̃θ4 t + 1, 0 ̃θ4 t + 1, H
+̃gt + 1 ̃θt + 2
+θ 1 t + 1, 0 θ 1 t + 1, H
+θ 2 t + 1, 0 θ 2 t + 1, H
+θ 3 t + 1, 0 θ 3 t + 1, H
+θ 4 t + 1, 0 θ 4 t + 1, H
+Figure 2: Overview of LACCO. Each outer iteration alternates a lookahead stage (red) and a main
+stage (blue), each consisting of H inner steps on K = 4 replicas. While one stage performs its local
+steps, communication of the previous stage’s outer gradient is overlapped with this computation.
+3.4 CONVERGENCE ANALYSIS
+In this section, for the sake of simplicity and without losing in generality, we establish the convergence
+of LACCO when both InnerOptM, InnerOptL and OuterOptM, OuterOptL are standard SGD.
+Let K denote the number of replicas. For each h = 0, . . . , H − 1 of iteration t, each replica i draws
+6
+Preprint.
+samples ξi t,h, ˜ξi t,h ∼ D and performs the following local SGD updates for β > 0
+θi t,0 = θt, θi t,h+1 = θi t,h − β H ∇F (θi t,h; ξi t,h),
+˜θi t,0 = ˜θt, ˜θi t,h+1 = ˜θi t,h − β H ∇F (˜θi t,h; ˜ξi t,h), h = 0, . . . , H − 1. (11)
+Let η denote the outer learning rate. Then, the pair ˜θt, θt is updated as
+(i)
+
+
+
+˜gi t = ˜θt − ˜θi t,H ,
+˜gt = 1 K
+KX
+i=1
+˜gi t,
+˜θt+1 = θt − η˜gt,
+(ii)
+
+
+
+gi t = θt − θi t,H ,
+gt = 1 K
+KX
+i=1
+gi t,
+θt+1 = θt − η 2 (gt + ˜gt).
+(12)
+We make the following assumptions.
+Assumption 1. The objective f : Rd → R is bounded below by f ⋆ and L-smooth, namely f ⋆ :=
+inf θ∈Rd f (θ) > −∞ and ∥∇f (θ) − ∇f (θ′)∥ ≤ L∥θ − θ′∥ for all θ, θ′ ∈ Rd.
+Assumption 2. Let Ft denote the filtration generated by all randomness preceding iteration t.
+Conditionally on Ft, the local sample sequences (ξi t,0, . . . , ξi t,H−1, ˜ξi t,0, . . . , ˜ξi t,H−1), i = 1, . . . , K,
+are i.i.d. accross replicas.
+Assumption 3. Let Ft,h be defined as in Assumption 2. The stochastic gradients satisfy
+E[∇F (θi t,h; ξt) | Ft,h] = ∇f (θi t,h) and E[∥∇F (θi t,h; ξt) − ∇f (θi t,h)∥2 | Ft,h] ≤ σ2.
+Altogether, using standard Local SGD lemmas proved in Appendix C, we can prove:
+Theorem 1. Suppose Assumptions 1, 2 and 3 hold. Let H ≥ 1 be the number of local SGD steps
+performed by K replicas. Let β, η > 0 be as in equation 11 and equation 12. Assume that
+0 < βL ≤ 1 30 , η = 30. (13)
+If θ0 = ˜θ0, then, for every T ≥ 1, we have
+1
+T
+T −1X
+t=0
+E
+
+∥∇f (θt)∥2 ≤ 4(f (θ0) − f ⋆) 15βT + 824βLσ2 H + 18360βLσ2 KH . (14)
+The key idea underlying the proof is that the following function serves as a Lyapunov function for
+our dynamics adapted to Local SGD, by choosing,
+Vt = f (θt) − f ⋆ + ηβL   f (˜θt) − f ⋆ + 16L∥θt − ˜θt∥2 ≥ 0. (15)
+4 EXPERIMENTS
+Our experiments use Llama 3-style (Dubey et al., 2024) decoder-only Transformers (Vaswani et al.,
+2017) with 134M, 325M and 500M parameters. We use the Llama 2 (7B) tokenizer (Touvron et al.,
+2023) with a vocabulary size of 32,000 and a sequence length of 2,048 tokens. Following standard
+practice (Hoffmann et al., 2022), each model is trained on a token budget equal to 20× its parameter
+count. We train on FineWeb (Penedo et al., 2024) and validate on a disjoint held-out split of 65.5M
+tokens. For methods where replicas are not synchronized, we average them before validation, while
+for LACCO we validate on θt (see Appendix E.1). Moreover, we perform zero-shot downstream
+tasks on classic benchmarks. Whereas Ajanthan et al. (2026) use K = 2 replicas, we use K ≥ 4
+replicas with a global batch size of 64 for 134M and 325M models and 128 for the 500M model.
+Architectural details, hyperparameter choices, and implementation details, all built on TorchFT (Meta
+PyTorch, 2026), are provided in Appendices B.1, B.2, and B.3, respectively. We include DDP and
+DiLoCo as synchronous references and overlapping baselines use the same amount of computation
+and communication.
+7
+Preprint.
+4.1 MAIN RESULTS
+LACCO evaluation on 134M model size with K = 4 and H = 30. Table 2 compares LACCO
+with both synchronous baselines and methods that overlap communication with local computa-
+tion. Thanks to its two-stage mechanism, LACCO achieves the lowest evaluation loss among
+communication-overlapping methods, and furthermore, LACCO remains within 1.77% of DDP and
+0.91% of DiLoCo. It also outperforms the overlapping baselines on HellaSwag and PIQA, and is
+close on ARC-Easy. While CPU-GPU transfers can be beneficial, our primary target setting is a
+tightly interconnected GPU cluster, where high-bandwidth communication enables the system to
+operate effectively as a single, unified computing platform. We however discuss below timing in a
+setting where this might not be the case.
+Table 2: 134M evaluation, K = 4 and H = 30. Comparison of potentially overlapping baselines.
+Method Overlap Eval loss ↓ HellaSwag ↑ PIQA ↑ ARC-Easy ↑
+DDP ✗ 2.936 28.76 59.79 38.80
+DiLoCo ✗ 2.961 29.06 60.50 36.91
+LACCO ✓ 2.988 28.87 61.10 37.04
+Eager DiLoCo ✓ 3.020 28.77 59.74 37.50
+Delayed DiLoCo ✓ 3.117 27.81 58.98 35.98
+0.0 0.5 1.0 1.5 2.0 2.5
+Tokens (Billions)
+2.5
+3.0
+3.5
+4.0
+4.5
+5.0
+5.5
+6.0
+6.5
+7.0
+Training Loss
+2.55 2.60 2.65
+2.90
+2.95
+3.00
+3.05
+3.10
+3.15
+DDP
+DiLoCo
+Delayed DiLoCo
+Eager DiLoCo
+LACCO
+(a) Measured loss versus tokens.
+0.0 2.5 5.0 7.5 10.0 12.5 15.0 17.5
+Simulated wall-clock time (minutes)
+2.5
+3.0
+3.5
+4.0
+4.5
+5.0
+5.5
+6.0
+6.5
+7.0
+Training Loss
+DiLoCo
+Delayed DiLoCo
+Eager DiLoCo
+LACCO (b) OuterOpt state on GPU.
+0 5 10 15 20
+Simulated wall-clock time (minutes)
+2.5
+3.0
+3.5
+4.0
+4.5
+5.0
+5.5
+6.0
+6.5
+7.0
+Training Loss
+DiLoCo
+Delayed DiLoCo
+Eager DiLoCo
+LACCO (c) OuterOpt state offloaded.
+Figure 3: Training loss versus tokens and simulated wall-clock time. (a) Measured loss ver-
+sus tokens. (b)–(c) The same losses against simulated time (H100, 50% MFU, bnet = 10 GB/s,
+bCPU/GPU = 3 GB/s), with the OuterOpt state kept on GPU (b) or offloaded to CPU (c).
+Simulated wall-clock time. Figure 3 reports training loss against tokens and simulated wall-clock
+time using the timing model detailed in Appendix D. We assume a pessimistic inter-replica bandwidth
+of bnet = 10 GB/s and CPU–GPU bandwidth of bCPU/GPU = 3 GB/s. Let Tinner, Tcomm, and
+Touter denote the time spent on local computation, outer-gradient communication, and the outer
+update, respectively. Without overlap, the time per round is Tserial = Tinner + Tcomm + Touter. If
+communication is overlapped with local computation but the outer update remains serialized,
+Tpartial = max{Tinner, Tcomm} + Touter.
+If the complete outer path is overlapped with local computation,
+Toverlap = max{Tinner, Tcomm + Touter}.
+Hence, communication and outer-update costs are fully hidden whenever Tinner ≥ Tcomm + Touter.
+For the 134M model with K = 4, H = 30, and 131,072 tokens per inner step, we consider an H100
+(details in Appendix D). This gives Tinner ≃ 1.58 s, and Tcomm ≃ 0.08 s. For LACCO, the additional
+optimizer-state transfers amount to an estimated Touter ≃ 0.89 s, whereas it is Touter ≃ 0.36 s for
+the other methods. The complete outer path is therefore hidden by the local computation at H = 30:
+under these assumptions, full overlap requires only H ≥ 19, as detailed in Appendix D. This threshold
+is independent of the parameter count P under our simplified model: both the local-computation
+cost and the communicated/offloaded volumes scale linearly with P . This cancellation assumes fixed
+MFU and effective bandwidths and neglects the comparatively small optimizer kernel time. All
+model computation is assumed to execute on the GPU.
+8
+Preprint.
+Table 3: Measured wall-clock breakdown and end-to-end speedup with K = 4 workers and H = 30
+on the 0.5B model. Tstep denotes the time per inner step, Tinner = HTstep the total local-computation
+time, and Tround the measured time per communication round.
+Bandwidth Method Tstep (s) Tinner (s) Tcomm (s) Touter (s) Tround (s) Speedup
+0.5 Gbps
+DiLoCo 1.72 51.6 49.4 0.3 101.17 1.00×
+LACCO, CPU offload 1.72 51.6 49.4 0.6 54.05 1.87×
+LACCO, fully GPU 1.72 51.6 49.4 0.15 53.62 1.89×
+1 Gbps
+DiLoCo 1.72 51.6 24.8 0.3 76.38 1.00×
+LACCO, CPU offload 1.72 51.6 24.8 0.6 53.21 1.44×
+LACCO, fully GPU 1.72 51.6 24.8 0.15 53.08 1.44×
+5 Gbps
+DiLoCo 1.72 51.6 5.3 0.3 56.66 1.00×
+LACCO, CPU offload 1.72 51.6 5.3 0.6 53.00 1.07×
+LACCO, fully GPU 1.72 51.6 5.3 0.15 52.95 1.07×
+Real wall-clock time. To validate our timing model under more realistic scenarios, Table 3 reports
+empirical wall-clock measurements for K = 4 workers training the 0.5B model at H = 30 on
+80GB NVIDIA A100 GPUs (PCIe Gen4 x16) across low inter-node bandwidths of 0.5 Gbps, 1 Gbps,
+and 5 Gbps. We compare synchronous DiLoCo against two LACCO variants: (i) CPU-offloaded
+inactive optimizer states with GPU outer updates where Touter ≃ 0.6 s, and (ii) fully GPU-resident
+states where Touter ≃ 0.15 s, significantly shorter than the gradient steps or communications. Each
+inner step takes Tstep ≃ 1.72 s, giving Tinner = HTstep ≃ 51.6 s. Our timing model (Appendix D)
+gives Tround ≃ Tinner + Tcomm + Touter for DiLoCo and Tround ≃ max{Tinner, Tcomm + Touter}
+for LACCO. While DiLoCo is severely bottlenecked by serialized synchronization, both LACCO
+implementations successfully hide the communication and outer update behind the total local compute
+window of 51.6 s. This yields an end-to-end training speedup of up to 1.89× at 0.5 Gbps and 1.44× at
+1 Gbps, with identical wall-clock performance between the offloaded and GPU-resident configurations
+in this setting. Moreover, for a detailed breakdown of memory footprints and training throughput,
+please refer to Appendix E.3.
+4.2 ABLATIONS
+4.2.1 VARYING THE MODEL SIZE
+Table 4: Model size evaluation, K = 4 and H = 30. Comparison across 134M, 325M and 500M
+models. LACCO consistently outperforms other overlapping methods and is on par with DiLoCo.
+Scale Method Overlap Eval loss ↓ HellaSwag ↑ PIQA ↑ ARC-Easy ↑
+134M DDP ✗ 2.936 28.76 59.79 38.80
+DiLoCo ✗ 2.961 29.06 60.50 36.91
+LACCO ✓ 2.988 28.87 61.10 37.04
+Eager DiLoCo ✓ 3.020 28.77 59.74 37.50
+Delayed DiLoCo ✓ 3.117 27.81 58.98 35.98
+325M DDP ✗ 2.673 33.90 64.80 42.76
+DiLoCo ✗ 2.692 34.27 64.25 41.20
+LACCO ✓ 2.693 34.12 63.49 41.37
+Eager DiLoCo ✓ 2.715 33.78 64.09 42.26
+Delayed DiLoCo ✓ 2.795 31.39 63.11 39.44
+500M DDP ✗ 2.558 37.31 66.16 45.50
+DiLoCo ✗ 2.557 38.53 66.05 46.34
+LACCO ✓ 2.561 38.63 66.10 45.58
+Eager DiLoCo ✓ 2.576 37.88 66.65 45.62
+Delayed DiLoCo ✓ 2.675 34.12 64.53 42.97
+We train and evaluate all methods at 134M, 325M and 500M parameters using H = 30 and K =
+4, and we tune the baselines according to Appendix B.2. In Table 4, we observe that LACCO
+9
+Preprint.
+achieves the lowest evaluation loss among communication-overlapping methods at every model size,
+demonstrating consistent scaling. At the larger 500M scale, LACCO achieves a validation loss only
+approximately 0.11% higher than DDP while communicating (i) 30× less frequently and (ii) fully
+hiding communication latency, with (iii) comparable downstream accuracy.
+4.2.2 VARYING THE INNER STEPS H
+Table 5: Evaluation of the inner step size H, with model size 134M and K = 4. DiLoCo, LACCO,
+and Eager DiLoCo all show a U-shaped trend in H, as observed in (Kale et al., 2025). Only Delayed
+DiLoCo does not exhibit this trend, which is consistent with its delayed update dynamics.
+Method H = 5 H = 10 H = 15 H = 30 H = 45 H = 60 H = 75
+DiLoCo 3.034 2.959 2.960 2.961 2.984 3.000 3.016
+LACCO 3.077 2.960 2.959 3.001 3.039 3.071 3.103
+Eager DiLoCo 4.370 3.170 3.068 3.020 3.053 3.079 3.114
+Delayed DiLoCo 3.040 3.061 3.074 3.117 3.150 3.176 3.201
+We vary H from 5 to 75 on the 134M model with K = 4 (Table 5) and keep the other hyperparameters
+constant. LACCO achieves the lowest loss among overlapping methods for every H > 5, and
+performs comparably to synchronous DiLoCo for H = 10 and H = 15. At larger H, the gap
+to DiLoCo widens, possibly because θt and ˜θt drift further apart over longer local phases (see
+Appendix E.1).
+4.2.3 VARYING THE NUMBER OF REPLICAS K
+Table 6: Evaluation of K, for 134M scale and H = 30. Loss degrades with K for all methods,
+with K > 8 known to be a critical regime for DiLoCo (Douillard et al., 2023). Nonetheless, LACCO
+remains within 1% of DiLoCo at every K, degrading more gracefully than other overlapped methods.
+Method K = 2 K = 4 K = 8 K = 16
+DiLoCo 2.941 2.961 3.029 3.143
+LACCO 2.953 2.988 3.054 3.154
+Eager DiLoCo 2.946 3.020 3.183 3.445
+Delayed DiLoCo 3.027 3.117 3.209 3.353
+We vary K from 2 to 16 on the 134M model (by keeping the global batch size fixed) with H = 30
+(Table 6) and keep the other hyperparameters constant. LACCO remains within 1% of DiLoCo for all
+K and achieves the lowest loss among overlapping methods for K ≥ 4. In contrast, Eager DiLoCo
+degrades markedly as K grows, from 3.020 at K = 4 to 3.445 at K = 16, compared with 2.988
+to 3.154 for LACCO. Eager DiLoCo is slightly better at K = 2: with a single replica, local and
+averaged outer gradients coincide, and with two replicas each local outer gradient still accounts for
+half of the average. As K increases, the discrepancy between replica-local and global updates grows,
+whereas the shared updates of LACCO keep all replicas consistent. Consistently with Equation 6, the
+gap between Eager and Delayed DiLoCo vanishes as K grows.
+5 CONCLUSION
+We introduced LACCO, a two-stage local optimization algorithm that fully overlaps outer commu-
+nication and the outer update with local computation. Unlike existing overlap methods, LACCO
+applies the same globally averaged update to every replica and computes each outer update from
+the current pair of models, thereby preserving replica consistency without introducing staleness or
+local synchronization. We established convergence guarantees for smooth objectives and showed
+that, among communication-overlapping methods, LACCO achieves the lowest evaluation loss across
+model sizes, communication intervals, and replica counts, while remaining close to synchronous
+DiLoCo and scaling markedly better than Eager DiLoCo as the number of replicas grows.
+10
+Preprint.
+6 AI DISCLOSURE
+In this work, we used generative AI tools to polish the manuscript and assist with code review
+and debugging. All AI-assisted edits and code changes were reviewed by the authors. We take
+responsibility for the final content of this work, including all text, claims, and code produced with the
+assistance of generative AI.
+ACKNOWLEDGMENTS
+B.T. acknowledges support from the FRQNT Doctoral (B2X) scholarship. D.K. and E.O. were
+supported by funding managed by the French National Research Agency (ANR) under the France
+2030 program through the PEPR IA (grant SHARP ANR-23-PEIA-0008). Part of this work was
+granted access to the JeanZay HPC/AI resources of IDRIS under the allocation AD011015884R1,
+AD011017481, AD011016641, AD011017661 and AD011017766.
+REFERENCES
+Alekh Agarwal and John C. Duchi. Distributed delayed stochastic optimization. In Advances in
+Neural Information Processing Systems, volume 24, pp. 873–881, 2011.
+Danyal Ahmed and Edouard Oyallon. Know what you need: Efficient activation checkpointing. The
+Fortieth Annual Conference on Neural Information Processing Systems, 2026.
+Thalaiyasingam Ajanthan, Sameera Ramasinghe, Gil Avraham, Yan Zuo, and Alexander Long.
+Momentum look-ahead for asynchronous distributed low-communication training. In ICLR
+Workshop on Modularity for Collaborative, Decentralized, and Continual Deep Learning, 2025.
+URL https://openreview.net/forum?id=4O8nzTkHPI.
+Thalaiyasingam Ajanthan, Sameera Ramasinghe, Gil Avraham, Hadi Mohaghegh Dolatabadi, Chamin
+P Hewa Koneputugodage, Violetta Shevchenko, Yan Zuo, and Alexander Long. Asyncmesh: Fully
+asynchronous optimization for data and pipeline parallelism, 2026. URL https://arxiv.
+org/abs/2601.22442.
+Alham Fikri Aji and Kenneth Heafield. Sparse communication for distributed gradient descent. In
+Conference on Empirical Methods in Natural Language Processing, pp. 440–445, 2017. doi:
+10.18653/v1/D17-1045.
+Dan Alistarh, Demjan Grubic, Jerry Li, Ryota Tomioka, and Milan Vojnovic. QSGD: Communication-
+efficient SGD via gradient quantization and encoding. In Advances in Neural Information Process-
+ing Systems, 2017.
+Sara Babakniya, Ahmed Roushdy Elkordy, Yahya H. Ezzeldin, Qingfeng Liu, Kee-Bong Song,
+Mostafa El-Khamy, and Salman Avestimehr. SLoRA: Federated parameter efficient fine-tuning
+of language models. In International Workshop on Federated Learning in the Age of Foundation
+Models, NeurIPS, 2023.
+Saar Barkai, Ido Hakimi, and Assaf Schuster. Gap aware mitigation of gradient staleness. arXiv
+preprint arXiv:1909.10802, 2019.
+Eugene Belilovsky, Stefan Horoi, Edouard Oyallon, and Benjamin Thérien. How inner optimizers
+shape replica scaling. arXiv preprint arXiv:2610.19064, 2026.
+Jeremy Bernstein, Yu-Xiang Wang, Kamyar Azizzadenesheli, and Anima Anandkumar. signSGD:
+Compressed optimisation for non-convex problems. In International Conference on Machine
+Learning, 2018.
+Pietro Cagnasso, Eugene Belilovsky, and Edouard Oyallon. Unifying local communications and local
+updates for llm pretraining, 2026. URL https://arxiv.org/abs/2606.11081.
+Zachary Charles, Gabriel Teston, Lucio Dery, Keith Rush, Nova Fallen, Zachary Garrett, Arthur
+Szlam, and Arthur Douillard. Communication-efficient language model training scales reliably and
+robustly: Scaling laws for diloco. In Advances in Neural Information Processing Systems, 2025.
+11
+Preprint.
+Jeffrey Dean, Greg S. Corrado, Rajat Monga, Kai Chen, Matthieu Devin, Mark Mao, Marc’Aurelio
+Ranzato, Andrew Senior, Paul Tucker, Ke Yang, Quoc V. Le, and Andrew Y. Ng. Large scale
+distributed deep networks. In Advances in Neural Information Processing Systems, volume 25,
+2012.
+Decoupled DiLoCo Team. Decoupled DiLoCo for resilient distributed pre-training. arXiv preprint
+arXiv:2604.21428, 2026.
+Michael Diskin, Alexey Bukhtiyarov, Max Ryabinin, Lucile Saulnier, Quentin Lhoest, Anton Sinitsin,
+Dmitry Popov, Dmitry Pyrkin, Maxim Kashirin, Alexander Borzunov, et al. Distributed deep
+learning in open collaborations. arXiv preprint arXiv:2106.10207, 2021.
+Arthur Douillard, Qixuan Feng, Andrei A. Rusu, Rachita Chhaparia, Yani Donchev, Adhiguna
+Kuncoro, Marc’Aurelio Ranzato, Arthur Szlam, and Jiajun Shen. DiLoCo: Distributed low-
+communication training of language models. arXiv preprint arXiv:2311.08105, 2023. URL
+https://arxiv.org/abs/2311.08105.
+Arthur Douillard, Yanislav Donchev, Keith Rush, Satyen Kale, Zachary Charles, Zachary Gar-
+rett, Gabriel Teston, Dave Lacey, Ross McIlroy, Jiajun Shen, Alexandre Ramé, Arthur Szlam,
+Marc’Aurelio Ranzato, and Paul Barham. Streaming DiLoCo with overlapping communica-
+tion: Towards a distributed free lunch. In Conference on Language Modeling, 2025. URL
+https://arxiv.org/abs/2501.18512.
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, et al. The llama 3 herd of models. arXiv
+preprint arXiv:2407.21783, 2024.
+Haozhe Feng, Tianyu Pang, Chao Du, Wei Chen, Shuicheng Yan, and Min Lin. BAFFLE: A baseline
+of backpropagation-free federated learning. In European Conference on Computer Vision, 2024.
+Priya Goyal, Piotr Dollár, Ross Girshick, Pieter Noordhuis, Lukasz Wesolowski, Aapo Kyrola,
+Andrew Tulloch, Yangqing Jia, and Kaiming He. Accurate, large minibatch sgd: Training imagenet
+in 1 hour. arXiv preprint arXiv:1706.02677, 2017.
+Ido Hakimi, Saar Barkai, Moshe Gabel, and Assaf Schuster. Taming momentum in a distributed
+asynchronous environment. arXiv preprint arXiv:1907.11612, 2019.
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom
+Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy,
+Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and Laurent Sifre.
+Training compute-optimal large language models. arXiv preprint arXiv:2203.15556, 2022.
+Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. LoRA: Low-rank adaptation of large language models. In International
+Conference on Learning Representations, 2022.
+Paul Janson, Edouard Oyallon, and Eugene Belilovsky. Stabilizing native low-rank llm pretraining.
+arXiv preprint arXiv:2602.12429, 2026.
+Sylvain Jeaugey. NCCL 2.0. GPU Technology Conference, 2017. URL https://developer.
+nvidia.com/nccl.
+Dhiraj Kalamkar, Dheevatsa Mudigere, Naveen Mellempudi, Dipankar Das, Kunal Banerjee,
+Sasikanth Avancha, Dharma Teja Vooturi, Nataraj Jammalamadaka, Jianyu Huang, Hector Yuen,
+et al. A study of BFLOAT16 for deep learning training. arXiv preprint arXiv:1905.12322, 2019.
+URL https://arxiv.org/abs/1905.12322.
+Satyen Kale, Arthur Douillard, and Yanislav Donchev. Eager updates for overlapped communication
+and computation in DiLoCo. arXiv preprint arXiv:2502.12996, 2025. URL https://arxiv.
+org/abs/2502.12996.
+Anastasia Koloskova, Nicolas Loizou, Sadra Boreiri, Martin Jaggi, and Sebastian U. Stich. A
+unified theory of decentralized SGD with changing topology and local updates. In International
+Conference on Machine Learning, 2020.
+12
+Preprint.
+Chamin Hewa Koneputugodage, Thalaiyasingam Ajanthan, Sameera Ramasinghe, Hadi Mohaghegh
+Dolatabadi, Shamane Siriwardhana, Gil Avraham, Violetta Shevchenko, Karol Pajak, James
+Snewin, and Alexander Long. Factored gossip diloco: Reducing blocking communication in diloco.
+arXiv preprint arXiv:2606.22768, 2026.
+Shen Li, Yanli Zhao, Rohan Varma, Omkar Salpekar, Pieter Noordhuis, Teng Li, Adam Paszke, Jeff
+Smith, Brian Vaughan, Pritam Damania, and Soumith Chintala. PyTorch Distributed: Experiences
+on accelerating data parallel training. Proceedings of the VLDB Endowment, 13(12):3005–3018,
+2020. doi: 10.14778/3415478.3415530.
+Zhe Li, Bicheng Ying, Zidong Liu, Chaosheng Dong, and Haibo Yang. Achieving dimension-free
+communication in federated learning via zeroth-order optimization. In International Conference
+on Learning Representations, 2025.
+Xiangru Lian, Yijun Huang, Yuncheng Li, and Ji Liu. Asynchronous parallel stochastic gradient for
+nonconvex optimization. In Advances in Neural Information Processing Systems, 2015.
+Wanchao Liang, Tianyu Liu, Less Wright, Will Constable, Andrew Gu, Chien-Chin Huang, Iris
+Zhang, Wei Feng, Howard Huang, Junjie Wang, et al. TorchTitan: One-stop PyTorch native solution
+for production-ready LLM pre-training. In International Conference on Learning Representations,
+2025. URL https://openreview.net/forum?id=WuQtmIkiUL.
+Tao Lin, Sebastian U. Stich, Kumar Kshitij Patel, and Martin Jaggi. Don’t use large mini-batches,
+use local SGD. In International Conference on Learning Representations, 2020. URL https:
+//openreview.net/forum?id=B1eyO1BFPr.
+Yujun Lin, Song Han, Huizi Mao, Yu Wang, and William J. Dally. Deep gradient compression: Reduc-
+ing the communication bandwidth for distributed training. In International Conference on Learning
+Representations, 2018. URL https://openreview.net/forum?id=SkhQHMW0W.
+Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Chenggang Zhao,
+Chengqi Deng, Chenyu Zhang, Chong Ruan, et al. Deepseek-v3 technical report. arXiv preprint
+arXiv:2412.19437, 2024a.
+Bo Liu, Rachita Chhaparia, Arthur Douillard, Satyen Kale, Andrei A. Rusu, Jiajun Shen, Arthur
+Szlam, and Marc’Aurelio Ranzato. Asynchronous local-SGD training for language modeling.
+arXiv preprint arXiv:2401.09135, 2024b.
+Ilya Loshchilov and Frank Hutter. Sgdr: Stochastic gradient descent with warm restarts. In Interna-
+tional Conference on Learning Representations, 2017.
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In International Confer-
+ence on Learning Representations, 2019. URL https://openreview.net/forum?id=
+Bkg6RiCqY7.
+Yassine Maziane, Ammar Mahran, Artavazd Maranjyan, and Peter Richtárik. Loscar-sgd: Local
+sgd with communication-computation overlap and delay-corrected sparse model averaging. arXiv
+preprint arXiv:2605.20866, 2026.
+H. Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Agüera y Arcas.
+Communication-efficient learning of deep networks from decentralized data. In Proceedings of the
+20th International Conference on Artificial Intelligence and Statistics, volume 54 of Proceedings
+of Machine Learning Research, pp. 1273–1282. PMLR, 2017. URL https://proceedings.
+mlr.press/v54/mcmahan17a.html.
+Meta PyTorch. TorchFT: Fault tolerance for PyTorch, 2026. URL https://github.com/
+meta-pytorch/torchft. Software repository; accessed 22 July 2026.
+Paulius Micikevicius, Sharan Narang, Jonah Alben, Gregory Diamos, Erich Elsen, David Garcia,
+Boris Ginsburg, Michael Houston, Oleksii Kuchaiev, Ganesh Venkatesh, and Hao Wu. Mixed
+precision training. In International Conference on Learning Representations, 2018. URL https:
+//openreview.net/forum?id=r1gs9JgRZ.
+13
+Preprint.
+Konstantin Mishchenko, Francis Bach, Mathieu Even, and Blake Woodworth. Asynchronous SGD
+beats minibatch SGD under arbitrary delays. In Advances in Neural Information Processing
+Systems, 2022.
+Adel Nabli and Edouard Oyallon. DADAO: Decoupled accelerated decentralized asynchronous
+optimization. In Proceedings of the 40th International Conference on Machine Learning, volume
+202 of Proceedings of Machine Learning Research, pp. 25604–25626. PMLR, 2023. URL
+https://proceedings.mlr.press/v202/nabli23a.html.
+Adel Nabli and Edouard Oyallon. Decentralized asynchronous optimization with dadao allows
+decoupling and acceleration. Journal of Machine Learning Research, 26(207):1–48, 2025.
+Adel Nabli, Eugene Belilovsky, and Edouard Oyallon. Acid2: Accelerating asynchronous communi-
+cation in decentralized deep learning. Advances in Neural Information Processing Systems, 36:
+47451–47474, 2023.
+Adel Nabli, Louis Fournier, Pierre Erbacher, Louis Serrano, Eugene Belilovsky, and Edouard Oyallon.
+Acco: Accumulate while you communicate for communication-overlapped sharded llm training,
+2025. URL https://arxiv.org/abs/2406.02613.
+Deepak Narayanan, Mohammad Shoeybi, Jared Casper, Patrick LeGresley, Mostofa Patwary, Vi-
+jay Anand Korthikanti, Dmitri Vainbrand, Prethvi Kashinkunti, Julie Bernauer, Bryan Catanzaro,
+Amar Phanishayee, and Matei Zaharia. Efficient large-scale language model training on GPU
+clusters using Megatron-LM. In Proceedings of the International Conference for High Performance
+Computing, Networking, Storage and Analysis, pp. 1–15, 2021. doi: 10.1145/3458817.3476209.
+Yurii E. Nesterov. A method for solving the convex programming problem with convergence rate
+o(1/k2). Soviet Mathematics Doklady, 27(2):372–376, 1983.
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style,
+high-performance deep learning library. In Advances in Neural Information Processing Systems,
+volume 32, 2019.
+Guilherme Penedo, Hynek Kydlíˇcek, Loubna Ben allal, Anton Lozhkov, Margaret Mitchell, Colin
+Raffel, Leandro Von Werra, and Thomas Wolf. The fineweb datasets: Decanting the web for
+the finest text data at scale. In The Thirty-eighth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track, 2024. URL https://openreview.net/forum?
+id=n6SCkn2QaG.
+PyTorch Team. Pytorch distributed data parallel: Gradient bucketing and communication–
+computation overlap. PyTorch Blog, 2020. URL https://pytorch.org/blog/
+efficient-pytorch-ddp/. Accessed 2026-07-22.
+Zhen Qin, Daoyuan Chen, Bingchen Qian, Bolin Ding, Yaliang Li, and Shuiguang Deng. Federated
+full-parameter tuning of billion-sized language models with communication cost under 18 kilobytes.
+In International Conference on Machine Learning, 2024.
+Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and Yuxiong He. Zero: Memory optimizations
+toward training trillion parameter models. In SC20: International Conference for High Performance
+Computing, Networking, Storage and Analysis, pp. 1–16. IEEE, 2020.
+Sashank Reddi, Zachary Charles, Manzil Zaheer, Zachary Garrett, Keith Rush, Jakub Koneˇcný,
+Sanjiv Kumar, and H. Brendan McMahan. Adaptive federated optimization. In International
+Conference on Learning Representations, 2021. URL https://openreview.net/forum?
+id=LkFG3lB13U5.
+Jie Ren, Samyam Rajbhandari, Reza Yazdani Aminabadi, Olatunji Ruwase, Shuangyan Yang, Minjia
+Zhang, Dong Li, and Yuxiong He. Zero-offload: Democratizing billion-scale model training. In
+2021 USENIX Annual Technical Conference (USENIX ATC 21), pp. 551–564. USENIX Associa-
+tion, 2021. URL https://www.usenix.org/conference/atc21/presentation/
+ren-jie.
+14
+Preprint.
+Stéphane Rivaud, Louis Fournier, Thomas Pumir, Eugene Belilovsky, Michael Eickenberg, and
+Edouard Oyallon. Petra: Parallel end-to-end training with reversible architectures. In International
+Conference on Learning Representations, volume 2025, pp. 80162–80178, 2025.
+Frank Seide, Hao Fu, Jasha Droppo, Gang Li, and Dong Yu. 1-bit stochastic gradient descent and its
+application to data-parallel distributed training of speech DNNs. In Interspeech, pp. 1058–1062,
+2014. doi: 10.21437/Interspeech.2014-274.
+Noam Shazeer. Glu variants improve transformer. arXiv preprint arXiv:2002.05202, 2020.
+Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley, Jared Casper, and Bryan Catan-
+zaro. Megatron-LM: Training multi-billion parameter language models using model parallelism.
+arXiv preprint arXiv:1909.08053, 2019. URL https://arxiv.org/abs/1909.08053.
+Vaibhav Singh, Zafir Khalid, Pietro Cagnasso, Edouard Oyallon, and Eugene Belilovsky. Model
+parallelism with subnetwork data parallelism. arXiv preprint arXiv:2507.09029, 2025.
+Sebastian U. Stich. Local SGD converges fast and communicates little. In International Confer-
+ence on Learning Representations, 2019. URL https://openreview.net/forum?id=
+S1g2JnRcFX.
+Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, and Bo Wen. Roformer: Enhanced transformer
+with rotary position embedding. arXiv preprint arXiv:2104.09864, 2021.
+Weigao Sun, Zhen Qin, Weixuan Sun, Shidi Li, Dong Li, Xuyang Shen, Yu Qiao, and Yiran Zhong.
+CO2: Efficient distributed training with full communication–computation overlap. In International
+Conference on Learning Representations, 2024. URL https://openreview.net/forum?
+id=ZO5cn4IfaN.
+Ilya Sutskever, James Martens, George Dahl, and Geoffrey Hinton. On the importance of initialization
+and momentum in deep learning. In Proceedings of the 30th International Conference on Machine
+Learning, volume 28 of Proceedings of Machine Learning Research, pp. 1139–1147. PMLR, 2013.
+URL https://proceedings.mlr.press/v28/sutskever13.html.
+Kimi Team, Tongtong Bai, Yifan Bai, Yiping Bao, Jianfeng Cai, Xinyuan Cai, Peizhou Cao, Yux-
+uan Cao, Ziwei Chai, Y Charles, et al. Kimi k3: Open frontier intelligence. arXiv preprint
+arXiv:2607.24653, 2026.
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, et al. Llama 2: Open foundation and
+fine-tuned chat models. arXiv preprint arXiv:2307.09288, 2023.
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Advances in Neural Information
+Processing Systems, 2017.
+Jianyu Wang, Hao Liang, and Gauri Joshi. Overlap local-SGD: An algorithmic approach to hide
+communication delays in distributed SGD. In IEEE International Conference on Acoustics, Speech
+and Signal Processing, pp. 8871–8875, 2020. doi: 10.1109/ICASSP40776.2020.9053552.
+Ziyao Wang, Zheyu Shen, Yexiao He, Guoheng Sun, Hongyi Wang, Lingjuan Lyu, and Ang Li.
+FLoRA: Federated fine-tuning large language models with heterogeneous low-rank adaptations. In
+Advances in Neural Information Processing Systems, 2024.
+Jianqiao Wangni, Jialei Wang, Ji Liu, and Tong Zhang. Gradient sparsification for communication-
+efficient distributed optimization. In Advances in Neural Information Processing Systems, 2018.
+Cong Xie, Oluwasanmi Koyejo, and Indranil Gupta. Asynchronous federated optimization. arXiv
+preprint arXiv:1903.03934, 2019.
+Biao Zhang and Rico Sennrich. Root mean square layer normalization. In Advances in Neural
+Information Processing Systems, 2019.
+15
+Preprint.
+Muru Zhang, Mayank Mishra, Zhongzhu Zhou, William Brandon, Jue Wang, Yoon Kim, Jonathan
+Ragan-Kelley, Shuaiwen Leon Song, Ben Athiwaratkun, and Tri Dao. Ladder-residual: parallelism-
+aware architecture for accelerating large model inference with communication overlapping. arXiv
+preprint arXiv:2501.06589, 2025.
+Sixin Zhang, Cong Zhang, Zhao You, Rong Zheng, and Bo Xu. Asynchronous stochastic gradient
+descent for DNN training. In IEEE International Conference on Acoustics, Speech and Signal
+Processing (ICASSP), pp. 6660–6663. IEEE, 2013.
+Shuxin Zheng, Qi Meng, Taifeng Wang, Wei Chen, Nenghai Yu, Zhi-Ming Ma, and Tie-Yan Liu.
+Asynchronous stochastic gradient descent with delay compensation. In Proceedings of the 34th
+International Conference on Machine Learning, volume 70 of Proceedings of Machine Learning
+Research, pp. 4120–4129. PMLR, 2017. URL https://proceedings.mlr.press/v70/
+zheng17b.html.
+16
+Preprint.
+A ALGORITHMIC VIEW
+Algorithm 1 LACCO
+Inputs: number of outer iterations T , inner steps H, number of replicas K
+Inputs: initial models θ0 = ˜θ0, initial ˜g0 = 0
+Inputs: optimizers InnerOptM, InnerOptL, OuterOptM, OuterOptL
+Inputs: data shards D1, . . . , DK
+1: function INNERSTEPS(ϑi 0, Di, H, Opt)
+2: for h = 0, . . . , H − 1 do
+3: ξi h ∼ Di
+4: ϑi h+1 ← Opt   ϑi h, ∇F (ϑi h; ξi h) 
+5: end for
+6: return ϑi H
+7: end function
+8: for t = 0, . . . , T − 1 do
+9: for all i ∈ {1, . . . , K} in parallel do
+Lookahead stage
+10: θi t,H ← INNERSTEPS(θt, Di, H, InnerOptM)
+11: gi t ← θt − θi t,H
+12: gt ← ASYNC-ALLREDUCE(gi t)
+13: WAIT(˜gt)
+14: ˜θt+1 ← OuterOptL(θt, ˜gt)
+Main stage
+15: ˜θi t+1,H ← INNERSTEPS(˜θt+1, Di, H, InnerOptL)
+16: ˜gi t+1 ← ˜θt+1 − ˜θi t+1,H
+17: ˜gt+1 ← ASYNC-ALLREDUCE(˜gi t+1)
+18: WAIT(gt)
+19: θt+1 ← OuterOptM
+ 
+θt, 1 2 ( gt + ˜gt) 
+20: end for
+21: end for
+B EXPERIMENTAL DETAILS
+B.1 MODEL ARCHITECTURE
+Our experiments use Llama 3-style (Dubey et al., 2024) decoder-only Transformers (Vaswani
+et al., 2017) with RMSNorm (Zhang & Sennrich, 2019) pre-normalization, SwiGLU feed-forward
+networks (Shazeer, 2020), and rotary positional embeddings (RoPE) (Su et al., 2021) with base
+θ = 10,000. Attention uses standard multi-head attention with head dimension 64. We use the Llama
+2 (7B) tokenizer (Touvron et al., 2023) with a vocabulary size of 32,000 and a sequence length of
+2,048 tokens. Following the Chinchilla scaling laws (Hoffmann et al., 2022), each model is trained on
+a token budget equal to 20× its parameter count. All models are trained from scratch, with weights
+initialized following Dubey et al. (2024). Details of the architectures used at each scale are reported
+in Table 7.
+Table 7: Model architecture. We report, for each scale, the total parameter count, the number of
+Transformer layers, the number of attention heads, the embedding dimension, the per-head dimension,
+the SwiGLU feed-forward hidden dimension, and the Chinchilla token budget.
+Model
+parameters
+Transformer
+layers
+Attention
+heads
+Embedding
+dimension
+Head
+dimension
+FFN hidden
+dimension
+Token
+budget
+134M 12 12 768 64 2048 2.7B
+325M 20 16 1024 64 2816 6.5B
+500M 20 20 1280 64 3584 9.8B
+17
+Preprint.
+B.2 HYPERPARAMETER TUNING
+We use AdamW (Loshchilov & Hutter, 2019) as the inner optimizer with β1 = 0.9 and β2 = 0.95.
+The inner learning rate follows a cosine decay schedule (Loshchilov & Hutter, 2017) with a
+10% linear warm-up (Goyal et al., 2017) from 1% of its peak value. Weight decay is set to
+0.1. The outer optimizer is Nesterov SGD (Nesterov, 1983; Sutskever et al., 2013). All hy-
+perparameters were tuned on the 134M model with H = 30 and K = 4. When scaling to
+the 325M and 500M models, the outer learning rate and momentum are kept fixed for each
+method (Charles et al., 2025). We use a global batch size of B = 64 for the 134M and 325M
+models and B = 128 for the 500M model. For DDP, the inner learning rate ηin was swept
+over ηin ∈ {1e−3, 2e−3, 3e−3, 4e−3, 5e−3, 6e−3}. For all the other methods, the inner learn-
+ing rate ηin was swept over {6e−4, 7e−4, 8e−4, 1e−3, 2e−3, 3e−3}, the outer learning rate ηout
+over {0.2, 0.3, 0.4, 0.5, 0.6, 0.7}, and the momentum over µ ∈ {0.7, 0.8, 0.9}. For Delayed DiLoCo,
+the outer learning rate was selected by lowering by ×4 the optimal outer learning found for Eager
+DiLoCo (Kale et al., 2025). Given the two-stage step mechanism of LACCO, two inner learning rates
+ηin and ˜ηin as well as two outer learning rates ηout and ˜ηout should be all tuned. For simplicity, we
+set ηin = ˜ηin and ηout = ˜ηout. Table 8 summarizes the values that were selected for each method.
+Table 8: Selected hyperparameters across model sizes.
+Method (a) 134M model (b) 325M model (c) 500M model
+ηin ηout µ ηin ηout µ ηin ηout µ
+DDP 5e−3 — — 2e−3 — — 3e−3 — —
+DiLoCo 1e−3 0.7 0.9 7e−4 0.7 0.9 8e−4 0.7 0.9
+LACCO 2e−3 0.7 0.9 7e−4 0.7 0.9 2e−3 0.7 0.9
+Eager DiLoCo 2e−3 0.4 0.9 7e−4 0.4 0.9 8e−4 0.4 0.9
+Delayed DiLoCo 2e−3 0.1 0.9 8e−4 0.1 0.9 8e−4 0.1 0.9
+B.3 IMPLEMENTATION
+All experiments were conducted using PyTorch 2.13.0 (Paszke et al., 2019) with CUDA 12.6,
+cuDNN 9.10.2, building on the TorchTitan (Liang et al., 2025) and TorchFT codebases. Replica
+communication relies on NCCL 2.29.3 collectives (Jeaugey, 2017), launched asynchronously to
+overlap communication with local computation. Models are trained in mixed precision (Micikevicius
+et al., 2018; Kalamkar et al., 2019) on NVIDIA A100 and H100 GPUs.
+C PROOFS
+This section collects the proofs of the main technical results.
+C.1 AUXILIARY LEMMAS
+Lemma 1 (Gradient Mismatch). Let f be L-smooth. Fix H ≥ 1 and 0 < βL ≤ 1. Define, for every
+replica i = 1, . . . , K, the local deterministic trajectory
+θi t,0 = θt, θi t,h+1 = θi t,h − β H ∇f (θi t,h), h = 0, . . . , H − 1,
+and the accumulated local updates
+gi t := θt − θi t,H .
+Then
+gi t − β∇f (θt)  ≤
+
+1 + βL H
+H
+− 1 − βL
+L ∥∇f (θt)∥
+≤ β2L∥∇f (θt)∥.
+18
+Preprint.
+Proof. First note that
+gi t = β H
+H−1X
+h=0
+∇f (θi t,h).
+Hence
+gi t − β∇f (θt) = β H
+H−1X
+h=0
+ 
+∇f (θi t,h) − ∇f (θt)  .
+By L-smoothness,
+gi t − β∇f (θt)  ≤ βL H H−1X h=0 ∥θi t,h − θt∥.
+We claim that
+∥θi t,h − θt∥ ≤
+
+1 + βL H
+h
+− 1
+L ∥∇f (θt)∥.
+Indeed, using the update rule and L-smoothness,
+∥θi t,h+1 − θt∥ ≤
+
+1 + βL H  ∥θi t,h − θt∥ + β H ∥∇f (θt)∥.
+Since θi t,0 = θt, iterating this recursion gives the claim. Therefore,
+gi t − β∇f (θt)  ≤ β H H−1X h=0 " 1 + βL H h − 1 # ∥∇f (θt)∥
+=
+
+1 + βL H
+H
+− 1 − βL
+L ∥∇f (θt)∥.
+Finally, since 0 < βL ≤ 1, 
+1 + βL H H ≤ eβL
+and
+ex − 1 − x ≤ x2, 0 ≤ x ≤ 1.
+Thus 
+1 + βL H H − 1 − βL ≤ (βL)2,
+which gives gi t − β∇f (θt)  ≤ β2L∥∇f (θt)∥.
+Lemma 2 (Expected Stochastic Gradient Mismatch). Let f : Rd → R be L-smooth. Let Ft,h be the
+filtration generated by the randomness up to the h-th local step of outer iteration t. Assume that:
+(i) The stochastic gradient is unbiased:
+E
+
+∇F (θi t,h; ξi t,h) | Ft,h  = ∇f (θi t,h).
+(ii) The conditional variance is uniformly bounded by σ2:
+E
+h∇F (θi t,h; ξi t,h) − ∇f (θi t,h) 2 | Ft,h i ≤ σ2.
+Fix H ≥ 1 and 0 < βL ≤ 1. For every replica i = 1, . . . , K, define the local stochastic trajectory by
+θi t,0 = θt, θi t,h+1 = θi t,h − β H ∇F (θi t,h; ξi t,h), h = 0, . . . , H − 1.
+19
+Preprint.
+Define the accumulated local update
+gi t := θt − θi t,H = β H
+H−1X
+h=0
+∇F (θi t,h; ξi t,h).
+Then, with
+q := 1 + βL H ,
+we have
+E[gi t] − β∇f (θt) 2 ≤ 2β2 H H−1X h=0 (qh − 1)2∥∇f (θt)∥2
++ 2β3Lσ2
+H 2
+H−1X
+h=0
+q2h − 1
+2 + βL H .
+Consequently,
+E[gi t] − β∇f (θt) 2 ≤ 8β4L2∥∇f (θt)∥2 + 8 β3Lσ2 H .
+Proof. Throughout the proof, all expectations are taken with respect to the local stochastic-gradient
+randomness, conditional on the current iterate θt.
+Define the stochastic gradient noise
+εi t,h := ∇F (θi t,h; ξi t,h) − ∇f (θi t,h).
+By assumptions (i)–(ii),
+E[εi t,h | Ft,h] = 0, E[∥εi t,h∥2 | Ft,h] ≤ σ2.
+Also define
+∆i t,h := θi t,h − θt.
+Since θi t,0 = θt, we have
+∆i t,0 = 0.
+Moreover, using the local update rule,
+∆i t,h+1 = ∆i t,h − β H ∇f (θi t,h) − β H εi t,h.
+Adding and subtracting ∇f (θt) gives
+∆i t,h+1 = ∆i t,h − β H   ∇f (θi t,h) − ∇f (θt)  − β H ∇f (θt) − β H εi t,h.
+Let
+q := 1 + βL H .
+Introduce the noiseless comparison sequence ¯∆i t,h, defined by
+¯∆i t,0 = 0,
+and
+¯∆i t,h+1 = ¯∆i t,h − β H   ∇f (θt + ¯∆i t,h) − ∇f (θt)  − β H ∇f (θt).
+By L-smoothness,
+∥ ¯∆i t,h+1∥ ≤ q∥ ¯∆i t,h∥ + β H ∥∇f (θt)∥.
+Iterating this inequality yields
+∥ ¯∆i t,h∥ ≤ ∥∇f (θt)∥ L (qh − 1).
+20
+Preprint.
+Now consider
+∆i t,h − ¯∆i t,h.
+Using the two recursions above and L-smoothness,
+E
+
+∥∆i t,h+1 − ¯∆i t,h+1∥2 | Ft,h  ≤ q2∥∆i t,h − ¯∆i t,h∥2 + β2σ2 H 2 .
+Iterating from ∆i t,0 − ¯∆i t,0 = 0 gives
+E
+
+∥∆i t,h − ¯∆i t,h∥2 ≤ β2σ2 H 2 h−1X j=0 q2j .
+Since
+h−1X
+j=0
+q2j = q2h − 1 q2 − 1
+and
+q2 − 1 = βL H  2 + βL H  ,
+we obtain
+E
+
+∥∆i t,h − ¯∆i t,h∥2 ≤ βσ2 HL q2h − 1 2 + βL H .
+Using
+∆i t,h = ¯∆i t,h +   ∆i t,h − ¯∆i t,h 
+and
+∥a + b∥2 ≤ 2∥a∥2 + 2∥b∥2,
+we get
+E
+
+∥∆i t,h∥2 ≤ 2 L2 (qh − 1)2∥∇f (θt)∥2 + 2βσ2 HL q2h − 1 2 + βL H .
+Now, by definition,
+gi t = β H
+H−1X
+h=0
+∇F (θi t,h; ξi t,h).
+By the tower property and unbiasedness of the stochastic gradient,
+E[gi t] = β H
+H−1X
+h=0
+E[∇f (θi t,h)].
+Therefore,
+E[gi t] − β∇f (θt) = β H
+H−1X
+h=0
+E
+
+∇f (θi t,h) − ∇f (θt)  .
+By Jensen’s inequality, Cauchy–Schwarz, and L-smoothness,
+E[gi t] − β∇f (θt) 2 =
+ β H H−1X h=0 E  ∇f (θi t,h) − ∇f (θt)   2
+≤ β2
+H
+H−1X
+h=0
+E  ∇f (θi t,h) − ∇f (θt) 2
+≤ β2
+H
+H−1X
+h=0
+E
+
+∥∇f (θi t,h) − ∇f (θt)∥2
+≤ β2L2
+H
+H−1X
+h=0
+E
+
+∥∆i t,h∥2 .
+21
+Preprint.
+Substituting the previous estimate gives
+E[gi t] − β∇f (θt) 2 ≤ 2β2 H H−1X h=0 (qh − 1)2∥∇f (θt)∥2
++ 2β3Lσ2
+H 2
+H−1X
+h=0
+q2h − 1
+2 + βL H .
+Since h ≤ H and βL ≤ 1,
+qh =
+
+1 + βL H h ≤ eβL.
+Moreover,
+eβL − 1 ≤ (e − 1)βL,
+so
+qh − 1 ≤ (e − 1)βL.
+Also,
+q2h ≤ e2βL ≤ e2,
+and therefore
+q2h − 1
+2 + βL H ≤ e2 − 1 2 .
+Consequently,
+E[gi t] − β∇f (θt) 2 ≤ 2(e − 1)2β4L2∥∇f (θt)∥2
++ (e2 − 1) β3Lσ2
+H .
+Thus,
+E[gi t] − β∇f (θt) 2 ≤ 2(e − 1)2β4L2∥∇f (θt)∥2 + (e2 − 1) β3Lσ2 H .
+Lemma 3 (Averaged Stochastic Gradient Mismatch). Suppose that the assumptions and notation
+of Lemma 2 hold. Set Ft := Ft,0. Moreover, assume that, conditionally on Ft, the local sample
+sequences
+(ξi t,0, . . . , ξi t,H−1), i = 1, . . . , K,
+are i.i.d. across replicas.
+Let
+gt := 1 K
+KX
+i=1
+gi t.
+Then
+∥E[gt|Ft] − β∇f (θt)∥2 ≤ 8β4L2∥∇f (θt)∥2 + 8 β3Lσ2 H .
+Proof. By linearity of conditional expectation,
+E[gt|Ft] = 1 K
+KX
+i=1
+E
+
+gi t Ft  .
+Hence,
+E[gt|Ft] − β∇f (θt) = 1 K
+KX
+i=1
+ 
+E
+
+gi t Ft  − β∇f (θt)  .
+22
+Preprint.
+Therefore, by Jensen’s inequality,
+∥E[gt|Ft] − β∇f (θt)∥2 ≤ 1 K
+KX
+i=1
+E  gi t Ft  − β∇f (θt) 2 .
+Since the replicas are conditionally identically distributed given Ft, the terms in the sum are identical.
+Thus,
+∥E[gt|Ft] − β∇f (θt)∥2 = E  gi t Ft  − β∇f (θt) 2 .
+Applying Lemma 2 yields
+∥E[gt|Ft] − β∇f (θt)∥2 ≤ 8β4L2∥∇f (θt)∥2 + 8 β3Lσ2 H .
+Lemma 4 (Conditional Variance of Averaged Updates). Suppose that the assumptions and notation
+of Lemma 3 hold. Then
+E
+h
+∥gt − E[gt | Ft]∥2 | Ft
+i
+≤ e2β2σ2
+KH .
+Proof. Let ¯θt,h denote the deterministic comparison trajectory initialized at θt, defined by
+¯θt,0 = θt, ¯θt,h+1 = ¯θt,h − β H ∇f (¯θt,h),
+and set
+¯gt := θt − ¯θt,H .
+Define
+di t,h := θi t,h − ¯θt,h, q := 1 + βL H .
+By L-smoothness, conditional unbiasedness, and the variance bound,
+E
+
+∥di t,h+1∥2 | Ft,h  ≤ q2∥di t,h∥2 + β2σ2 H 2 .
+Since di t,0 = 0, iterating yields
+E
+
+∥di t,H ∥2 | Ft  ≤ β2σ2 H 2 H−1X h=0 q2h
+≤ e2βLβ2σ2
+H
+≤ e2β2σ2
+H ,
+where we used βL ≤ 1.
+Since gi t − ¯gt = −di t,H and ¯gt is Ft-measurable, the conditional mean minimizes the expected
+squared deviation, so
+E
+hgi t − E[gi t | Ft] 2 | Ft i
+≤ E
+
+∥gi t − ¯gt∥2 | Ft 
+≤ e2β2σ2
+H .
+23
+Preprint.
+Finally, by conditional independence across replicas and gt = 1 K PK i=1 gi t,
+E
+h
+∥gt − E[gt | Ft]∥2 | Ft
+i
+= 1 K 2
+KX
+i=1
+E
+hgi t − E[gi t | Ft] 2 | Ft i
+≤ e2β2σ2
+KH .
+C.2 MAIN THEOREMS
+Theorem A (Deterministic Lyapunov Descent). Let f : Rd → R be L-smooth and bounded below
+by f ⋆. Fix H ≥ 1, set η = 30, and choose β > 0 such that
+0 < βL ≤ 1 30 .
+For every replica i = 1, . . . , K, define the deterministic local trajectories
+θi t,0 = θt, θi t,h+1 = θi t,h − β H ∇f (θi t,h), h = 0, . . . , H − 1,
+and
+˜θi t,0 = ˜θt, ˜θi t,h+1 = ˜θi t,h − β H ∇f (˜θi t,h), h = 0, . . . , H − 1.
+Define the accumulated local updates
+gi t := θt − θi t,H , ˜gi t := ˜θt − ˜θi t,H ,
+and their replica averages
+gt = 1 K
+KX
+i=1
+gi t, ˜gt = 1 K
+KX
+i=1
+˜gi t.
+Consider the outer updates
+θt+1 = θt − η 2 (gt + ˜gt), ˜θt+1 = θt − η˜gt.
+Define the Lyapunov function
+Vt := f (θt) − f ⋆ + ηβL(f (˜θt) − f ⋆) + 16L∥θt − ˜θt∥2.
+Then
+Vt+1 − Vt ≤ − ηβ 3 ∥∇f (θt)∥2.
+Consequently, for every T ≥ 1,
+1
+T
+T −1X
+t=0
+∥∇f (θt)∥2 ≤ 3V0 ηβT .
+Moreover, if θ0 = ˜θ0, then
+1
+T
+T −1X
+t=0
+∥∇f (θt)∥2 ≤ 6
+ 
+f (θ0) − f ⋆
+ηβT .
+Proof. By L-smoothness and the update
+θt+1 = θt − η 2 (gt + ˜gt),
+24
+Preprint.
+we have
+f (θt+1) − f (θt) ≤ −η
+
+∇f (θt), gt + ˜gt 2  + Lη2 2  gt + ˜gt 2  2 .
+Using the identity
+−⟨a, b⟩ = − β 2 ∥a∥2 − 1 2β ∥b∥2 + 1 2β ∥b − βa∥2,
+with
+a = ∇f (θt), b = gt + ˜gt 2 ,
+we obtain
+f (θt+1) − f (θt) ≤ − ηβ 2 ∥∇f (θt)∥2 − η 2β (1 − ηβL)  gt + ˜gt 2  2
++ η 2β  gt + ˜gt 2 − β∇f (θt)  2 .
+Since ηβL ≤ 1, the middle term is nonpositive and may be dropped. Moreover,
+gt + ˜gt
+2 − β∇f (θt) = 1 2 (gt − β∇f (θt)) + 1 2  ˜gt − β∇f (˜θt) 
++ β 2  ∇f (˜θt) − ∇f (θt)  .
+Therefore, using ∥a + b + c∥2 ≤ 3∥a∥2 + 3∥b∥2 + 3∥c∥2 and L-smoothness,
+ gt + ˜gt 2 − β∇f (θt)  2 ≤ 3 4 ∥gt − β∇f (θt)∥2 + 3 4 ˜gt − β∇f (˜θt)  2
++ 3β2L2
+4 ∥θt − ˜θt∥2.
+Hence
+f (θt+1) − f (θt) ≤ − ηβ 2 ∥∇f (θt)∥2 + 3η 8β ∥gt − β∇f (θt)∥2
++ 3η 8β ˜gt − β∇f (˜θt)  2 + 3ηβL2 8 ∥θt − ˜θt∥2.
+Next, by L-smoothness and the update
+˜θt+1 = θt − η˜gt,
+we have
+ηβL(f (˜θt+1) − f (˜θt)) ≤ ηβL
+D
+∇f (˜θt), θt − ˜θt − η˜gt
+E
++ ηβL2
+2
+θt − ˜θt − η˜gt  2
+= −ηβL
+D
+∇f (˜θt), η˜gt − θt + ˜θt
+E
++ ηβL2
+2
+η˜gt − θt + ˜θt  2 .
+Using the identity
+−⟨a, b⟩ = − γ 2 ∥a∥2 − 1 2γ ∥b∥2 + 1 2γ ∥b − γa∥2,
+with
+a = ηβ∇f (˜θt), b = η˜gt − θt + ˜θt, γ = 1,
+gives
+ηβL(f (˜θt+1) − f (˜θt)) ≤ − η2β2L 2 ∥∇f (˜θt)∥2
+− L 2 (1 − ηβL) η˜gt − θt + ˜θt  2
++ L 2 η˜gt − θt + ˜θt − ηβ∇f (˜θt)  2 .
+25
+Preprint.
+Since ηβL ≤ 1, the middle term is nonpositive and may be dropped. Furthermore,
+η˜gt − θt + ˜θt − ηβ∇f (˜θt) = η
+
+˜gt − β∇f (˜θt)
+
+− (θt − ˜θt).
+Thus, by ∥a − b∥2 ≤ 2∥a∥2 + 2∥b∥2,
+η˜gt − θt + ˜θt − ηβ∇f (˜θt)  2 ≤ 2η2 ˜gt − β∇f (˜θt)  2 + 2∥θt − ˜θt∥2.
+Therefore,
+ηβL
+
+f (˜θt+1) − f (˜θt)
+
+≤ − η2β2L 2 ∥∇f (˜θt)∥2
++ η2L ˜gt − β∇f (˜θt)  2
++ L∥θt − ˜θt∥2.
+Finally, using the two outer updates,
+θt+1 − ˜θt+1 = θt − η 2 (gt + ˜gt) − (θt − η˜gt)
+= η 2 (˜gt − gt).
+Hence
+∥θt+1 − ˜θt+1∥2 − ∥θt − ˜θt∥2 = −∥θt − ˜θt∥2 + η2 4 ∥gt − ˜gt∥2.
+Moreover,
+gt − ˜gt = (gt − β∇f (θt)) −
+
+˜gt − β∇f (˜θt)
+
++ β
+
+∇f (θt) − ∇f (˜θt)
+
+.
+Therefore, using ∥a + b + c∥2 ≤ 3∥a∥2 + 3∥b∥2 + 3∥c∥2 and L-smoothness,
+∥gt − ˜gt∥2 ≤ 3 ∥gt − β∇f (θt)∥2 + 3 ˜gt − β∇f (˜θt)  2
++ 3β2L2∥θt − ˜θt∥2.
+If κ = 16L, let’s pursue:
+κ
+
+∥θt+1 − ˜θt+1∥2 − ∥θt − ˜θt∥2
+
+≤ −κ
+
+1 − 3η2β2L2
+4
+
+∥θt − ˜θt∥2
++ 3κη2
+4 ∥gt − β∇f (θt)∥2
++ 3κη2
+4
+˜gt − β∇f (˜θt)  2 .
+Adding the three estimates gives
+Vt+1 − Vt ≤ − ηβ 2 ∥∇f (θt)∥2 − η2β2L 2 ∥∇f (˜θt)∥2
++
+ 3η
+8β + 3κη2 4  ∥gt − β∇f (θt)∥2
++
+ 3η
+8β + η2L + 3κη2 4  ˜gt − β∇f (˜θt)  2
+−
+
+κ
+
+1 − 3η2β2L2
+4
+
+− L − 3ηβL2
+8
+
+∥θt − ˜θt∥2.
+26
+Preprint.
+For κ = 16L, the coefficient of ∥θt − ˜θt∥2 satisfies
+− κ
+
+1 − 3η2β2L2
+4
+
++ L + 3ηβL2
+8
+= −15L + 12η2β2L3 + 3ηβL2
+8
+≤ −15L + 12L + 3L 8
+= − 21L 8 < 0,
+where we used ηβL ≤ 1. Moreover, for κ = 16L, the coefficients of the error terms satisfy
+3η
+8β + 3κη2 4 = 3η 8β + 12η2L
+≤ 99η 8β ,
+and
+3η
+8β + η2L + 3κη2 4 = 3η 8β + 13η2L
+≤ 107η 8β ,
+where we used ηβL ≤ 1. Consequently,
+Vt+1 − Vt ≤ − ηβ 2 ∥∇f (θt)∥2 − η2β2L 2 ∥∇f (˜θt)∥2
++ 99η 8β ∥gt − β∇f (θt)∥2
++ 107η 8β ˜gt − β∇f (˜θt)  2
+− 21L 8 ∥θt − ˜θt∥2.
+By Lemma 1, for every replica i,
+∥gi t − β∇f (θt)∥ ≤ β2L∥∇f (θt)∥,
+and
+∥˜gi t − β∇f (˜θt)∥ ≤ β2L∥∇f (˜θt)∥.
+Jensen’s inequality for the replica averages then gives
+∥gt − β∇f (θt)∥2 ≤ β4L2∥∇f (θt)∥2
+and
+∥˜gt − β∇f (˜θt)∥2 ≤ β4L2∥∇f (˜θt)∥2.
+Substituting these estimates yields
+27
+Preprint.
+Vt+1 − Vt ≤ − ηβ 2 ∥∇f (θt)∥2 − η2β2L 2 ∥∇f (˜θt)∥2
++ 99ηβ3L2
+8 ∥∇f (θt)∥2
++ 107ηβ3L2
+8 ∥∇f (˜θt)∥2
+− 21L 8 ∥θt − ˜θt∥2
+= − ηβ 2  1 − 99 4 β2L2  ∥∇f (θt)∥2
+− η2β2L 2  1 − 107βL 4η  ∥∇f (˜θt)∥2
+− 21L 8 ∥θt − ˜θt∥2.
+Fix η = 30 and assume βL ≤ 1/30. Then
+1 − 99 4 β2L2 ≥ 1 − 99 3600 ≥ 2 3 ,
+1 − 107βL 4η ≥ 1 − 107 3600 ≥ 2 3 .
+Therefore, dropping the nonpositive terms,
+Vt+1 − Vt ≤ − ηβ 3 ∥∇f (θt)∥2.
+Summing from t = 0 to T − 1 and using VT ≥ 0, we obtain
+ηβ
+3
+T −1X
+t=0
+∥∇f (θt)∥2 ≤ V0.
+Dividing by ηβT /3 gives
+1
+T
+T −1X
+t=0
+∥∇f (θt)∥2 ≤ 3V0 ηβT .
+Moreover, if θ0 = ˜θ0, then
+V0 = (1 + ηβL)
+ 
+f (θ0) − f ⋆
+≤ 2
+ 
+f (θ0) − f ⋆ ,
+where we used ηβL ≤ 1. Hence,
+1
+T
+T −1X
+t=0
+∥∇f (θt)∥2 ≤ 6
+ 
+f (θ0) − f ⋆
+ηβT .
+Theorem B (Stochastic Lyapunov Descent). Let f : Rd → R be L-smooth and bounded below by f ⋆.
+Suppose that the assumptions of Lemmas 2, 3, and 4 hold. Set Ft := Ft,0. Fix H ≥ 1, set η = 30,
+and choose β > 0 such that
+0 < βL ≤ 1 30 .
+For every replica i = 1, . . . , K, define the stochastic local trajectories
+θi t,0 = θt, θi t,h+1 = θi t,h − β H ∇F (θi t,h; ξi t,h), h = 0, . . . , H − 1,
+28
+Preprint.
+and
+˜θi t,0 = ˜θt, ˜θi t,h+1 = ˜θi t,h − β H ∇F (˜θi t,h; ˜ξi t,h), h = 0, . . . , H − 1.
+Define the accumulated local updates
+gi t := θt − θi t,H , ˜gi t := ˜θt − ˜θi t,H ,
+and their replica averages
+gt = 1 K
+KX
+i=1
+gi t, ˜gt = 1 K
+KX
+i=1
+˜gi t.
+Consider the outer updates
+θt+1 = θt − η 2 (gt + ˜gt), ˜θt+1 = θt − η˜gt.
+If θ0 = ˜θ0 and the initialization is deterministic, then
+1
+T
+T −1X
+t=0
+E
+
+∥∇f (θt)∥2 ≤ 4(f (θ0) − f ⋆) 15βT
++ 824βLσ2
+H + 18360βLσ2 KH .
+Proof. First, we note that taking each terms of the Lyapunov function independently leads to:
+E [f (θt+1) − f (θt) | Ft]
+≤ −η
+
+∇f (θt), E[gt | Ft] + E[˜gt | Ft] 2 
++ Lη2
+2
+ E[gt | Ft] + E[˜gt | Ft] 2  2 .
++ Lη2
+4
+ 
+E
+
+∥gt − E[gt | Ft]∥2 | Ft 
++E
+
+∥˜gt − E[˜gt | Ft]∥2 | Ft  .
+and
+E
+h
+ηβL(f (˜θt+1) − f (˜θt)) | Ft
+i
+≤ ηβL
+D
+∇f (˜θt), θt − ˜θt − ηE[˜gt | Ft]
+E
++ ηβL2
+2
+θt − ˜θt − ηE[˜gt | Ft]  2
++ η3βL2
+2 E
+h
+∥˜gt − E[˜gt | Ft]∥2 | Ft
+i
+and
+E
+h
+∥θt+1 − ˜θt+1∥2 − ∥θt − ˜θt∥2 | Ft
+i
+= −∥θt − ˜θt∥2 + η2 4 E  ∥gt − ˜gt∥2 | Ft 
+≤ −∥θt − ˜θt∥2 + η2 4 ∥E[gt | Ft] − E[˜gt | Ft]∥2
++ η2
+2 E
+
+∥gt − E[gt | Ft]∥2 + ∥˜gt − E[˜gt | Ft]∥2 | Ft 
+29
+Preprint.
+Following the proof of Theorem A, the deterministic part of the argument remains unchanged when
+replacing the stochastic updates by their conditional means. We obtain
+E [Vt+1 − Vt | Ft]
+≤ − ηβ 2 ∥∇f (θt)∥2 − η2β2L 2 ∥∇f (˜θt)∥2
++ 99η 8β ∥E[gt | Ft] − β∇f (θt)∥2
++ 107η 8β E[˜gt | Ft] − β∇f (˜θt)  2
+− 21L 8 ∥θt − ˜θt∥2
++ Lη2
+2
+e2β2σ2
+KH| {z }
+Main iterate
++ η3βL2
+2
+e2β2σ2
+KH| {z }
+Auxiliary iterate
++ 16Lη2 e2β2σ2
+KH| {z }
+Discrepancy term
+= − ηβ 2 ∥∇f (θt)∥2 − η2β2L 2 ∥∇f (˜θt)∥2
++ 99η 8β ∥E[gt | Ft] − β∇f (θt)∥2
++ 107η 8β E[˜gt | Ft] − β∇f (˜θt)  2
+− 21L 8 ∥θt − ˜θt∥2
++ e2η2β2Lσ2
+2KH (33 + ηβL).
+By Lemma 3,
+∥E[gt | Ft] − β∇f (θt)∥2 ≤ 2(e − 1)2β4L2∥∇f (θt)∥2 + (e2 − 1) β3Lσ2 H ,
+and similarly,
+E[˜gt | Ft] − β∇f (˜θt)  2 ≤ 2(e − 1)2β4L2∥∇f (˜θt)∥2 + (e2 − 1) β3Lσ2 H .
+Using
+(e − 1)2 ≤ 8, e2 − 1 ≤ 8,
+we obtain
+∥E[gt | Ft] − β∇f (θt)∥2 ≤ 16β4L2∥∇f (θt)∥2 + 8 β3Lσ2 H ,
+and
+E[˜gt | Ft] − β∇f (˜θt)  2 ≤ 16β4L2∥∇f (˜θt)∥2 + 8 β3Lσ2 H .
+Substituting these estimates gives
+30
+Preprint.
+E[Vt+1 − Vt|Ft]
+≤ − ηβ 2 ∥∇f (θt)∥2 − η2β2L 2 ∥∇f (˜θt)∥2
++ 198ηβ3L2∥∇f (θt)∥2
++ 214ηβ3L2∥∇f (˜θt)∥2
+− 21L 8 ∥θt − ˜θt∥2
++ 206ηβ2Lσ2
+H + e2η2β2Lσ2 2KH (33 + ηβL).
+= − ηβ 2   1 − 396β2L2 ∥∇f (θt)∥2
+− η2β2L 2  1 − 428βL η  ∥∇f (˜θt)∥2
+− 21L 8 ∥θt − ˜θt∥2
++ 206ηβ2Lσ2
+H + e2η2β2Lσ2 2KH (33 + ηβL).
+Fix η = 30 and assume 0 < βL ≤ 1/30. Then
+1 − 396β2L2 ≥ 1 − 396 900 = 14 25 ≥ 1 2 ,
+1 − 428βL η ≥ 1 − 428 900 = 118 225 ≥ 1 2 .
+Therefore, dropping the nonpositive terms involving ∇f (˜θt) and θt − ˜θt, we obtain
+E [Vt+1 − Vt | Ft]
+≤ − 15β 2 ∥∇f (θt)∥2 + 6180β2Lσ2 H + 137700β2Lσ2 KH .
+Taking total expectation and summing from t = 0 to T − 1, and using VT ≥ 0, yields
+15β
+2
+T −1X
+t=0
+E
+
+∥∇f (θt)∥2 ≤ E[V0]
++ 6180β2Lσ2T H
++ 137700β2Lσ2T KH .
+Dividing by 15βT /2 gives
+1
+T
+T −1X
+t=0
+E
+
+∥∇f (θt)∥2 ≤ 2E[V0] 15βT
++ 824βLσ2
+H + 18360βLσ2 KH .
+Moreover, if θ0 = ˜θ0 and the initialization is deterministic, then
+V0 = (1 + 30βL)
+ 
+f (θ0) − f ⋆
+≤ 2
+ 
+f (θ0) − f ⋆ ,
+31
+Preprint.
+where we used βL ≤ 1/30.
+Consequently,
+1
+T
+T −1X
+t=0
+E
+
+∥∇f (θt)∥2 ≤ 4(f (θ0) − f ⋆) 15βT
++ 824βLσ2
+H + 18360βLσ2 KH .
+D TIMING AND BANDWIDTH CONSIDERATIONS
+Let P denote the number of model parameters, K the number of replicas, and Ntok the global number
+of tokens processed per inner step. Using the standard estimate of 6P FLOPs per token, the duration
+of one inner step is
+Tstep ≃ 6P Ntok KρMFUFpeak , Tinner = HTstep,
+where Fpeak is the peak accelerator throughput and ρMFU is the model FLOPs utilization.
+Assuming an FP32 outer gradient and a ring all-reduce, the communication time is approximated by
+Tcomm ≃ 2(K − 1) K 4P bnet ,
+where bnet is the effective inter-replica bandwidth.
+The CPU–GPU transfer cost depends on the method. Let cm denote the number of FP32 parameter-
+sized buffers transferred by method m per outer step. We use
+cDiLoCo = cEager = cDelayed = 2, cLACCO = 5,
+where the additional three buffers for LACCO correspond to the inactive AdamW state. The resulting
+outer-update cost is
+T (m) outer ≃ T (m) opt + cm 4P bCPU/GPU .
+In the estimates below, we neglect the optimizer kernel time relative to the transfer time.
+The wall-clock time per communication round is therefore
+TDiLoCo = Tinner + Tcomm + T (DiLoCo) outer ,
+TEager = max{Tinner, Tcomm} + T (Eager) outer ,
+TDelayed = max{Tinner, Tcomm + T (Delayed) outer },
+TLACCO = max{Tinner, Tcomm + T (LACCO) outer }.
+Representative H100 setting. For the 134M model with K = 4 and Ntok = 131,072, we take
+Fpeak = 1 PFLOP/s, ρMFU = 0.5, bnet = 10 GB/s, and bCPU/GPU = 3 GB/s. This gives
+Tstep ≃ 52.7 ms, Tcomm ≃ 80 ms, 4P bCPU/GPU ≃ 179 ms.
+For H = 30, Tinner ≃ 1.58 s.
+For methods that overlap the complete outer path,
+H (m) hide =
+&
+Tcomm + T (m) outer
+Tstep
+’
+.
+Thus, Delayed DiLoCo requires H ≥ 9, while the larger optimizer state of LACCO requires H ≥ 19.
+Both are below the H = 30 used in our main experiments, for which the outer path is fully hidden.
+32
+Preprint.
+Table 9: Timing estimates for the 134M model under the representative H100 setting described above.
+Hhide is the minimum number of inner steps required to hide the complete outer path when the
+method permits full overlap.
+Method cm T (m) outer Tround at H = 30 Hhide
+DiLoCo 2 0.36 s 2.02 s –
+Eager DiLoCo 2 0.36 s 1.94 s –
+Delayed DiLoCo 2 0.36 s 1.58 s 9
+LACCO 5 0.89 s 1.58 s 19
+E FURTHER ABLATIONS
+E.1 DYNAMICS OF THE PARAMETER DISTANCE ∥θt − ˜θt∥2
+To understand the interaction between the two parameter
+states throughout training, Figure 4 tracks the L2 dis-
+tance ∥θt − ˜θt∥2 over the whole training for H ranging
+from H = 5 to H = 75 on the 134M model.
+The dynamics exhibit three distinct phases: (1) Ini-
+tialization: both models start identical (θ0 = ˜θ0); (2)
+Transient drift: early in training, the trajectories drift
+apart up to a peak around 0.35B tokens that scales
+monotonically with H; and (3) Contraction: as train-
+ing progresses, the distance steadily contracts across
+all settings, effectively collapsing to zero at the end
+(∥θT − ˜θT ∥2 ≈ 0).
+Crucially, because θT ≈ ˜θT at convergence, evaluating
+on θt, ˜θt, or their pairwise average yields identical vali-
+dation performance, validating our evaluation protocol.
+0.0 0.5 1.0 1.5 2.0 2.5
+Tokens (Billions)
+0
+50
+100
+150
+200
+250
+300
+‖θt − ̃θt‖2
+H = 5
+H = 10
+H = 15
+H = 30
+H = 45
+H = 60
+H = 75
+Figure 4: L2 distance ∥θt − ˜θt∥2 across
+training for varying H on the 134M
+model.
+E.2 INNER OPTIMIZER STATE POLICY
+In LACCO, each outer iteration alternates between a main stage and a lookahead stage. To evaluate
+how the inner AdamW state should be handled across these stages, we conduct an ablation on the
+134M model with K = 4 and H = 30.
+Let S0 denote the inner optimizer state at the beginning of an iteration. We compare three policies:
+(1) Rewind: the lookahead stage initializes from SM , but its state updates are discarded at the end of
+the round, restarting the next cycle from SM ; (2) Shared state: a single continuous AdamW state
+evolves sequentially through both stages (S0 → SM → SL); and (3) Momentum averaging: both
+stages branch from S0 to reach SM and SL, and the next cycle initializes from 1 2 (SM + SL).
+Table 10: Ablation of inner AdamW state policies on the 134M model at K = 4, H = 30.
+Inner State Policy Val. Loss ↓
+LACCO, no averaging (rewind) 3.029
+LACCO, no averaging (shared state) 3.008
+LACCO (momentum averaging, default) 2.988
+As shown in Table 10, momentum averaging yields the best performance, achieving the lowest
+validation loss of 2.988. Maintaining a single shared state across both stages without averaging
+achieves 3.008, which still improves over the Eager DiLoCo baseline (3.020). In contrast, completely
+discarding the updates from the lookahead trajectory degrades the loss to 3.029.
+33
+Preprint.
+E.3 PEAK MEMORY FOOTPRINT AND TRAINING THROUGHPUT
+To evaluate the practical overhead of maintaining two sets of parameter and optimizer states, Table 11
+reports the peak allocated GPU memory and end-to-end token throughput for K = 4 workers training
+the 0.5B model at H = 30 on 80GB NVIDIA A100 GPUs across inter-node bandwidths of 0.5, 1,
+and 5 Gbps.
+Table 11: Peak GPU memory allocation and measured training throughput across bandwidths for the
+0.5B model (K = 4, H = 30). Percentages indicate memory utilization relative to the 80 GB GPU
+capacity.
+Method Peak GPU memory 0.5 Gbps 1 Gbps 5 Gbps
+DiLoCo 37.9 GiB (48%) 77.7k tok/s 103.0k tok/s 138.8k tok/s
+LACCO, CPU offload 40.3 GiB (51%) 145.5k tok/s 147.8k tok/s 148.4k tok/s
+LACCO, fully GPU 56.1 GiB (71%) 146.7k tok/s 148.2k tok/s 148.5k tok/s
+These results highlight three main findings: (1) Minimal memory overhead with offloading: when
+offloading inactive optimizer states to the host CPU, peak GPU memory increases by only 2.4 GiB
+over synchronous DiLoCo (40.3 GiB vs. 37.9 GiB), making it practical even under tight memory
+budgets. (2) Resilient throughput: LACCO sustains a nearly constant throughput of ∼146k–148.5k
+tok/s across all network conditions, whereas DiLoCo’s throughput drops by nearly half (to 77.7k
+tok/s) at 0.5 Gbps due to blocking synchronization; and (3) Zero throughput penalty from offloading:
+the throughput difference between CPU-offloaded and fully GPU-resident LACCO is practically
+nonexistent (e.g., 147.8k vs. 148.2k tok/s at 1 Gbps), confirming that host transfers are entirely hidden
+behind local computation.
+34

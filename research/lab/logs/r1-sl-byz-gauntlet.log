@@ -1,0 +1,6 @@
+[r1-sl-byz-gauntlet] start eval 8.3665
+[r1-sl-byz-gauntlet] it 1 t    1.2s tok   0.123M eval 7.9213 up/step 0.858MB {'simTime': 30.0, 'innerLoss': 7.0972, 'kept': 3, 'msgNorm': 16.2375, 'bitsPerParam': 0.2337}
+[r1-sl-byz-gauntlet] it 2 t    2.3s tok   0.246M eval 7.5390 up/step 0.858MB {'simTime': 60.0, 'innerLoss': 6.9927, 'kept': 3, 'msgNorm': 20.6364, 'bitsPerParam': 0.2337}
+[r1-sl-byz-gauntlet] it 5 t    6.2s tok   0.614M eval 6.9232 up/step 0.858MB {'simTime': 150.0, 'innerLoss': 6.5784, 'kept': 3, 'msgNorm': 25.5918, 'bitsPerParam': 0.2337}
+[r1-sl-byz-gauntlet] it 9 t   11.3s tok   1.106M eval 6.3596 up/step 0.858MB {'simTime': 270.0, 'innerLoss': 6.2749, 'kept': 3, 'msgNorm': 27.9824, 'bitsPerParam': 0.2337}
+[r1-sl-byz-gauntlet] it 17 t   21.5s tok   2.089M eval 5.9747 up/step 0.858MB {'simTime': 510.0, 'innerLoss': 6.0987, 'kept': 3, 'msgNorm': 29.881, 'bitsPerParam': 0.2337}

@@ -1,0 +1,3004 @@
+GISKARD: Byzantine Robust and Private
+Aggregation for Large-Scale Decentralized Learning
+Ousmane Touat∗, César Sabater∗, Mohamed Maouche†, Sonia Ben Mokhtar∗
+∗ CNRS, INSA Lyon, Université Lyon 1, LIRIS, UMR5205
+† INRIA, INSA Lyon, Université Lyon 1, CITI Lab
+{ousmane.touat, cesar.sabater, sonia.ben-mokhtar}@liris.cnrs.fr
+{mohamed.maouche}@inria.fr
+Abstract—In decentralized learning, clients train a machine
+learning model while keeping their data locally and share their
+model parameters or gradients with a set of neighbors, making
+it vulnerable to both privacy attacks and model poisoning
+attacks. Jointly addressing privacy and Byzantine behavior in
+decentralized learning is challenging. Indeed, Differential Pri-
+vacy (DP) applied on the client side is known to increase the
+variance of honest model updates, which weakens Byzantine-
+robust aggregation against poisoning attacks. Distributed DP can
+mitigate this issue by adding noise after aggregation, but imple-
+menting it without a trusted curator requires both confidential
+and Byzantine-resilient computation. Recent work addresses this
+challenge using secure multi-party computation (MPC) to imple-
+ment robust aggregation while preserving input confidentiality.
+However, these solutions scale badly: they either require all-to-
+all communication between participants or delegate the entire
+computation to a small subset of parties whose computational and
+communication cost grows with network size. In this paper, we
+present Giskard, a scalable protocol for private and Byzantine-
+robust decentralized aggregation. Giskard organizes n parties
+into a tree of committees of size O(log n) and evaluates a
+differentially private coordinate-wise approximate median via a
+committee-adapted secure quantile search over the value domain,
+using MPC within each committee. We assess Giskard both
+theoretically by proving its security and privacy properties and
+empirically through extensive experiments involving up to one
+million participants. Compared to its closest competitors, Giskard
+reduces per-party communication complexity by close to three
+orders of magnitude over the closest competitor while exhibiting
+comparable robustness under up to n/4 Byzantine parties.
+Index Terms—Decentralized learning, Byzantine robustness,
+Secure multiparty computation, Privacy-preserving aggregation
+I. INTRODUCTION
+Federated learning (FL) was initially promoted as a privacy-
+preserving alternative to centralized training, since raw data
+remains on users’ devices [1]. However, subsequent work has
+shown that FL is vulnerable to a wide range of attacks, many of
+which exploit the privileged role of the aggregation server [2].
+This centralization also creates a governance bottleneck: the
+entity operating the server retains effective control over the
+learning process, including the choice of the training objective,
+model architecture, aggregation rule. As a result, FL may
+decentralize data storage, but it does not decentralize decision-
+making. From this perspective, decentralized learning, where
+participants interact directly in a peer-to-peer manner [3], [4]
+appears to be an appealing alternative as it eliminates the need
+for a trusted central all-mighty orchestrator while preserving
+the convergence properties of centralized training [5].
+Nevertheless, decentralized learning systems face several
+challenges that hinder their wider adoption. First, these sys-
+tems are inherently vulnerable to Byzantine participants, i.e.,
+malicious or faulty nodes that submit arbitrary, manipulated,
+or erroneous model updates with the intent to corrupt the
+global model [6]. Unlike in FL, where the server can act as a
+gatekeeper (albeit a trusted and potentially compromised one),
+the absence of a central authority in decentralized settings
+makes model poisoning attacks harder to detect and mitigate.
+An orthogonal yet equally critical challenge concerns the
+privacy of participants’ contributions. Even in the absence of a
+central server, nodes must exchange model updates (gradients
+or parameter vectors) that can leak sensitive information about
+their training data, and such direct access to parties updates,
+and the possibility to manipulate them broadens the attack
+surface enable privacy attacks potentially stronger than in
+FL [7]. Examples of such attacks include membership infer-
+ence attacks [8]–[12], where an adversary determines whether
+a particular record was used during training and more criti-
+cally, gradient/model inversion attacks [13]–[15], whereby an
+adversary reconstructs raw training samples with high fidelity
+directly from the exchanged gradients and reconstructed ones.
+These two challenges have been extensively studied in
+isolation, each giving rise to its own line of defenses. On the
+one hand, robust aggregation functions have been devised to
+deal with Byzantine contributions. These aggregation functions
+are designed to limit the influence of malicious updates by
+filtering outliers or computing statistics robust to a fraction of
+corrupted inputs, such as coordinate-wise Median, Trimmed
+Mean, or Krum [16], [17]. These methods offer provable
+robustness guarantees up to a bounded fraction of Byzantine
+participants. More recently, the challenge of handling model
+poisoning attacks within heterogeneous environment was also
+tackled by boosting current robust aggregation rule with pre-
+aggregation mechanism [18], [19] or by reformulating the loss
+function [20]. On the other hand, one of the main protections
+against privacy attacks is differential privacy [21] (DP), which
+introduces calibrated noise to bound what an adversary can
+infer from participants data. However adding noise in the train-
+ing process would greatly disrupt model utility. To alleviate
+arXiv:2606.19129v2  [cs.CR]  22 Oct 2026
+that, a little noise as possible must be added, which can be
+done going in the Distributed DP model, where the noise can
+be added after aggregating participants updates. This model,
+however, requires cryptographic techniques such as Secure
+Aggregation [22] or homomorphic encryption [23] to provide
+input confidentiality and ensure that individual updates are
+never exposed in the clear. So to guarantee end-to-end privacy
+while preserving model utility, we must combine differential
+privacy with cryptographic protection.
+However, it is well known that these two challenges are fun-
+damentally in tension: Byzantine-resilient aggregation func-
+tions require inspecting and comparing individual contribu-
+tions, while privacy mechanisms are designed to hide them.
+This conflict limits the applicability of naive combinations.
+Approaches that combine robust aggregators with local DP
+mechanisms face impossibility results that bound the simul-
+taneous guarantees of privacy, robustness, and utility [24].
+Alternatively, implementing robust aggregation inside crypto-
+graphic protocols is a natural direction, but incurs a heavy
+computational and communication cost: aggregation rules such
+as Trimmed Mean or Median inherently require sorting and
+comparison operations, which are notoriously expensive to
+implement in encrypted form.
+Prior work has explored MPC-based robust aggregation
+in federated settings [25]–[28], where a central coordinator
+can structure the computation. Extending these guarantees to
+fully decentralized systems is considerably harder. Existing
+decentralized proposals [29], [30] involve either all nodes or
+a randomly elected committee performing MPC to perform
+robust aggregation, without adding a DP mechanism, that
+would still open the door to to privacy attacks on the resulting
+deciphered aggregate. Furthermore, these designs yield all-
+to-all or all-to-committee communication topologies, where
+the per-node communication load grows at least linearly with
+the number of participants. This constitutes a fundamental
+scalability bottleneck that renders them impractical for large-
+scale fully decentralized learning deployments, where we may
+not expect any of the participant to yield enough computing
+and/or networking power to handle such workload.
+Our work: In this paper, we aim at bridging this gap by
+proposing GISKARD, a scalable, robust and privacy-preserving
+decentralized learning system. To reach this objective, we build
+on scalable MPC systems designed to withstand malicious ad-
+versaries [31], [32] and use them to implement a differentially
+private, Byzantine-robust aggregation protocol.
+GISKARD distribute secure computation across small com-
+mittees to achieve sub-linear per-party communication, while
+ensuring that only carefully calibrated noisy statistics are
+revealed. Our key technical insight is a new formulation
+of coordinate-wise median as a sequence of private secure
+counting queries. This formulation enables a lightweight hi-
+erarchical aggregation protocol that combines communication
+efficiency, differential privacy, and Byzantine resilience.
+As a result, GISKARD is a scalable, load-balanced, private
+decentralized learning system that tolerates up to n/4 byzan-
+tine nodes via a hierarchical aggregation tree, matching the
+robustness properties of coordinate-wise median.
+Our contributions are summarized as follows:
+• We propose GISKARD, a novel robust and private decen-
+tralized learning protocol that scales up to millions of
+parties.
+• We prove that GISKARD is secure against static malicious
+adversaries.
+• We analyze GISKARD’s communication cost and show
+that the worst per-party communication is polyloga-
+rithmic in n while its closest competitors have worst
+per-party communication complexity in the order of
+O(n log2 n).
+• We empirically evaluate GISKARD on four datasets and
+at network sizes up to n = 106. GISKARD reduces
+worst-case per-party communication by close to three
+orders of magnitude over the closest baseline, while
+its robust aggregation function matches the utility of
+formally robust aggregators.
+• The code is publicly available1.
+This paper is structured as follows. We first present the
+collaborative learning setting and technical preliminaries in
+Section II. We describe the system and threat model alongside
+with the design goals in Section III. We derive the struc-
+tural requirements for MPC-friendly robust aggregation, the
+counting-based design of GISKARD and its the full protocol
+in Section IV. We then conduct GISKARD security, confi-
+dentiality, robustness, and communication cost analysis in
+Section V before empirically validate our theoretical analysis
+in Section VI. Finally, we discuss related work in Section VII
+before concluding in Section VIII.
+II. BACKGROUND
+This section introduces the setting in which GISKARD oper-
+ates and the components on which it is built. We first formalize
+the collaborative learning problem (§II-A) and differential
+privacy guarantees (§II-B). We then recall the three technical
+components our protocol GISKARD relies on, that are robust
+aggregation (§II-C), cryptographic building blocks (§II-D) and
+committee formation (§II-E).
+A. Collaborative Learning
+Collaborative learning is a distributed learning paradigm
+where the objective is to learn a statistical/learning model from
+independent computing units, each holding its own local data.
+In particular, here we consider a set of parties P = {1, . . . , n},
+each holding a local data set Di , whose common objective is
+to learn a shared model θ⋆ that minimizes the following loss
+function:
+L(θ⋆) = 1 |D|
+nX
+i=1
+li(θ⋆, Di), (1)
+where li(,i)s the local loss function of party i and D =S
+i∈P Di as defined in [33].
+1https://anonymous.4open.science/r/Giskard-ByzRobustPrivatelDL-922D
+B. Differential Privacy
+To analyze formal privacy guarantees in GISKARD, Differ-
+ential Privacy (DP) is a standard framework. DP provides a
+formal guarantee that the output of a statistical function does
+not depend too strongly on the contribution of any individual
+client. Sample-level DP protects the addition or removal of a
+single record, whereas user-level (or client-level) DP, which we
+consider in this paper, protects the addition or removal of all
+records associated with a single client [34], [35]. Accordingly,
+in user level DP, two datasets D and D′ are neighboring,
+denoted D ∼ D′, if one can be obtained from the other
+by adding or removing the entire local dataset of a single
+party [35].
+Definition 1. (ε, δ)-DP [36]
+A randomized mechanism M satisfies (ε, δ)-differential
+privacy (DP) if, for any neighboring datasets D ∼ D′ and
+any measurable set S,
+Pr[M(D) ∈ S] ≤ eε Pr[M(D′) ∈ S] + δ. (2)
+Definition 2. ρ-Zero-Concentrated DP [37]
+A randomized mechanism M satisfies ρ-zero-concentrated
+differential privacy (zCDP) if, for any neighboring datasets
+D ∼ D′ and any α > 1,
+Dα(M(D), |, M(D′)) ≤ ρα, (3)
+where Dα denotes the Rényi divergence of order α.
+A ρ-zCDP mechanism satisfies (ε, δ)-DP for any δ > 0,
+with [37]
+ε = ρ + 2
+p
+ρ log(1/δ). (4)
+In collaborative learning, we distinguish between mecha-
+nisms in which noise is added locally to each parties’ update,
+referred to as Local DP, and mechanisms that add noise to
+global aggregates of party updates, referred to as the Central
+DP model if the aggregator is trusted, or Distributed DP if a
+cohort of parties are involved. For the latter, we must rely on
+the use of cryptographic primitives.
+C. Byzantine Robust Collaborative Learning
+1) Threat to Collaborative Learning Model: While averag-
+ing is the most common aggregation policy in collaborative
+learning, it is also the most vulnerable to cases where par-
+ties fail to send correct model update. Such failures include
+parties that fail to respond, have their updates corrupted by
+faults, or adversarially submit crafted updates that bias the
+aggregate. We refer to this class of attacks as model poisoning
+attacks [38], [39].
+2) Defense against Model Poisoning Attacks: The literature
+gives a wide range of defenses against model poisoning.
+A first class restricts client updates to a bounded domain,
+preventing deviations far from the mean [40]. A second class
+deterministically detects and excludes corrupted updates from
+aggregation [41].
+A third class replaces averaging with robust statistical
+functions that tolerate a fraction of corrupted inputs. We focus
+on this third class, which is supported by the theoretical
+framework described below.
+Definition 3. (f, κ)-Byzantine robustness [19] Let f = ρn
+with ρ < 1 2 and κ ≥ 0, the aggregation rule F is (f, κ)-
+Byzantine robust if there exist a value κ ∈ R+ so that for any
+(x1, . . . , xn) ∈ RN and any subset S ⊆ [n] of size n-f the
+output of F is bounded as follow :
+∥F (x1, . . . , xn) − xS ∥2 ≤ κ |S| X i∈S ∥xi − xS ∥2 (5)
+where xS = 1 |S| P i∈S xi.
+Such an aggregator’s output deviates by at most a bounded
+multiple of the honest dispersion, regardless of the attacker
+knowledge and attack strategies.
+Examples of (f, κ)-Byzantine robust aggregators include
+coordinate-wise estimators (trimmed mean and median [16])
+and geometry-based aggregators (Krum and Multi-Krum [17],
+Geometric Median [42]).
+D. Cryptographic Building Blocks
+1) Multi-Party Computation: GISKARD relies on secure
+multi-party computation (MPC) [43]: a set of parties P =
+{1, . . . , n}, each holding a private input xi ∈ I, jointly
+compute a public function f : In → On such that party i
+learns only its own output fi((xj )n j=1) ∈ O. We instantiate this
+with secret-sharing-based MPC in the honest-majority setting,
+building on Shamir’s scheme and the BGW verifiable variant.
+We recall both schemes below.
+2) Verifiable Secret Sharing: Let Fq be a field of size
+at least q > n, and let t denote the maximum number of
+corrupted MPC parties.
+Shamir secret sharing [44] represents a secret s ∈ Fq as
+evaluations (denoted shares) of a random polynomial of degree
+t whose constant term is s, ensuring that t + 1 share can
+recover the secret, while t share reveal no information about
+s. A key property is linearity: any addition and multiplication
+by a public constant can be performed with local operation on
+the shares.
+To tolerate malicious dealers and parties we use the BGW
+verifiable secret-sharing (VSS) scheme [45], [46]. VSS ensures
+that honest parties can reject inconsistent shares or reconstruct
+the secret despite malformed ones. BGW provides protocols
+for multiplying shared values and for robust reconstruction,
+where malformed shares submitted by corrupted parties can
+be detected or corrected. These mechanisms protect our MPC
+computation against active deviations by up to t < n/3 cor-
+rupted parties. For completeness, we provide the full descrip-
+tion of the BGW sharing, multiplication, and reconstruction
+protocols in Appendix A .
+Theorem 1 ( [46]). The BGW protocol is unconditionally
+secure against a static malicious adversary corrupting up to
+t < n/3 parties, with a straight-line black-box simulator.
+E. Seed Agreement and Committee Formation
+To make GISKARD scalable, we need to be able to form
+committees of a small number of parties that guarantee, with
+an extremely high probability, that they contain a sufficient
+proportion of honest parties. This requires the robust genera-
+tion of a random seed, followed by the use of a public function
+so that each party can sample the committee membership. This
+is a standard construction that has been extensively studied and
+which we therefore reuse [31], [32], based on the composition
+of scalable Byzantine Agreement [47]–[49], which gives the
+following.
+Lemma 1 (Common Reference String Generation). For all
+ϵ > 0, there exists a protocol such that for n parties in a
+synchronous network with authenticated channels, against a
+static adversary corrupting at most (1/4 − ϵ)n parties:
+• With probability 1 − n−c for any constant c, all honest
+parties agree on a common string seed of length Θ(log n)
+with at least a 2/3 + ϵ fraction of uniformly random bits.
+• The per-party communication cost is polylog(n) bits.
+• The round complexity is polylog(n).
+The proof is adapted from composing [47] with [49, Lemma
+9]. The protocol is run only once during system setup. Its
+output seed deterministically defines the tree topology via the
+public random functions. This topology is then reused across
+all subsequent operations, so no further BA invocations are
+needed per-operation.
+III. MODELS AND DESIGN GOALS
+We first describe the system and threat models (§III-A–
+§III-B) and finally the design goals (§III-C).
+A. System and Network Model
+We model our collaborative learning system as a set of n
+parties, P = {P1, . . . , Pn}. The parties jointly execute a pre-
+scribed protocol Π to collaboratively learn a global model. We
+assume that the set of parties P consists of two disjoint sets:
+the honest parties H, which strictly follow Π, and the adversar-
+ial parties A (also called Byzantine parties), with H ∪ A = P
+and H ∩ A = ∅. We assume a synchronous communication
+network where computation proceeds in rounds and messages
+sent by honest parties are delivered within a known bounded
+delay. We further assume a public-key infrastructure (PKI)
+that authenticates point-to-point communication channels, and
+the presence of a secure communication protocol such as
+TLS to ensure channel confidentiality, all being necessary pre-
+requisite for our MPC primitives.
+B. Threat Model
+We consider a static, computationally bounded adversary
+A who corrupts a set of parties of size f = |A| prior to
+protocol execution. Static corruption means that the adversary
+choose the corrupted parties, and cannot change this choice
+during the protocol execution. The computationally bounded
+assumption implies that the adversary is limited to polynomial-
+time computation and as such cannot break the underlying
+cryptographic assumptions, such as the security of authenti-
+cation and encryption mechanisms. The adversarial objective
+is to undermine the confidentiality, privacy, and correctness of
+the aggregation process.
+a) Attacker capabilities.: GISKARD considers a Byzan-
+tine threat model in which corrupted parties may arbitrarily
+deviate from the prescribed protocol Π. At the protocol level,
+corrupted parties may send malformed shares, colluding to
+reconstruct shared secrets, or attempting to abort the protocol.
+At the model learning level, corrupted parties may submit
+adversarially crafted model updates in order to bias the global
+aggregated model.
+b) Corruption bound.: We require f < n/4. This bounds
+results from the requirement for the optimized MULTIPLY
+protocol used within GISKARD and the committee formation
+requirements.
+C. Design Goals
+Our primary objective is to ensure secure and reliable
+decentralized learning even when a subset of parties acts
+maliciously. Specifically, GISKARD is designed to achieve the
+following three goals:
+(1) Byzantine Robustness. We want our aggregation rule
+to be provably robust, ideally under the (f, κ)-robustness
+(Def. 3), so that the training process gets robustness guarantee
+against model poisoning attacks.
+(2) Privacy and Security. GISKARD must provide formal
+differential privacy for honest updates, while ensuring perfect,
+information-theoretic confidentiality against static malicious
+adversaries under the assumed corruption bound. Only pre-
+scribed outputs may be revealed, enabling distributed DP
+without a trusted aggregator. It must also guarantee output
+delivery to all honest parties despite missing, malformed, or
+inconsistent adversarial contributions.
+(3) Scalability. The per-party communication overhead
+must grow sub-linearly in the total number of participants,
+ensuring that the protocol remains practical at cross-device
+scale, concretely for deployments involving n ≥ 104.
+The main challenge is scalability, since robust rules use
+costly non-linear operations and processing all n inputs in one
+MPC instance concentrates computation and communication.
+The rule and its MPC realization must therefore be co-
+designed to satisfy Goal (3).
+IV. GISKARD PROTOCOL
+A. Overview and Intuition
+1) Private Secure Counting for Median Search: Our key
+observation is that the coordinate-wise median, a known robust
+aggregation rule, can be formulated it through a series of
+secure queries. Given a public pivot p, define the counting
+query
+count(p) =
+nX
+j=1
+1[xj ≤ p], (6)
+Algorithm 1 Differentially Private Median Search via Secure
+Counting
+Input: Inputs: x1, . . . , xn ∈ (−u, u]; precision q; DP budget ρ
+Output: Approximate median ˆM
+1: Left ← −u; Right ← u; Niter ← ⌈log2(2u/q)⌉
+2: for t = 1, . . . , Niter do
+3: pt ← (Left + Right)/2
+4: Honest j: bj (pt) ← 1[xj ≤ pt]; Byzantine j: arbitrary
+bj (pt)
+5: Verify bj (pt) ∈ {0, 1}; replace invalid by 0
+6: Securely compute ^count
+(t)
+← Pn j=1 bj (pt) + Zt, where
+Zt ∼ N (0, Niter/2ρ)
+7: if ^count
+(t)
+≥ ⌊n/2⌋ + 1 then
+8: Right ← pt
+9: else
+10: Left ← pt
+11: end if
+12: end for
+13: return ˆM ← (Left + Right)/2
+which returns how many inputs lie below p. Furthermore,
+instead of revealing the exact count, we reveal a differentially
+private noisy count
+^count = count(p) + Zt Zt ∼ N
+
+0, Niter
+2ρ
+
+, (7)
+where independent Gaussian noise is added at each iteration.
+Since each counting query has sensitivity one, allocating a
+privacy budget ρ/Niter to each query yields an overall ρ-
+CDP guarantee over the Niter adaptive counting queries by
+composition [50].
+Algorithm 1 gives the scalar procedure; model coordinates
+are processed in parallel. For the robustness and privacy
+analysis, the revealed noisy count decomposes as
+^count
+(t)
+= count(t) H + count(t) B + Zt, (8)
+with count(t) H = |{j ∈ H : xj ≤ pt}|, where bit validation
+ensures count(t) B ∈ [0, f ] under any Byzantine strategy,
+while Zt denotes the Gaussian perturbation introduced for
+differential privacy.
+Securely evaluating the query is inexpensive because the
+reformulation moves all costly operations outside the secure
+domain. Local comparisons are free, as they are performed
+in plaintext by the participating parties, while aggregation
+reduces to a sum, an efficient associative operation that can
+be delegated to small committees and combined hierarchically.
+Finally, Byzantine influence can be provably bounded: each
+submitted contribution must be proven to be binary, and any
+contribution that fails this check is discarded. Consequently,
+each Byzantine party can alter the validated count by at most
+one, so the Byzantine contribution satisfies count(t) B ∈ [0, f ].
+DP introduces an additional perturbation Zt, yielding
+^count
+(t)
+− count(t) H = count(t) B + Zt. (9)
+Therefore, every binary-search step operates on a private and
+Byzantine-robust estimate of the rank, and the final approxi-
+mation error can be characterized in terms of a Byzantine rank
+error and a privacy-induced rank error.
+2) Hierarchical Committee Architecture: To distribute the
+aggregation workload, GISKARD organizes the parties into
+small committees arranged as a k-ary tree of depth L. Figure 1
+illustrates this architecture. Each level of the tree has a specific
+role:
+• Leaves (depicted as Level 0 in Figure 1) – all n
+parties. Each compares its local vector to the current pivot
+coordinate-wise and secret-shares the resulting bit vector
+to its assigned base committee.
+• Base committees (depicted as Level 1 in Figure 1) –
+each receives shares from n/kL leaves, validates share
+domain and well-formedness, sums them, and forwards
+re-shared sums to its parent.
+• Intermediate committees (depicted as Levels 2 to L−1
+in Figure 1) – receive shares from k child committees,
+convert and re-aggregate, forward upward.
+• Root committee (depicted as Level L in Figure 1)
+– performs final checks and aggregation, adds jointly
+generated Gaussian noise to the count, reconstructs the
+noisy count in the clear, selects the next pivot, and
+disseminates it down the tree.
+This hierarchical organization distributes the computation
+and communication load across multiple committees rather
+than concentrating it on a single one. We next presents the
+complete GISKARD protocol and shows how these levels
+interact during setup and each median-search iteration.
+B. Protocol Description
+We now present the main steps of the GISKARD protocol,
+presented in Algorithm 2. GISKARD consists of a one-time
+setup phase followed by a secure median-computation phase
+that is executed in each decentralized learning round. Each
+party Pj holds a private model update xj ∈ (−u, u]D , where
+D is the model dimension and u bounds the value domain. The
+parties jointly compute an approximation cM of the coordinate-
+wise median with target precision q. All vector operations
+described below are performed coordinate-wise and in parallel.
+1) One-Time Setup: Before training, parties run
+BUILDTREE once to construct a k-ary tree T of depth
+L, with parties as leaves and size-m committees as internal
+nodes. Each party learns its leaf position, base committee,
+and committee memberships. Committees use threshold
+τ < m/4 to tolerate corrupted members. The tree is reused
+across all median computations, amortizing seed agreement
+and committee-formation costs over learning rounds.
+2) Secure Median Computation: Algorithm 2 describe the
+counting-based median search of Subsection IV-A1 over the
+GISKARD committee tree, with all model coordinates pro-
+cessed in parallel. The binary-search rule and stopping cri-
+terion are therefore inherited directly from Algorithm 1; we
+describe only their secure distributed realization below.
+a) Input sharing.: At iteration t, each party Pj computes
+the comparison vector
+b(t) j = (1[xj,d ≤ pt,d])d∈[D] (10)
+COM
+P1
+x1
+P2
+x2
+Pn/b
+xn/b
+· · ·
+· · ·
+Pi
+xi
+Pi+1
+xi+1
+Pi+n/b
+xi+n/b
+· · ·
+· · ·
+· · ·
+· · ·
+· · ·
+· · ·
+Pn−n/b
+xn−n/b
+Pn−1
+xn−1
+Pn
+xn
+· · ·
+· · ·
+C1 Ca Cb
+🔒 🔒 🔒 🔒 🔒 🔒 🔒 🔒 🔒
+C′ 1 C′ a C′ b· · · · · ·
+🔒 Σ 🔒 Σ 🔒 Σ
+· · ·
+🔒 Σ 🔒 Σ 🔒 Σ 🔒 Σ🔒 Σ🔒 Σ
+· · ·
+COM
+...
+🔒 Σ
+...
+🔒 Σ
+...
+🔒 Σ· · · · · ·
+Level 0
+Level 1
+Level 2
+...
+Level L
+Phase 1
+clients hold xj ,
+compare xj,d ≤
+pt,d, share [bj ]
+Phase 2
+verify, aggre-
+gate P bj , re-
+share upward
+Phases 3–4
+compute distributed
+noise, reveal
+global ^count,
+broadcast pt+1
+🔒 [bj ]: shared
+bit vector
+🔒 Σ: shared
+partial count
+broadcast
+pt+1
+Fig. 1. GISKARD secure median computation. The n parties P1, . . . , Pn are partitioned across b = n/kL base committees C1, . . . , Cb, each of size m. Each
+base committee receives n/b bit-vector shares from its assigned parties and aggregates them into a partial count. Partial counts are re-shared upward through
+L levels of k-ary aggregation to the root committee COM, which broadcasts the next threshold pt+1 downward (dashed).
+Algorithm 2 GISKARD
+Input: Tree T (k-ary, depth L); committee size m = O(log n);
+threshold τ = ⌊(1/4 − ϵ)m⌋; precision q; value-domain bound
+u
+Input: Each leaf j ∈ [n] holds private xj ∈ RD
+Output: Coordinate-wise median ˆM ∈ RD
+— Setup (once) —
+1: Run BUILDTREE; instantiate T
+— Median computation (each FL round) —
+2: Left ← −u · 1; Right ← u · 1
+3: p1 ← (Left + Right)/2
+4: for t = 1, . . . , Niter do
+— Phase 1: input sharing —
+5: Each leaf j computes b(t) j ←   1[xj,d ≤ pt,d]  d∈[D]
+6: Each leaf j runs INPUTSHARE(b(t) j , Cj ) ▷ Prot. 5
+7: Each Pi ∈ Cj : verify and aggregate → σi
+— Phase 2: hierarchical aggregation —
+8: for ℓ = 1 to L − 1 do
+9: for each Cch → Cpa in parallel do
+10: Run RESHARE(Cch, Cpa) ▷ Prot. 6
+11: end for
+12: Cross-child aggregation at each Cpa:
+σr ← P ch σ′ r,ch for each P ′ r ∈ Cpa
+13: end for
+— Phase 3: private reconstruction —
+14: z(t) r ← NOISEGEN  N  0, Niter 2ρ  ▷ Prot. 8
+15: σr ← σr + z(t) r
+16: ^count
+(t)
+← VSS-RECONST({σr }r∈CL ) ▷ Prot. 3
+— Phase 4: broadcast and update —
+17: CL updates (Left, Right) coordinate-wise from ^count
+(t)
+and
+pt
+18: CL broadcasts pt+1 ← (Left + Right)/2 down the tree
+19: end for
+20: ˆM ← (Left + Right)/2; broadcast down the tree
+21: return ˆM
+and secret-shares it with its base committee Cj using
+INPUTSHARE (Protocol 5). Committee members verify that
+every shared coordinate is a bit, replace invalid contributions
+by a canonical sharing of zero, and locally sum the validated
+shares into a secret-shared partial count.
+b) Hierarchical aggregation.: The partial counts are
+propagated toward the root committee using RESHARE (Pro-
+tocol 6) between each child–parent committee pair. At every
+level, each parent locally sums the re-shared aggregates re-
+ceived from its children. After L−1 levels, the root committee
+holds a secret sharing of the global coordinate-wise count.
+c) Count reconstruction.: The root committee invokes
+NOISEGEN and then VSS-RECONST to reconstruct noisy
+count
+^count
+(t)
+=
+nX
+j=1
+b(t) j + Z (t) (11)
+Thus, ^count
+(t)
+is exactly the vectorized form of the secure
+counting query defined in Eq. (6).
+d) Broadcast and update.: The root committee applies
+the binary-search update of Algorithm 1 independently to
+every coordinate using ^count
+(t)
+and pt. It then computes
+pt+1 and broadcasts the new public pivot down the committee
+tree. After Niter iterations, the final midpoint is returned as
+the aggregated model ˆM. The protocol then reuses the same
+committee topology for the next round. Algorithm 2 speci-
+fies how the protocol components are composed, but treats
+their internal executions as black boxes. We next describe
+BUILDTREE, INPUTSHARE, NOISEGEN and RESHARE.
+C. Sub-Protocols
+We now detail the four sub-protocols invoked by GISKARD
+(Algorithm 2): BUILDTREE (line 1), INPUTSHARE (line 6),
+RESHARE (line 10) and NOISEGEN (line 14).
+1) BUILDTREE for Topology Generation: BUILDTREE is a
+one-time protocol that randomly constructs the communication
+topology through seed agreement and local assignment. Honest
+parties agree on a k-ary tree of depth L, whose leaves are
+parties and whose internal nodes are size-m committees with
+fewer than m/4 corrupted members. A party may belong to
+multiple committees and learns its base committee, its internal
+committee memberships, and their members. By Theorem 1,
+seed agreement produces an unpredictable string from which
+two public pseudorandom functions derive committee mem-
+bership and leaf assignment. More details can be found in
+Appendix B-A.
+2) INPUTSHARE with Domain Proof: After locally compar-
+ing its vector coordinates to the current pivot, leaf j secret-
+shares the resulting bit vector bj,d = 1[xj,d ≤ pt,d] via
+VSS-SHARE to its assigned base committee. A malicious
+leaf could share an arbitrary field element instead of a bit,
+biasing the aggregated count by an unbounded amount. To
+prevent this, the committee verifies that each shared value b
+satisfies b ∈ {0, 1} via the standard degree-2 domain proof:
+it runs MULTIPLY([b], [1 − b]) and reconstructs the result
+using VSS-RECONST. If the reconstruction yields 0, the share
+is accepted; otherwise the committee collectively replaces it
+with a canonical zero sharing. This bounds the Byzantine
+contribution per iteration to CB ∈ [0, f ]. Committee parties
+then locally sum the shares, producing a share of the partial
+count from the incoming leaves.
+3) Verifiable Share Redistribution via RESHARE: RE-
+SHARE converts a (τ, m)-Shamir sharing held by a child
+committee Cch into a fresh (τ, m)-sharing held by its parent
+Cpa. Two adversarial behaviors must be taken into account:
+a corrupted child may send sub-shares that are inconsistent
+with any degree-τ polynomial, or send consistent share but for
+the wrong secret. Both are handled by VSS-SUBSHARE [46,
+Prot. 6.8], ensuring that the parent committee receive correct
+sub-shares that correspond to the correct held secret. Each
+parent reconstructs its share by combining the child commit-
+tee’s contributions using Lagrange interpolation (see Fig. 2).
+Because every child contribution corresponds to an evaluation
+of the original polynomial, this weighted combination pro-
+duces an evaluation of a newly randomized polynomial while
+preserving the same secret value at its constant term. Thus,
+the parent committee receives fresh shares of the value held
+by the child committee without revealing that value. The full
+protocol is given in Appendix B.
+˜σd,1←1 ˜σd,1←2 · · · ˜σd,1←m
+˜σd,r←1 ˜σd,r←2 · · · ˜σd,r←m
+... ... ... ...
+˜σd,m←1 ˜σd,m←2 · · · ˜σd,m←m
+
+
+
+
+P ′ 1
+P ′ r
+P ′ m
+Parent Cpa (new shares)
+σd,1 σd,2 · · · σd,m
+P1 P2 Pm
+Child committee Cch (old shares)
+˜σd,r←k = gk,d(ωr ) (child k to parent r)
+Fresh share σ′ d,r = Pm k=1 λk ˜σd,r←k
+Fig. 2. Matrix view of resharing. Column k contains the subshares from
+the child share σd,k . Row r contains all subshares received by parent party
+P ′ r . The new fresh share of P ′ r is obtained by recombining row r as σ′ d,r =Pm
+k=1 λk ˜σd,r←k .
+4) Secure Noise Addition with NOISEGEN: NOISEGEN
+which uses only GISKARD’s existing BGW primitives: VSS,
+multiplication and robust reconstruction in order to generate
+DP noise in a distributed manner. At a high level, NOISEGEN
+has each committee member sample a discrete-Gaussian noise
+contribution bounded to [−B, B − 1], bit-decompose it, and
+uses VSS-SHARE on the bits, then the committee validates
+with a similar bit-verification protocol as INPUTSHARE and
+replacing any malformed contribution with a zero sharing. The
+surviving bits are then locally recombined so that, for each of
+the Niter queries, the parties hold a sharing [Zq ] of aggregate
+noise that lies in the prescribed range and contains at least
+m − τ honest discrete-Gaussian samples. We defer the full
+description to Protocol 8 in Appendix B-E.
+D. Generalizing GISKARD to Other Robust Aggregation Rules
+The scalability of GISKARD does not require the aggrega-
+tion rule itself to be associative, since even the coordinate-wise
+median is not associative. Instead, its evaluation must reduce
+to a small number of public-query rounds whose answers are
+compact associative aggregates. At round t, a public state qt
+defines local encodings z(t) i = ϕt(xi; qt) and summaries
+St(I) =
+M
+i∈I
+z(t) i , St(I ∪ J ) = St(I) ⊕t St(J ),
+where ⊕t is associative and the size of St(I) is independent
+of |I|. The global summary determines either the next public
+state or the final output.
+We identify three requirements for a GISKARD-compatible
+realization.
+(G1) Compact and query-efficient decomposability: the
+rule admits compact mergeable summaries and a non-
+combinatorial number of public-query rounds.
+(G2) Efficiently certifiable robustness: Analogous to the
+computational surjectivity requirement of Franzese et
+al. [29], we could enforce that each contribution only ad-
+mits a fixed admissible input, while robustness continues
+to hold for arbitrary Byzantine choices of such inputs.
+(G3) Low secure arithmetic complexity: producing and
+merging summaries uses mainly linear operations and few
+inexpensive multiplications, avoiding extensive compar-
+isons, sorting, divisions, or spectral computations.
+These requirements capture complementary bottlenecks:
+(G1) determines whether computation can be distributed over
+the committee hierarchy, (G2) prevents an unchecked Byzan-
+tine interface at the leaves, and (G3) controls the cost within
+each committee. For example, the average function is per-
+fectly decomposable and inexpensive to aggregate, but an
+unrestricted Byzantine summand has unbounded influence and
+therefore does not provide Byzantine robustness [17].
+Table I illustrate the taxonomy. Bounded output rules,
+using bits or signs, are the most MPC-friendly because
+they are cheap to certify and merge. Examples include
+GISKARD’s binary-search coordinate-wise quantiles, ℓ1-RSA,
+DP-RSA [51], [52], signSGD [53], and BRACE [54].
+TABLE I
+COMPATIBILITY OF REPRESENTATIVE AGGREGATION RULES WITH THE
+GISKARD INTERFACE. A DASH INDICATES THAT THE RULE IS NOT
+ANALYZED UNDER THE (f, κ)-ROBUSTNESS DEFINITION.
+Rule / realization (f, κ)-rob. G1 G2 G3
+ℓ1-RSA / DP-RSA [51], [52] – ✓ ✓ ✓
+signSGD-MV [53] – ✓ ✓ ✓
+BRACE [54] – ✓ ✓ ✓
+Geo. median / RFA [42] ✓ ✓ ✗ ✗
+Krum [17] ✓ ✗ ✗ ✗
+CW median, direct [16] ✓ ✗ ✗ ✗
+Trim. mean, direct [16] ✓ ✗ ✗ ✗
+SMEA [24] ✓ ✗ ✓ ✗
+CAF / CafCor [55] ✓ ✓ ✓ ✗
+GISKARD quantile ✓ ✓ ✓ ✓
+Input-dependent rules are less suitable. RFA [42] admits
+a distributed Weiszfeld formulation but requires distance-
+dependent weights and divisions, while Krum [17], coordinate-
+wise median, and trimmed mean [16] require costly selection,
+comparison, or sorting. SMEA [24] has mergeable statistics
+for fixed subsets, but searching
+ n
+f
+
+candidates violates (G1).
+CAF [55] supports compact summaries for weighted moments
+and covariance-vector products, yet repeated spectral estima-
+tion and nonlinear weight updates remain costly under MPC,
+violating (G3).
+V. THEORETICAL ANALYSIS
+A. Security Analysis of Giskard
+We now state the main security results of GISKARD, the
+proofs being provided in the appendix in section C. Our main
+argument is presented in a modular approach.
+We first assume that BUILDTREE was successfully per-
+formed before running the secure median computation, so
+that all formed committees respect the byzantine tolerance
+bound. We then establishes that all the defined sub-protocols
+are secure under the universal composability framework [56].
+We finally show GISKARD is perfectly secure using all the
+previous results and composition theorem [56].
+We first collect the security guarantees of the underlying
+cryptographic building blocks.
+Lemma 2. Protocols BA, VSS-SHARE, VSS-RECONST,
+VSS-SUBSHARE, and MULTIPLY are UC-secure against
+static malicious adversaries.
+We next state the security guarantees of the sub-protocols
+built from these components.
+Lemma 3. Protocol INPUTSHARE, RESHARE and
+NOISEGEN are UC-secure against static malicious
+adversaries.
+The proofs are provided separately for each subprotocol
+respectively in Appendix C-F, C-C and C-E2. Combining these
+results through the UC composition theorem yields the security
+of the complete protocol.
+Theorem 2. Assuming that BUILDTREE completes success-
+fully, protocol GISKARD securely realizes the approximated
+coordinate-wise median functionality in the UC framework
+against static malicious adversaries, provided that f < n/4.
+The proof of Theorem 2 is provided in Appendix C-F.
+B. Robustness Against Model Poisoning Attacks
+We analyze the median-search procedure of §IV-A1, whose
+bit-domain proof guarantees CB (pt) ∈ [0, f ] at every iteration.
+Theorem 3 (Robustness of GISKARD). Let H ⊆ [n] be the
+honest set with |H| = n − f and n > 2f. Let ¯xH and σ2 H
+denote the mean and variance of the honest scalar inputs xj ∈
+(−u, u]. For any adaptive Byzantine strategy, the output ˆM of
+GISKARD satisfies
+| ˆM − ¯xH| ≤ √κ0 σH + q 2 , κ0 := n − f ⌈n/2⌉ − f . (12)
+If q ≤ σH, then
+( ˆM − ¯xH)2 ≤
+
+κ0 + √κ0 + 1 4  σ2 H. (13)
+Applied coordinate-wise to inputs in RD , this gives
+∥ ˆM − ¯xH∥2 ≤ 2κ0 1 |H| X j∈H ∥xj − ¯xH∥2 + Dq2 2 . (14)
+Hence, GISKARD tolerates any f < n/2 Byzantine inputs
+and satisfies Definition 3 up to the additive discretization term
+Dq2/2. This term vanishes as q → 0 at a cost of Niter =
+⌈log2(2u/q)⌉ rounds. Moreover, since κ0 ≤ 2
+
+1 + f n−2f
+
+,
+the multiplicative factor is in the same Θ(1) regime as
+CWMed, GM, and Krum [19].
+The proof is deferred to Appendix D-A.
+C. Differential Privacy Guarantees
+Let K := T dNiter and h := m − τ. We use distributed
+discrete-Gaussian noise with
+σ2 = K 2ρ , σ2 c = σ2 h , ηDP = s K ln(2K/β) ρ . (15)
+For σc ≥ 1/2, define
+ϑDG = 10
+h−1X
+k=1
+exp
+
+−2π2σ2 c k k + 1  ,
+ξDG = K min
+
+ϑDG, ϑDG√ hσc + ϑ2 DG 2  . (16)
+By Proposition 13 of [57], ξDG is the additional zCDP cost
+due to discrete-Gaussian aggregation. For the truncation in
+NOISEGEN, let
+qB ≤ 2 exp
+
+− B2
+2σ2c
+
+, βtr := min{1, KhqB }. (17)
+Theorem 4 (Privacy and Byzantine tolerance). The ideal
+GISKARD mechanism is (ρ + ξDG)-zCDP. Let ¯ρ := ρ + ξDG
+and ε0 := ¯ρ+2
+p
+¯ρ ln(1/δ0) for any δ0 ∈ (0, 1). The truncated
+mechanism is
+(ε0, δ0 + (1 + eε0 )βtr) -DP. (18)
+With probability at least 1 − β − βtr, NOISEGEN incurs rank
+error at most ηDP simultaneously over all coordinates. Hence,
+if the non-private protocol tolerates f < n/2 Byzantine inputs
+and τ < m/4 corrupted root-committee parties, then
+fDP = f − ηDP − τ B. (19)
+D. Committee Formation Guarantees
+We introduced the BUILDTREE protocol, which includes
+the seed-agreement sub-protocol and the local committee-
+membership and leaf-assignment computations. The benefit of
+this tree topology is most pronounced when committee size is
+small relative to n. We show that such a tree exists under
+global corruption bounded by (1/4 − ϵ)n:
+Theorem 5 (Minimum Required Committee Size). Against
+a static adversary corrupting at most (1/4 − ϵ)n parties,
+BUILDTREE produces a k-ary tree of depth L in which every
+committee has size m = O(ϵ−2 ln n) and fewer than m/4
+corrupted members, with probability 1 − n−c for any constant
+c.
+Full proof in Appendix D-C. The bound above is loose.
+Figure 3 reports a tighter numerical evaluation at target
+Pr[failure] = 2−40, showing that the required committee size
+shrinks as the gap between the global corruption fraction
+and the 1/4 per-committee requirement widens, and that for
+f /n ∈ [0, 1/5] it remains stable as the network size grows.
+0 5 10 15 20 25
+Global Corruption Percentage (%)
+102
+103
+104
+105
+106
+Committee Size (m)
+ n = 1,000
+n = 10,000
+n = 100,000
+n = 1,000,000
+f = n/4
+Fig. 3. Minimum committee size for varying global corruption fractions
+across different network sizes, at Pr[failure] = 2−40.
+E. Communication Complexity
+Thanks to the topology of communication and the commit-
+tee formation guarantees, we get the following
+Theorem 6 (Communication Complexity of Giskard). Let
+Niter denote the number of median-search iterations, and let
+d denote the model dimension. Under the tree parameters of
+Theorem 5, with m = Θ(log n), constant branching factor
+k = O(1), the following bounds hold:
+(i) In the optimistic execution, in which no VSS complaint is
+invoked, the worst-case per-party communication cost is
+∆eff max = O   dNiter log3 n  , Total = O   dNitern log3 n  .
+(20)
+(ii) In the non-optimistic execution, complaints are dissemi-
+nated using a reliable-broadcast protocol, where broad-
+casting ℓ field elements costs O(mℓ) per party and
+O(m2ℓ) in total. Then, the worst-case per-party commu-
+nication cost is
+∆eff max = O   dNiter log5 n  , Total = O   dNitern log5 n  .
+(21)
+The proof is deferred to Appendix D-D.
+We compare three BGW-based topologies for each
+median-search iteration using identical primitives: all-to-all
+(A2A) [30], all-to-committee (A2C) [26], [29], and GISKARD.
+We report the worst-case per-party communication cost; for
+A2C, this is the cost of a committee member. A2C and
+GISKARD use m = O(log n) committees sized via Chernoff
+and union bounds (non union bound needed for A2C), with
+τ < m/4, while GISKARD uses constant branching factor k.
+Table II summarizes the resulting costs.
+TABLE II
+MAXIMUM OPTIMISTIC PER-PARTY AND TOTAL COMMUNICATION PER
+MEDIAN-SEARCH ITERATION.
+Per-party cost Total network cost Rounds
+A2A O(dn2) O(dn3) O(1)
+A2C O(dn log2 n) O(dn log2 n) O(1)
+Giskard O(d log3 n) O(dn log3 n) O(log n)
+VI. EXPERIMENTS
+We evaluate GISKARD on scalability, by comparing its
+communication and latency costs with MPC-based decentral-
+ized baselines (A2C and A2A), and model utility, by testing
+whether its binary-search median formulation remains robust
+under Byzantine attacks. We implemented GISKARD in Rust
+using arkworks [58], and obtained plaintext baselines with a
+modified ByzFL framework in Python [59]. All experiments
+ran on an Ubuntu 24.04 workstation with an Intel Core i9-
+13950HX CPU and an NVIDIA RTX 5000 GPU. The source
+code is available in the Giskard Repository. Our evaluation is
+guided by the following research questions:
+• RQ1: To what extent does GISKARD reduce per-party
+communication cost relative to A2A and A2C topologies?
+• RQ2: How does the network size n affect the end-to-end
+latency of each topology?
+• RQ3: Under which data-heterogeneity regimes does
+GISKARD retain robust performance under Byzantine
+attacks, and how does it compare with state-of-the-art
+plaintext robust aggregators?
+• RQ4: How does DP budget affect GISKARD’s resilience
+to Byzantine model-poisoning attacks ?
+A. Comparing GISKARD per-party communication cost to
+A2A and A2C (RQ1)
+To isolate the effect of communication topology, we run the
+same median circuit under the same cost model and derive
+each subprotocol’s cost by counting sent and received field
+elements. For committee size m, we set τ = (m − 1)/4
+and require fewer than m/4 Byzantine parties. A2C chooses
+the smallest m such that Pr[X ≥ ⌈m/4⌉] ≤ δ, where
+X ∼ Hypergeom(n, f, m) and δ = 2−40. GISKARD requires
+C(k, L) = (kL−1)/(k−1) committees, and as such we use the
+global union bound C(k, L) Pr[X ≥ ⌈m/4⌉] ≤ δ. We exhaus-
+tively search a feasible topology that minimizes GISKARD’s
+per-party cost over 2 ≤ k ≤ 32 and L values satisfying
+kL−1m ≤ n and the union bound. Our MPC primitives are
+implemented in Rust using the arkworks library [58]. From this
+implementation, we derive closed-form communication costs
+for VSS-SHARE, MULTIPLY, INPUTSHARE, RESHARE and
+NOISEGEN by counting every field element sent, received, or
+broadcast. The resulting worst-case compositions per iteration
+are
+CA2A = CInput(n, ⌊(n − 1)/4⌋ , n) + CNoiseGen(n),
+CA2C = CInput(mA2C , τA2C , n) + CNoiseGen(m) + Cdown,
+CGISKARD = CInput(m, τ, n) + (L − 1)kCReshare(m, τ )
++ CNoiseGen(m) + Cdown.
+with CInput the INPUTSHARE phase cost, CReshare the cost
+related to RESHARE between two committees, CNoiseGen the
+NOISEGEN cost Cdown for the broadcast down protocol. In
+the worst-case scenario, a party would have to assume all
+those prescribed roles. The model counts field-element, all
+other network related headers are excluded.
+Figure 4 compares the analytical worst-case per-party com-
+munication of A2A, A2C, and GISKARD, and the resulting
+total communication cost. Panel (a) represents total bytes
+versus n at f /n = 0.10. Panel (b) reports the cost as the
+network grows from n = 103 to 106, fixing f /n = 0.10,
+while Panel (c) reports the A2C-to-GISKARD cost ratio for
+f /n ∈ {0.01, 0.05, 0.10, 0.20}. Each value includes all field
+elements sent and received during a scalar median computation
+on Niter = 10 iterations.
+At f /n = 0.10, A2C offers the lowest total cost, especially
+compared to A2A, whose cost skyrockets as n increases.
+GISKARD, however, incurs a slight additional cost compared
+to A2C. GISKARD’s per-party cost grows from 392 GB at
+n = 103 to 1.99 TB at n = 106 at f /n = 0.10. This is
+a 5.1× increase for a 103× larger network, compared with
+approximately 572× for A2C and 1.00 · 109× for A2A.
+At n = 106, GISKARD’s per-party cost ranges from 146 GB
+to 3.09 PB across f /n ∈ {0.05, 0.10, 0.20}, compared with
+45.3 TB to 44.4 PB for A2C. The A2A cost approximately
+4.57 · 1022 bytes regardless of byzantine fraction. At f /n =
+0.01, this corresponds to a 722× reduction of GISKARD over
+A2C. We explain this advantage by the fact that GISKARD
+distributes the MPC work across a tree of small committees,
+whereas A2C concentrates the load on a single committee and
+1015
+1018
+1021
+1024
+1027
+Total bytes
+(a) Global at f = 0.1, ℓ = 11
+A2A A2C Giskard
+1012
+1015
+1018
+1021
+Bytes / party
+(b) Worst-case per-party at f = 0.1
+103 104 105 106
+Parties n
+100
+101
+102
+103
+A2C / Giskard
+722×
+311×
+135×
+14×
+(c) A2C overhead vs Giskard
+f = 0.01
+f = 0.05
+f = 0.10
+f = 0.20
+Fig. 4. (a) Total communication costs f /n = 0.1. (b) Worst-case Per-party
+communication cost at f /n = 0.1 for the three topologies. (c) A2C overhead
+relative to GISKARD across four Byzantine fractions. GISKARD reduces per-
+party bandwidth by up to 722× compared to A2C at n = 106 with f /n =
+0.01, with the advantage growing as the network scales.
+A2A scales committees with n. This make so that at n = 106
+and f /n = 0.10, A2C’s per-party cost is 99.7% INPUTSHARE
+because one committee validates all inputs, whereas GISKARD
+distributes this work across many committees, making the root
+commitee NOISEGEN dominate (89.5%) its much smaller per-
+party cost even thought NOISEGEN cost in both topologies are
+close (1.78 TB for GISKARD versus 0.78 TB for A2C).
+Takeaway: GISKARD greatly reduces per-party commu-
+nication by distributing MPC across small committees,
+at the cost of a moderate increase in total communication
+compared with A2C.
+B. Impact of Network Size on Total Cost and Latency (RQ2)
+In this experiment, we aim to study how each topology
+scales with the network size n in end-to-end wall-clock time.
+The results are presented in Figure 5 for the corresponding
+minimum wall-clock time at f /n = 0.10 under a 1 Gbps per-
+party bandwidth and a 1 s round-trip delay, adding in time from
+executed local computation. Each point in Figure 5 represents
+the minimum end-to-end latency under the assumption that
+compute and transfer overlap within a round and same-layer
+committees in GISKARD execute concurrently, and that local
+computation is done with one thread, namely INPUTSHARE
+is done sequentially. At f /n = 0.10, our model places
+GISKARD’s wall-clock in the minutes-to-hours range across
+102 103 104 105 106
+Network size n
+105
+108
+1011
+1014
+Estimated runtime (s)
+ 1 h
+1 d
+1 mo
+1 yr
+A2A A2C Giskard
+Fig. 5. Implementation-calibrated end-to-end wall-clock time to completion
+versus network size n at f /n = 0.10, under 1 Gbps per-party bandwidth and
+1 s round-trip delay. Dashed lines mark sample durations.
+the tested n, A2C in the multi-hour to multi-day range from
+n = 105 on, and A2A beyond any practical horizon already at
+n = 104. At small n (n = 102) the three topologies fall within
+a small constant factor of each other, reflecting that topology
+choice matters only when n ≫ m.
+Takeaway: GISKARD’s enable a significant reduction in
+communication related runtime compare to the baseline
+topologies at scale.
+C. Comparing GISKARD’s Median to Baseline Aggregators
+under Poisoning (RQ3)
+In this experiment, we identify the data-heterogeneity
+regimes under which GISKARD’s MPC-tailored binary-search
+median retains robust model utility under Byzantine attacks.
+We compare it in plaintext with standard robust aggrega-
+tion rules to isolate statistical robustness from cryptographic
+implementation costs. Using a fork of the ByzFL Python
+framework [59], we evaluate n = 100 parties, of which f = 25
+are Byzantine. Table III reports global test accuracy across
+several Dirichlet heterogeneity levels for GISKARD’s binary-
+search median (BSM), trimmed mean (TM), and CAF. We
+consider two omniscient poisoning attacks, Fall of Empire
+(FoE) [38] and A Little is Enough (ALIE) [39]. We grant FoE
+and ALIE white-box access to the aggregation rule and all
+honest updates, optimizing their hyperparameters to maximize
+the aggregate’s distance from the honest mean. This is stronger
+than a Byzantine party’s view in GISKARD, where MPC hides
+honest updates, so we treat these attacks as conservative stress
+tests to assess how much heterogeneity enable a power attacker
+to degrade the median.
+The Dirichlet parameter α controls heterogeneity: smaller
+values yield concentrated, non-i.i.d. local data, while α = 100
+approaches i.i.d. For MNIST at α = 0.10, 49% of parties have
+at least 75% of their samples from one class, versus none at
+α = 1. We include such severe stress regimes to identify
+when median-based aggregation fails, not as representative
+deployment assumptions.
+Across MNIST and Fashion-MNIST, GISKARD remains
+competitive with TM until heterogeneity becomes severe. On
+TABLE III
+PEAK TEST ACCURACY (↑) UNDER FOE AND ALIE ATTACKS UNDER
+MANY DIRICHLET HETEROGENEITY LEVELS. *TRAINING WAS
+TERMINATED EARLY BECAUSE ALIE CAUSED CAF TO STALL.
+MNIST FASHIONMNIST
+FoE ALIE FoE ALIE
+α BSM TM CAF BSM TM CAF BSM TM CAF BSM TM CAF
+0.10 0.18 0.47 0.97 0.84 0.76 0.98 0.15 0.33 0.74 0.59 0.53 0.81
+0.50 0.93 0.93 0.98 0.97 0.97 0.99 0.58 0.62 0.78 0.73 0.68 0.82
+0.75 0.95 0.96 0.98 0.97 0.97 0.99 0.67 0.70 0.79 0.74 0.74 0.83
+1.00 0.96 0.97 0.99 0.98 0.97 0.99 0.71 0.71 0.78 0.77 0.75 0.83
+100 0.97 0.97 0.99 0.98 0.98 0.99 0.77 0.78 0.82 0.82 0.81 0.84
+CIFAR10
+FoE ALIE
+α BSM TM CAF BSM TM CAF
+0.10 0.11 0.11 0.29 0.19 0.10 0.63*
+0.50 0.17 0.20 0.44 0.25 0.24 0.68*
+0.75 0.20 0.26 0.64 0.29 0.26 0.67*
+1.00 0.21 0.26 0.59 0.31 0.27 0.67*
+100 0.57 0.48 0.70 0.48 0.43 0.70*
+MNIST, their FoE accuracies differ by at most 0.9% for
+α ≥ 0.5, while GISKARD outperforms TM under ALIE. On
+Fashion-MNIST, the FoE gap grows from 3.4% at α = 0.75 to
+18.9% at α = 0.1, although GISKARD remains stronger under
+ALIE throughout. This is notable because FoE specifically
+targets median and TM, though CAF remains the most robust
+at low α. On CIFAR-10, the gap emerges at α = 1.0
+and becomes substantially larger under FoE, while GISKARD
+withstands both attacks in the near-i.i.d. regime (α ≥ 100).
+CAF is more robust in plaintext under severe heterogeneity
+but is not interchangeable with GISKARD: its repeated spectral
+estimation and nonlinear weight updates are too costly for
+MPC, violating our low-secure-arithmetic-complexity require-
+ment (Section IV-D). In contrast, GISKARD efficiently operates
+inside MPC and can add differential-privacy noise after secure
+aggregation, achieving close to central-DP utility without a
+trusted curator. Section VI-D shows how this systems advan-
+tage can reverse the plaintext comparison.
+Takeaway: GISKARD remains competitive with robust
+plaintext aggregators across moderate heterogeneity,
+even under omniscient attacks.
+D. Impact of Differential Privacy on Byzantine Robustness
+(RQ4)
+We next evaluate whether GISKARD can provide DP while
+preserving Byzantine resilience. Because aggregation occurs
+inside MPC, noise is added after secure aggregation while
+under Local DP, each update is perturbed beforehand, increas-
+ing the dispersion of honest updates. To isolate this statistical
+effect from MPC costs, we emulate both privacy mechanisms
+in plaintext while retaining their respective privacy accounting.
+For GISKARD, we compose zCDP additively across noisy
+count queries and convert the resulting guarantee to (ϵ, δ)-DP.
+For the Local DP baselines, we independently add Gaussian
+noise to each party’s update before Median or CAF and
+account for the privacy budget using Opacus [60] and Renyi
+Differential Privacy [61]. We compare all mechanisms at the
+same final (ϵ, δ) privacy guarantees, with δ = 10−5.
+Figure 6 display the global test accuracy of model trained
+with GISKARD against Local DP baselines (using Median and
+CAF aggregators) on 12 settings encompassing 4 attacks and
+3 privacy budgets. On non-i.i.d EMNIST dataset with α = 1.0
+and n = 11850, GISKARD achieve the highest accuracy
+accross 11 of the 12 experiment settings. Under Sign Flipping,
+it remains near 91% across all privacy budgets, outperforming
+both local-DP baselines by approximately 56% at ϵ = 10 and
+3% at ϵ = 100. Its advantage is largest under FoE: at ϵ = 100,
+GISKARD achieves 63.1%, versus 16.0% for Local DP+CAF
+and 10% accuracy for Local DP+Median. These results high-
+light GISKARD’s distributed-DP advantage. Although CAF
+is more robust under extreme plaintext heterogeneity, Local
+DP perturbs honest updates before aggregation. By enabling
+central-DP-style noise placement without a trusted curator,
+GISKARD avoids this distortion and can outperform Local DP
+even when combined with with CAF.
+10 25 100
+0
+25
+50
+75
+100 (a) Sign Flipping
+10 25 100
+(b) Label Flipping
+10 25 100
+0
+25
+50
+75
+100 (c) ALIE
+10 25 100
+(d) FoE
+Privacy budget ε
+Peak test acc. (%)
+GiskardDP Local DP + Median Local DP + CAF
+Fig. 6. Global test accuracy of GISKARD DP mechanism against Local DP
+baseline (Median and CAF Aggregators) on EMNIST with n = 11850 under
+four Byzantine attacks, across privacy budgets with f = 24% at heterogeneity
+level α = 1.0.
+Takeaway: GISKARD preserves substantially more util-
+ity under Byzantine attacks than Local DP. Secure
+post-aggregation noise enables strong privacy without
+perturbing individual honest updates before robust ag-
+gregation.
+VII. RELATED WORK
+Early privacy-preserving Byzantine-robust FL systems often
+combined separate mechanisms for robustness and privacy.
+Biscotti [62] combines Multi-Krum and DP noise with se-
+cure aggregation, but performs robust aggregation in plain-
+text. BREA [63] uses VSS-based MPC to compute pairwise
+distances, while the server receives the distance matrix in
+the clear to complete Multi-Krum. Similarly, SHARE [64]
+securely aggregates random client clusters but applies robust
+aggregation in plaintext to the resulting cluster means. Thus,
+those approaches still expose intermediate information to the
+server, resulting in inherent privacy leakage. A subsequent
+line of work focuses on combining robust aggregation with
+DP. Allouah et al. [24] show that achieving a meaningful DP
+guarantee from local DP on top of (f, κ)-robust aggregation
+sharply degrades model utility. CafCor [55] tackle this trade-
+off by replacing local DP with a correlated-noise mechanism
+across parties, and introducing a new (f, κ)-robust aggregator
+built on a covariance-bound-agnostic filter. It nonetheless
+operates in a classical FL setting with an honest-but-curious
+aggregation server.
+A second line of work implements robust aggregation
+rules via cryptographic primitives in server-based settings.
+Sable [25] uses somewhat-homomorphic-encryption operators
+to compute trimmed-mean, but relies on a single powerful
+and honest-but-curious server. AlphaFL [26] and EIFFeL [65]
+incorporate heuristic input validation into secure aggregation
+rather than formally robust rules under multi-server or client-
+server setups. Building on EIFFeL, DP-BREM+ [66] combines
+zero-knowledge input validation with MPC-based distributed
+noise generation to provide DP guarantee. However, it remains
+restricted FL cross-silo topologies and exhibits per-client com-
+munication scaling linearly with model dimension, system size
+and adversary bounds.
+Removing the server assumption shifts robust aggregation
+assumptions entirely, forcing a stricter threat model. Se-
+cureDL [30] use a maliciously secure MPC framework to
+implement a cosine-similarity filtering rule for aggregation.
+However, its all-to-all topology scales poorly while cosine-
+similarity filtering offers no formal robustness guarantee.
+Franzese et al. [29] formalize robust serverless collabora-
+tive learning in an all-to-committee MPC setting, using a
+lightweight robust mechanism. Their single-layer topology
+concentrates computation on a small committee, giving per-
+party costs close to multi-server approaches, while the absence
+of DP leaves the global model vulnerable to privacy attacks.
+GISKARD addresses these gaps by evaluating a formally robust
+aggregator via hierarchical MPC committees and distributed
+DP, scaling robust decentralized learning to large networks
+with per-party sub-linear communication overhead.
+VIII. CONCLUSION
+In this work, we presented GISKARD, a scalable, robust,
+and privacy-preserving decentralized learning system that
+addresses the per-party communication bottleneck of exist-
+ing approaches. In fully decentralized architecture, GISKARD
+achieves polylogarithmic per-party communication while com-
+bining Byzantine resilience and differential privacy in a ma-
+licious threat model. We establish its security and robustness
+guarantees, analyze its communication and practical costs and
+empirically show that it is competitive at scale. As future
+work, we plan to investigate non-interactive proof techniques
+to further reduce communication costs.
+ACKNOWLEDGMENTS
+This work was supported by the French government man-
+aged by the Agence Nationale de la Recherche (ANR) through
+France 2030 program with the reference ANR-23-PEIA-0005
+(REDEEM project).
+OPEN SCIENCE
+We provide an artifact available in the following
+anonymized code repository using anonymous.4open.science:
+Giskard Repository2.
+This artifact contains three elements:
+• A fork from the ByzFL repository to run the Collaborative
+Learning experiments under model poisoning attacks.
+• A Rust PoC of the procotol using the arkworks library
+to run the communication cost experiment and compute
+estimated latency
+• Additional python module to generate remaining figures
+LLM USAGE CONSIDERATIONS
+While writing this manuscript, AI tools (Gemini from
+Google, ChatGPT from OpenAI) were used for the following
+purposes: proofreading, improving text readability, editorial
+review, and searching additional related works results for
+comparison and proofs, all of which were read and verified
+by the authors. Finally coding harness (Claude Code from
+Anthropic) provided assistance during the development of
+the protocol’s PoC in Rust, which utilizes a well-known
+cryptography library (arkworks). Any contribution from the
+generative tool to the codebase were verified, tested, and
+compared against the description of the underlying protocols.
+Apart from this, the intellectual contributions of this paper,
+namely the protocol design, the integration with the threat
+model, the security proofs, and the complexity analysis, were
+carried out without the assistance of an LLM. The authors take
+full responsibility for the accuracy, originality, and integrity of
+all content in the paper (text, figures, experimental data, and
+references).
+REFERENCES
+[1] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. Y. Arcas,
+“Communication-Efficient Learning of Deep Networks from Decen-
+tralized Data,” in Proceedings of the 20th International Conference
+on Artificial Intelligence and Statistics, ser. Proceedings of Machine
+Learning Research, A. Singh and J. Zhu, Eds., vol. 54. Fort Lauderdale
+Florida, USA: PMLR, 20–22 Apr 2017, pp. 1273–1282.
+[2] V. Mothukuri, R. M. Parizi, S. Pouriyeh, Y. Huang, A. Dehghantanha,
+and G. Srivastava, “A survey on security and privacy of federated
+learning,” Future Generation Computer Systems, vol. 115, pp. 619–640,
+2021.
+[3] I. Heged˝us, G. Danner, and M. Jelasity, “Gossip learning as a decen-
+tralized alternative to federated learning,” in Distributed Applications
+and Interoperable Systems: 19th IFIP WG 6.1 International Conference,
+DAIS 2019, Held as Part of the 14th International Federated Confer-
+ence on Distributed Computing Techniques, DisCoTec 2019, Springer.
+Kongens Lyngby, Denmark: Springer, Jun. 2019, pp. 74–90.
+2https://anonymous.4open.science/r/Giskard-ByzRobustPrivatelDL-922D
+[4] X. Lian, C. Zhang, H. Zhang, C.-J. Hsieh, W. Zhang, and J. Liu, “Can
+decentralized algorithms outperform centralized algorithms? a case study
+for decentralized parallel stochastic gradient descent,” in Proceedings
+of the 31st International Conference on Neural Information Processing
+Systems, ser. NIPS’17. Red Hook, NY, USA: Curran Associates Inc.,
+2017, p. 5336–5346.
+[5] S. A. Alghunaim and K. Yuan, “A unified and refined convergence
+analysis for non-convex decentralized learning,” IEEE Transactions on
+Signal Processing, vol. 70, pp. 3264–3279, 2022.
+[6] M. Fang, Z. Zhang, Hairi, P. Khanduri, J. Liu, S. Lu, Y. Liu, and
+N. Gong, “Byzantine-robust decentralized federated learning,” in Pro-
+ceedings of the 2024 on ACM SIGSAC Conference on Computer and
+Communications Security, 2024, pp. 2874–2888.
+[7] D. Pasquini, M. Raynal, and C. Troncoso, “On the (in)security of peer-
+to-peer decentralized machine learning,” in 2023 IEEE Symposium on
+Security and Privacy (SP). San Francisco, CA, USA: IEEE, 2023, pp.
+418–436.
+[8] L. Melis, C. Song, E. De Cristofaro, and V. Shmatikov, “Exploiting
+unintended feature leakage in collaborative learning,” in 2019 IEEE
+symposium on security and privacy (SP), IEEE. San Francisco, CA,
+USA: IEEE, 2019, pp. 691–706.
+[9] M. Nasr, R. Shokri, and A. Houmansadr, “Comprehensive privacy
+analysis of deep learning: Passive and active white-box inference attacks
+against centralized and federated learning,” in 2019 IEEE symposium on
+security and privacy (SP), IEEE. San Francisco, CA, USA: IEEE, 2019,
+pp. 739–753.
+[10] J. Zhang, J. Zhang, J. Chen, and S. Yu, “Gan enhanced membership
+inference: A passive local attack in federated learning,” in ICC 2020
+- 2020 IEEE International Conference on Communications (ICC).
+Dublin, Ireland: IEEE, 2020, pp. 1–6.
+[11] M. Aerni, J. Zhang, and F. Tramèr, “Evaluations of machine
+learning privacy defenses are misleading,” in Proceedings of the
+2024 on ACM SIGSAC Conference on Computer and Communications
+Security, ser. CCS ’24. New York, NY, USA: Association for
+Computing Machinery, 2024, p. 1271–1284. [Online]. Available:
+https://doi.org/10.1145/3658644.3690194
+[12] H. Chang, B. Edwards, A. S. Paul, and R. Shokri, “Efficient
+privacy auditing in federated learning,” in 33rd USENIX Security
+Symposium (USENIX Security 24). Philadelphia, PA: USENIX
+Association, Aug. 2024, pp. 307–323. [Online]. Available: https:
+//www.usenix.org/conference/usenixsecurity24/presentation/chang
+[13] Y. Huang, S. Gupta, Z. Song, K. Li, and S. Arora, “Evaluating gradient
+inversion attacks and defenses in federated learning,” Advances in neural
+information processing systems, vol. 34, pp. 7232–7241, 2021.
+[14] A. El Mrini, E. Cyffers, and A. Bellet, “Privacy attacks in decentralized
+learning,” in Proceedings of the 41st International Conference on
+Machine Learning, ser. ICML’24. Vienna, Austria: JMLR.org, 2024.
+[15] K. Zhu, J. Yang, S. Guo, H. Qin, T. Wang, J. Wang, Y. Nan,
+and Z. Zheng, “Cracking federated privacy: Initialization-Resilient
+gradient inversion with Fine-Grained reconstruction,” in 35th USENIX
+Security Symposium (USENIX Security 26). Baltimore, MD: USENIX
+Association, Aug. 2026. [Online]. Available: https://www.usenix.org/
+conference/usenixsecurity26/presentation/zhu-kaiming
+[16] D. Yin, Y. Chen, R. Kannan, and P. Bartlett, “Byzantine-robust dis-
+tributed learning: Towards optimal statistical rates,” in Proceedings of the
+35th International Conference on Machine Learning, ser. Proceedings
+of Machine Learning Research, J. Dy and A. Krause, Eds., vol. 80.
+Stockholm, Sweden: PMLR, 10–15 Jul 2018, pp. 5650–5659.
+[17] B. Peva, E. M. El Mahdi, G. Rachid, and S. Julien, “Machine learning
+with adversaries: Byzantine tolerant gradient descent,” in Advances
+in Neural Information Processing Systems 30: Annual Conference on
+Neural Information Processing Systems 2017, G. Isabelle, v. L. Ulrike,
+B. Samy, W. Hanna M., F. Rob, V. S. V. N., and G. Roman, Eds. Long
+Beach, CA, USA: The MIT Press, 2017, pp. 119–129.
+[18] S. P. Karimireddy, L. He, and M. Jaggi, “Byzantine-robust learning on
+heterogeneous datasets via bucketing,” 2020.
+[19] Y. Allouah, S. Farhadkhani, R. Guerraoui, N. Gupta, R. Pinot, and
+J. Stephan, “Fixing by mixing: A recipe for optimal byzantine ml under
+heterogeneity,” in International Conference on Artificial Intelligence and
+Statistics. PMLR, 2023, pp. 1232–1300.
+[20] J. Erbani, S. B. Mokhtar, P.-E. Portier, E. Egyed-Zsigmond, and
+D. Nurbakova, “A weighted loss approach to robust federated
+learning under data heterogeneity,” 2025. [Online]. Available: https:
+//arxiv.org/abs/2506.09824
+[21] K. Wei, J. Li, M. Ding, C. Ma, H. H. Yang, F. Farokhi, S. Jin, T. Q. Quek,
+and H. V. Poor, “Federated learning with differential privacy: Algorithms
+and performance analysis,” IEEE transactions on information forensics
+and security, vol. 15, pp. 3454–3469, 2020.
+[22] M. Mansouri, M. Önen, W. B. Jaballah, and M. Conti, “Sok: Secure
+aggregation based on cryptographic schemes for federated learning,”
+Proceedings on Privacy Enhancing Technologies, 2023.
+[23] C. Zhang, S. Li, J. Xia, W. Wang, F. Yan, and Y. Liu, “{BatchCrypt}:
+Efficient homomorphic encryption for {Cross-Silo} federated learning,”
+in 2020 USENIX annual technical conference (USENIX ATC 20), 2020,
+pp. 493–506.
+[24] Y. Allouah, R. Guerraoui, N. Gupta, R. Pinot, and J. Stephan, “On the
+privacy-robustness-utility trilemma in distributed learning,” in Interna-
+tional Conference on Machine Learning. PMLR, 2023, pp. 569–626.
+[25] A. Choffrut, R. Guerraoui, R. Pinot, R. Sirdey, J. Stephan,
+and M. Zuber, “Towards practical homomorphic aggregation in
+byzantine-resilient distributed learning,” in Proceedings of the 25th
+International Middleware Conference, ser. Middleware ’24. New
+York, NY, USA: Association for Computing Machinery, 2024, p.
+431–444. [Online]. Available: https://doi-org.docelec.insa-lyon.fr/10.
+1145/3652892.3700783
+[26] Y. Jiang, M. Zarezadeh, T. Dai, and S. Köpsell, “AlphaFL: Secure
+aggregation with malicious2 security for federated learning against
+dishonest majority,” Proc. Priv. Enhancing Technol., vol. 2025, no. 4,
+pp. 348–368, Oct. 2025.
+[27] M. Rathee, C. Shen, S. Wagh, and R. A. Popa, “ ELSA:
+Secure Aggregation for Federated Learning with Malicious Actors
+,” in 2023 IEEE Symposium on Security and Privacy (SP). Los
+Alamitos, CA, USA: IEEE Computer Society, May 2023, pp. 1961–
+1979. [Online]. Available: https://doi.ieeecomputersociety.org/10.1109/
+SP46215.2023.10179468
+[28] H. Lycklama, L. Burkhalter, A. Viand, N. Kuchler, and A. Hithnawi,
+“RoFL: Robustness of Secure Federated Learning,” in 2023 IEEE
+Symposium on Security and Privacy (SP). IEEE, May 2023, p. 33.
+[29] N. Franzese, A. Dziedzic, C. A. Choquette-Choo, M. R. Thomas,
+M. A. Kaleem, S. Rabanser, C. Fang, S. Jha, N. Papernot,
+and X. Wang, “Robust and actively secure serverless collaborative
+learning,” in Advances in Neural Information Processing Systems, A. Oh,
+T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine,
+Eds., vol. 36. Curran Associates, Inc., 2023, pp. 39 504–39 528.
+[Online]. Available: https://proceedings.neurips.cc/paper_files/paper/
+2023/file/7c5a4b7a31dffef8ce296deedb6214a9-Paper-Conference.pdf
+[30] A. R. Ghavamipour, B. Z. H. Zhao, O. Ersoy, and F. Turkmen,
+“Privacy-Preserving Aggregation for Decentralized Learning with
+Byzantine-Robustness,” Apr. 2024, arXiv:2404.17970 [cs]. [Online].
+Available: http://arxiv.org/abs/2404.17970
+[31] M. Zamani, M. Movahedi, and J. Saia, “Millions of millionaires:
+Multiparty computation in large networks,” Cryptology ePrint Archive,
+Paper 2014/149, 2014. [Online]. Available: https://eprint.iacr.org/2014/
+149
+[32] M. Movahedi, J. Saia, and M. Zamani, “Secure multi-
+party shuffling,” in Post-Proceedings of the 22nd International
+Colloquium on Structural Information and Communication
+Complexity - Volume 9439, ser. SIROCCO 2015. Berlin,
+Heidelberg: Springer-Verlag, 2015, p. 459–473. [Online]. Available:
+https://doi.org/10.1007/978-3-319-25258-2_32
+[33] A. Bellet, R. Guerraoui, M. Taziki, and M. Tommasi, “Fast and
+differentially private algorithms for decentralized collaborative machine
+learning,” INRIA Lille, Research Report, 2017. [Online]. Available:
+https://inria.hal.science/hal-01665410
+[34] R. C. Geyer, T. Klein, and M. Nabi, “Differentially private federated
+learning: A client level perspective,” 2018. [Online]. Available:
+https://arxiv.org/abs/1712.07557
+[35] H. B. McMahan, D. Ramage, K. Talwar, and L. Zhang, “Learning
+differentially private recurrent language models,” in International
+Conference on Learning Representations, 2018. [Online]. Available:
+https://openreview.net/forum?id=BJ0hF1Z0b
+[36] C. Dwork, K. Kenthapadi, F. McSherry, I. Mironov, and M. Naor, “Our
+data, ourselves: Privacy via distributed noise generation,” in Advances in
+Cryptology - EUROCRYPT 2006, S. Vaudenay, Ed. Berlin, Heidelberg:
+Springer Berlin Heidelberg, 2006, pp. 486–503.
+[37] M. Bun and T. Steinke, “Concentrated differential privacy:
+Simplifications, extensions, and lower bounds,” in Proceedings,
+Part I, of the 14th International Conference on Theory of Cryptography
+- Volume 9985. Berlin, Heidelberg: Springer-Verlag, 2016, p. 635–658.
+[Online]. Available: https://doi.org/10.1007/978-3-662-53641-4_24
+[38] C. Xie, O. Koyejo, and I. Gupta, “Fall of empires: Breaking byzantine-
+tolerant sgd by inner product manipulation,” in Uncertainty in artificial
+intelligence. PMLR, 2020, pp. 261–270.
+[39] G. Baruch, M. Baruch, and Y. Goldberg, “A little is enough: Circumvent-
+ing defenses for distributed learning,” Advances in Neural Information
+Processing Systems, vol. 32, 2019.
+[40] S. P. Karimireddy, L. He, and M. Jaggi, “Learning from history
+for byzantine robust optimization,” in Proceedings of the 38th
+International Conference on Machine Learning, ser. Proceedings of
+Machine Learning Research, M. Meila and T. Zhang, Eds., vol.
+139. PMLR, 18–24 Jul 2021, pp. 5311–5319. [Online]. Available:
+https://proceedings.mlr.press/v139/karimireddy21a.html
+[41] X. Cao, M. Fang, J. Liu, and N. Z. Gong, “FLTrust: Byzantine-
+robust Federated Learning via Trust Bootstrapping,” in Proceedings
+2021 Network and Distributed System Security Symposium. Internet
+Society, 2021. [Online]. Available: https://www.ndss-symposium.org/
+wp-content/uploads/ndss2021_6C-2_24434_paper.pdf
+[42] K. Pillutla, S. M. Kakade, and Z. Harchaoui, “Robust aggregation for
+federated learning,” IEEE Transactions on Signal Processing, vol. 70,
+pp. 1142–1154, 2022.
+[43] A. C. Yao, “ Protocols for secure computations ,” in 23rd Annual
+Symposium on Foundations of Computer Science. Los Alamitos, CA,
+USA: IEEE Computer Society, Nov. 1982, pp. 160–164. [Online].
+Available: https://doi.ieeecomputersociety.org/10.1109/SFCS.1982.38
+[44] A. Shamir, “How to share a secret,” Commun. ACM, vol. 22, no. 11,
+p. 612–613, Nov. 1979. [Online]. Available: https://doi.org/10.1145/
+359168.359176
+[45] M. Ben-Or, S. Goldwasser, and A. Wigderson, “Completeness
+theorems for non-cryptographic fault-tolerant distributed computation,”
+in Proceedings of the Twentieth Annual ACM Symposium on Theory
+of Computing, ser. STOC ’88. New York, NY, USA: Association
+for Computing Machinery, 1988, p. 1–10. [Online]. Available:
+https://doi.org/10.1145/62212.62213
+[46] G. Asharov and Y. Lindell, “A full proof of the bgw protocol for
+perfectly secure multiparty computation,” J. Cryptol., vol. 30, no. 1,
+p. 58–151, Jan. 2017. [Online]. Available: https://doi.org/10.1007/
+s00145-015-9214-4
+[47] V. King, J. Saia, V. Sanwalani, and E. Vee, “Towards secure and
+scalable computation in peer-to-peer networks,” in Proceedings of the
+47th Annual IEEE Symposium on Foundations of Computer Science,
+ser. FOCS ’06. USA: IEEE Computer Society, 2006, p. 87–98.
+[Online]. Available: https://doi.org/10.1109/FOCS.2006.77
+[48] V. King, S. Lonargan, J. Saia, and A. Trehan, “Load balanced scalable
+byzantine agreement through quorum building, with full information,”
+in Proceedings of the 12th International Conference on Distributed
+Computing and Networking, ser. ICDCN’11. Berlin, Heidelberg:
+Springer-Verlag, 2011, pp. 203–214.
+[49] N. Braud-Santoni, R. Guerraoui, and F. Huc, “Fast byzantine
+agreement,” in Proceedings of the 2013 ACM Symposium on Principles
+of Distributed Computing, ser. PODC ’13. New York, NY, USA:
+Association for Computing Machinery, 2013, p. 57–64. [Online].
+Available: https://doi.org/10.1145/2484239.2484243
+[50] Z. Huang, Y. Liang, and K. Yi, “Instance-optimal mean estimation
+under differential privacy,” Advances in Neural Information Processing
+Systems, vol. 34, pp. 25 993–26 004, 2021.
+[51] L. Li, W. Xu, T. Chen, G. B. Giannakis, and Q. Ling, “Rsa: Byzantine-
+robust stochastic aggregation methods for distributed learning from
+heterogeneous datasets,” in Proceedings of the Thirty-Third AAAI
+Conference on Artificial Intelligence and Thirty-First Innovative
+Applications of Artificial Intelligence Conference and Ninth AAAI
+Symposium on Educational Advances in Artificial Intelligence, ser.
+AAAI’19/IAAI’19/EAAI’19. AAAI Press, 2019. [Online]. Available:
+https://doi.org/10.1609/aaai.v33i01.33011544
+[52] H. Zhu and Q. Ling, “Bridging differential privacy and byzantine-
+robustness via model aggregation,” in Proceedings of the Thirty-First
+International Joint Conference on Artificial Intelligence, IJCAI-22, L. D.
+Raedt, Ed. International Joint Conferences on Artificial Intelligence
+Organization, 7 2022, pp. 2427–2433, main Track. [Online]. Available:
+https://doi.org/10.24963/ijcai.2022/337
+[53] J. Bernstein, J. Zhao, K. Azizzadenesheli, and A. Anandkumar,
+“signSGD with majority vote is communication efficient and fault
+tolerant,” in International Conference on Learning Representations,
+2019. [Online]. Available: https://openreview.net/forum?id=BJxhijAcY7
+[54] M. Fang, Z. Liu, X. Zhao, and J. Liu, “Byzantine-robust federated
+learning over ring-all-reduce distributed computing,” in Companion
+Proceedings of the ACM on Web Conference 2025, ser. WWW ’25.
+New York, NY, USA: Association for Computing Machinery, 2025, p.
+961–965. [Online]. Available: https://doi.org/10.1145/3701716.3715491
+[55] Y. Allouah, R. Guerraoui, and J. Stephan, “Towards trustworthy
+federated learning with untrusted participants,” in Proceedings of the
+42nd International Conference on Machine Learning, ser. Proceedings
+of Machine Learning Research, A. Singh, M. Fazel, D. Hsu, S. Lacoste-
+Julien, F. Berkenkamp, T. Maharaj, K. Wagstaff, and J. Zhu, Eds., vol.
+267. PMLR, 13–19 Jul 2025, pp. 1184–1227. [Online]. Available:
+https://proceedings.mlr.press/v267/allouah25a.html
+[56] R. Canetti, “Universally composable security: A new paradigm for
+cryptographic protocols,” in Proceedings of the 42nd IEEE Symposium
+on Foundations of Computer Science, ser. FOCS ’01. USA: IEEE
+Computer Society, 2001, p. 136.
+[57] P. Kairouz, Z. Liu, and T. Steinke, “The distributed discrete gaussian
+mechanism for federated learning with secure aggregation,” 2022.
+[Online]. Available: https://arxiv.org/abs/2102.06387
+[58] arkworks contributors, “arkworks zksnark ecosystem,” 2022. [Online].
+Available: https://arkworks.rs
+[59] M. González, R. Guerraoui, R. Pinot, G. Rizk, J. Stephan, and
+F. Taïani, “Byzfl: Research framework for robust federated learning,”
+2025. [Online]. Available: https://arxiv.org/abs/2505.24802
+[60] A. Yousefpour, I. Shilov, A. Sablayrolles, D. Testuggine, K. Prasad,
+M. Malek, J. Nguyen, S. Ghosh, A. Bharadwaj, J. Zhao, G. Cormode,
+and I. Mironov, “Opacus: User-friendly differential privacy library in
+PyTorch,” arXiv preprint arXiv:2109.12298, 2021.
+[61] I. Mironov, “Rényi differential privacy,” in 2017 IEEE 30th Computer
+Security Foundations Symposium (CSF), 2017, pp. 263–275.
+[62] M. Shayan, C. Fung, C. J. M. Yoon, and I. Beschastnikh,
+“Biscotti: A Blockchain System for Private and Secure Federated
+Learning,” IEEE Transactions on Parallel and Distributed Systems,
+vol. 32, no. 7, pp. 1513–1525, Jul. 2021. [Online]. Available:
+https://ieeexplore.ieee.org/document/9292450
+[63] J. So, B. Güler, and A. S. Avestimehr, “Byzantine-resilient secure
+federated learning,” IEEE Journal on Selected Areas in Communications,
+vol. 39, no. 7, pp. 2168–2181, 2020.
+[64] R. K. Velicheti, D. Xia, and S. Koyejo, “Secure byzantine-robust
+distributed learning via clustering,” in NeurIPS Workshop New Frontiers
+in Federated Learning: Privacy, Fairness, Robustness, Personalization
+and Data Ownership, 2021.
+[65] A. Roy Chowdhury, C. Guo, S. Jha, and L. van der Maaten, “Eiffel:
+Ensuring integrity for federated learning,” in Proceedings of the
+2022 ACM SIGSAC Conference on Computer and Communications
+Security, ser. CCS ’22. New York, NY, USA: Association for
+Computing Machinery, 2022, p. 2535–2549. [Online]. Available:
+https://doi.org/10.1145/3548606.3560611
+[66] X. Gu, M. Li, and L. Xiong, “Dp-brem: differentially-private and
+byzantine-robust federated learning with client momentum,” in Proceed-
+ings of the 34th USENIX Conference on Security Symposium, ser. SEC
+’25. USA: USENIX Association, 2025.
+[67] E. Kushilevitz, Y. Lindell, and T. Rabin, “Information-theoretically
+secure protocols and security under composition,” SIAM J. Comput.,
+vol. 39, no. 5, p. 2090–2112, Mar. 2010.
+[68] O. Goldreich, Foundations of cryptography, volume 2. Cambridge
+university press Cambridge, 2004.
+[69] W. Hoeffding, “Probability inequalities for sums of bounded random
+variables,” Journal of the American statistical association, vol. 58, no.
+301, pp. 13–30, 1963.
+APPENDIX A
+BGW SCHEME PRIMITIVES
+A. VSS-SHARE.
+We now describe the BGW verifiable secret sharing protocol
+as described in [46, Prot. 5.6]. The protocol follows Shamir
+secret sharing, augmented with a bivariate commitment to
+enable verification. A dealer holding secret s samples a
+random bivariate polynomial B(x, y) ∈ Fp[x, y] of degree
+TABLE IV
+NOTATION.
+Symbol Meaning
+System and threat model
+n, P, H, A Parties; honest / adversarial sets
+f, ϵ Corruption count, f = (1/4 − ϵ)n
+Tree and committees
+T , k, L, ℓ Tree; branching, depth, level
+m, τ Committee size; threshold τ < m/4
+Cℓ,c Committee c at level ℓ
+Cj Leaf j’s base committee
+Cch, Cpa, CL Child, parent, root committee
+Pi, P ′ r Parties in child / parent
+Median search
+D, u, q Dimension, value range, precision
+xj , pt Leaf input; pivot at iter. t
+Left, Right Binary-search bounds
+bj Bits, bj,d = 1[xj,d ≤ pt,d]
+^count, ˆM Aggregated noisy count; final aggregate
+Niter Median Search iterations
+Secret sharing
+[·], σi, σ′ r Share: generic, child, parent
+fd, ψi Sharing / resharing polynomial
+αi, ωr , λi Eval. points; Lagrange coeff.
+FX Ideal functionality for X
+t − 1 in each variable, under the constraint B(0, y) = q(y)
+where q is the underlying univariate sharing polynomial with
+q(0) = s. The dealer sends each party Pi the two univariate
+polynomials fi(x) = B(x, i) and gi(y) = B(i, y). Every pair
+(Pi, Pj ) then performs a pairwise consistency exchange: Pi
+sends fi(j) and gi(j) to Pj , which checks fi(j)
+?
+= gj (i) and
+gi(j)
+?
+= fj (i). A failed check triggers a broadcast complaint.
+For each complaint from Pj , the dealer may either broadcast
+the full polynomial pair (fj , gj ) to resolve it publicly, or re-
+main silent. Parties whose complaints were resolved broadcast
+CONSISTENT. Each Pi accepts fi(0) = B(0, i) as its share of
+s if and only if at least n − t CONSISTENT messages are
+received.
+Functionality 1 FVSSSHARE
+Parameters. A committee C = {P1, . . . , Pm} with eval-
+uation points α1, . . . , αm.
+Input. A dealer holds a secret s ∈ F.
+Functionality.
+1) Sample a uniformly random polynomial f such that
+deg(f ) ≤ τ and f (0) = s.
+2) Deliver (SHARE, sid, ssid, f (αi)) to every Pi ∈ C.
+The parties obtain a degree-τ sharing of s.
+B. MULTIPLY.
+We now describe the BGW multiplication of two secrets
+protocol as described in [46, Prot. A.1], in the specific case
+Protocol 1: VSS-SHARE
+Input. The dealer D holds
+q(Z) ∈ F[Z], deg(q) ≤ τ.
+Output. Each Pi ∈ C obtains
+σi = q(αi)
+or outputs ⊥.
+1. Distribution. The dealer samples a random bivariate
+polynomial S(X, Y ) of degree at most τ in each
+variable such that
+S(0, Y ) = q(Y ).
+For every Pi ∈ C, the dealer privately sends
+fi(X) = S(X, αi), gi(Y ) = S(αi, Y ).
+2. Cross-checking. Each Pi sends
+ 
+fi(αj ), gi(αj )
+
+to every Pj ∈ C. Upon receiving (uj,i, vj,i) from Pj ,
+party Pi checks
+uj,i = gi(αj ), vj,i = fi(αj ).
+If either equality fails, Pi broadcasts a complaint
+against Pj . If no complaint is broadcast, Pi outputs
+σi = fi(0).
+3. Complaint resolution. For each complaint, the
+dealer reveals the pair
+(fj , gj )
+of any party Pj whose reported values are inconsistent
+with S. Each party verifies every revealed pair using
+fi(αj ) = gj (αi), gi(αj ) = fj (αi).
+A party whose pair is revealed replaces its local
+pair accordingly. Every other party that accepts all
+resolutions broadcasts CONSISTENT.
+4. Output. If at least m − τ parties broadcast
+CONSISTENT, then Pi outputs σi = fi(0).
+Otherwise, Pi outputs ⊥.
+where τ < m/4. Given degree-(t) sharings of a and b, the
+protocol outputs a degree-(t) sharing of ab in two steps:
+1) Each party locally computes the product of its input
+shares, obtaining a point on a degree-2t polynomial that
+hides ab.
+2) Each party subshares (i) its two original input shares and
+(ii) its local product, each via a fresh random degree-
+(t) polynomial. The consistency of the input subshares
+certifies that the product subshare indeed corresponds to
+the product of those inputs. Once verified, parties locally
+compute a public linear combination of the product
+subshares to recover a fresh degree-(t) sharing of ab.
+Functionality 2 FMULTIPLY
+Parameters. A committee C = {P1, . . . , Pm} with eval-
+uation points α1, . . . , αm.
+Input. The committee holds two degree-τ sharings ai =
+fa(αi) and bi = fb(αi), where deg(fa), deg(fb) ≤ τ.
+Functionality.
+1) Every party locally computes ci = fa(αi)fb(αi).
+2) Invoke
+FVSS-SUBSHARE
+ 
+{ci}Pi ∈C , C
+
+.
+For every i, let gi denote the resulting degree-τ
+subsharing polynomial satisfying gi(0) = ci.
+3) Let λ1, . . . , λm be the public coefficients satisfying
+fa(0)fb(0) =
+mX
+i=1
+λifa(αi)fb(αi).
+Define
+Q(X) =
+mX
+i=1
+λigi(X).
+4) Deliver (SHARE, sid, ssid, Q(αr )) to every party Pr .
+Since
+Q(0) =
+mX
+i=1
+λigi(0) =
+mX
+i=1
+λifa(αi)fb(αi) = fa(0)fb(0),
+the outputs form a fresh degree-τ sharing of the product.
+Protocol 2: MULTIPLY
+Input. Each party Pi holds ai = fa(αi) and bi =
+fb(αi).
+Output. Each party Pi obtains Q(αi), where Q is a
+degree-τ sharing of fa(0)fb(0).
+1. Local multiplication. Each Pi computes ci = aibi.
+2. Subsharing. Invoke VSS-SUBSHARE(ci). Each Pi
+receives C1(αi), . . . , Cn(αi), where Cj (0) = cj .
+3. Local recombination. Let λ1, . . . , λn be the first
+row of the inverse Vandermonde matrix. Each Pi
+computes
+Q(αi) =
+nX
+j=1
+λj Cj (αi)
+and outputs Q(αi).
+C. VSS-RECONST
+We now describe the BGW reconstruction of a secret
+protocol as described in [46, Step 3 of Prot. 7.1]. Suppose
+that a secret s ∈ F is shared via Shamir Secret Sharing using
+a polynomial f of degree t such that f (0) = s, and that each
+party Pi possesses a share f (ai). Normally, if all participants
+are honest, they can broadcast their shares, and ultimately t+1
+shares are sufficient to recover s by interpolation. However,
+we are in a malicious scenario, and in this case, we must
+guard against the possibility that some of the shares used to
+reconstruct the secret may be incorrect, which would skew the
+final result. Therefore, a mechanism is needed to efficiently
+identify and correct these incorrect shares.
+We know here that all the shares contains atleast n ≥ 3t + 1
+points lying in the same polynomial containing secret s. As
+such, it is possible to use an efficient Reed-Solomon decoding
+algorithm such as Berlekamp–Welch to recover the exact
+polynomial to get the secret .
+Functionality 3 FVSSRECONST
+Parameters. A committee C = {P1, . . . , Pm} with eval-
+uation points α1, . . . , αm.
+Input. The committee holds a degree-τ sharing
+σi = f (αi), deg(f ) ≤ τ.
+Functionality.
+1) Recover the unique polynomial f consistent with the
+honest parties’ inputs.
+2) Deliver
+(SECRET, sid, ssid, f (0))
+to every party.
+Protocol 3: VSS-RECONST
+Input. Each Pi ∈ C holds a share βi = f (αi), where
+deg(f ) ≤ τ.
+Output. Each party obtains the shared value s = f (0).
+1. Broadcast shares. Each party Pi broadcasts its
+share βi. bβ = ( bβ1, . . . , bβm) denotes the vector of
+received values, which may contain incorrect shares.
+2. Reed–Solomon decoding. Each party locally Reed–
+Solomon decodes bβ and recovers the unique polyno-
+mial f of degree at most τ whose evaluation vector
+agrees with bβ in all but at most τ positions.
+3. Reconstruction. Each party outputs
+s = f (0).
+D. VSS-SUBSHARE
+We now describe the BGW subsharing protocol as described
+in [46, Prot. 6.8]. The VSS-SUBSHARE protocol enables
+verifiable resharing of existing Shamir shares. Suppose a set of
+parties holds a secret s distributed into shares via a polynomial
+f, such that each party Pi holds bi = f (ai). Then each party
+Pi generates a random polynomial of degree t, gi, such that
+gi(0) = bi = f (ai). Here, shares are created based on the
+shares of the common secret.
+The challenge here is to figure out how to prevent a
+malicious party from sending evaluations corresponding to a
+polynomial whose constant term is gi(0) ̸= f (ai). To do this,
+we exploit the supermajority property of the honest parties
+and can therefore represent the vector of the constant parts
+of the generated polynomials as a Reed-Solomon codeword
+γ = (g1(0), . . . , gn(0)) that differs from the valid codeword
+β = (f (a1), . . . , f (an)) by only τ values, making it possible
+to use a code correction algorithm. We can then write the
+difference between these two vectors as γ = β + e, where
+e is an error vector of maximum weight τ. Let H be the
+parity-check matrix of the corresponding Reed-Solomon code.
+Since β is a valid codeword, we have βH T = 0, and
+by multiplying the expression for γ by H T , we obtain the
+syndrome s = γH T = (β + e)H T = 0 + eH T .
+The error-correcting algorithm can therefore recover this
+error vector from the syndrome, and thus directly identify
+the erroneous segments. In particular, for a vector e, all
+indices i such that ei ̸= 0 correspond to the indices of the
+parts that have cheated, and whose evaluations must there-
+fore be discarded and replaced, directly by setting f (ai) =
+gi(0) − ei. It is therefore necessary to retrieve this syn-
+drome s in addition to the subshares, which is ensured
+securely by the Fmat protocol. Specifically, after sending
+the subshares via VSS-SHARE, each party i ends up with
+a subshare vector (g1(ai), . . . , gn(ai)). The parties i can
+then calculate locally, using the public matrix H T , Y (ai) =
+(g1(ai), . . . , gn(ai))H T , corresponding to the evaluation at ai
+of the vector of 2t polynomials of degree t, Y (x), whose
+constant term is Y (0) = (g1(0), . . . , gn(0))H T = γH T = s.
+Revealing this polynomial thus allows the syndrome to be re-
+covered; this is achieved by having the parties i broadcast their
+evaluation of Y (x) and using VSS-RECONST to reconstruct
+the syndrome.
+Once the syndrome is obtained, the index j of the cheating
+parties is identified, and for those parties, the corresponding
+subshares are broadcast to reconstruct gj (0), which in turn
+allows the correct original share f (aj ) = gj (0) − ej to be
+recovered.
+Note that in the version described in [46], the VSS-
+SUBSHARE protocol takes place within a single commit-
+tee. In our case, we use a slightly different variant, which
+takes place between two committees. In this case, the source
+committee will only subshare its shares as the dealer via
+VSS-SHARE, and it is up to the receiving committee to
+perform the syndrome calculation and error correction. Note
+that, given the properties of our committees (same size, same
+corruption bound), this modified protocol does not alter the
+algebraic properties of the sent shares in any way; therefore,
+the syndrome calculation remains the same as if the dealers
+were from the same committee, and thus the argument for
+correctness remains the
+Functionality 4 FVSSSUBSHARE
+Parameters. A sending committee Cch = {P1, . . . , Pm}
+with evaluation points α1, . . . , αm, and a receiving com-
+mittee Cpa = {P ′ 1, . . . , P ′ m} with evaluation points
+ω1, . . . , ωm.
+Input. Each Pi ∈ Cch holds a value σi.
+Functionality.
+1) For every Pi ∈ Cch, sample a uniformly random
+polynomial gi such that deg(gi) ≤ τ and gi(0) = σi.
+2) Deliver (SHARE, sid, ssid, gi(ωr )) to every P ′ r ∈ Cpa.
+For every sender Pi, the receivers obtain a fresh degree-τ
+sharing of σi.
+Protocol 4: VSS-SUBSHARE
+Input. Each Pi ∈ C holds βi = f (αi), where
+deg(f ) ≤ τ.
+Output. Each Pi obtains g′ 1(αi), . . . , g′ m(αi), where
+each g′ j has degree at most τ and g′ j (0) = f (αj ).
+1. Subsharing. Each Pi samples a random degree-τ
+polynomial gi satisfying gi(0) = βi.
+2. Consistency check. Let H be the parity-check ma-
+trix of the Reed–Solomon code defined by α1, . . . , αm.
+The parties invoke F H mat on g1, . . . , gm. Each Pi ob-
+tains g1(αi), . . . , gm(αi) and the syndrome
+s = (g1(0), . . . , gm(0))H T .
+Each party decodes s with an error correction algo-
+rithm to obtain the error vector e = (e1, . . . , em).
+3. Correction. For every k with ek = 0, each Pi sets
+g′ k(αi) = gk(αi). For every k with ek ̸= 0, the parties
+exchange their values gk(αi), reconstruct gk, and set
+g′ k(αi) = gk(0) − ek = f (αk).
+Each Pi outputs gi and g′ 1(αi), . . . , g′ m(αi).
+APPENDIX B
+GISKARD SUB-PROTOCOLS DESCRIPTION
+This appendix details the sub-protocols that instantiate
+Giskard with the primitives are from the BGW scheme [46],
+we recall only what is needed. We present here the sub-
+protocols used in GISKARD: BUILDTREE ,INPUTSHARE, RE-
+SHARE, NOISEGEN and BROADCAST DOWN.
+A. BUILDTREE
+We call the protocol BUILDTREE, that is done locally by
+each parties, assuming that the Byzantine Aggreement phase
+worked, and that they all got the same random seed, they then
+sample the committee membership and Leaf assignment.
+Committee membership. For each tree level ℓ ∈
+{1, . . . , L}, we derive a permutation πℓ of [n] by Fisher–
+Yates shuffling seeded with H(seed ∥ ℓ), where H is a public
+hash function modeled as a random oracle. The committees
+at level ℓ are the kL−ℓ disjoint m-blocks in the prefix of πℓ.
+By construction, every party sits in at most one committee
+per level, so in the worst case a party participates in L
+committees, one per level. Within any level, each committee
+is marginally a uniformly random m-subset of [n], so per-
+committee corruption follows Hyp(n, f, m); the global failure
+probability is bounded by a union bound over all committees.
+Leaf assignment. Each party i ∈ [n] is assigned to leaf
+position πL(i). The base committee of party i is the level-
+(L − 1) committee whose k children include leaf πL(i), i.e.,
+committee ⌈πL(i)/k⌉ in the level-(L − 1) ordering. Since πL
+is a permutation, every party occupies exactly one leaf and
+every leaf is occupied by exactly one party.
+B. INPUTSHARE
+After locally comparing its vector coordinates to the current
+pivot, leaf j secret-shares the resulting bit vector bj,d =
+1[xj,d ≤ pt,d] via VSS-SHAREto its assigned base committee.
+A malicious leaf could share an arbitrary field element instead
+of a bit, biasing the aggregated count by an unbounded
+amount. To prevent this, the committee verifies that each
+shared value b satisfies b ∈ {0, 1} via the standard degree-2
+domain proof: it runs MULTIPLY([b], [1 − b]) and reconstructs
+the result using VSS-RECONST. If the reconstruction yields
+0, the share is accepted; otherwise the committee collectively
+replaces it with a canonical zero sharing. This bounds the
+Byzantine contribution per iteration to CB ∈ [0, f ]. Committee
+parties then locally sum the validated shares, jointly produce
+a shares of 0 to be added, then by linearity of Shamir
+sharing, this produces a fresh share of the partial count from
+the incoming leaves, which becomes the input to the tree-
+aggregation phase. It is to be noted that the share refresh is
+necessary only if all the leaves are byzantines, on the other
+case the produce share of the partial count is already uniformly
+random, from the presence of atleast one honest leaf.
+C. RESHARE
+RESHARE converts a (τ, m)-Shamir sharing held by a child
+committee Cch into a fresh (τ, m)-sharing held by its parent
+Cpa (all committees have size m and threshold τ < m/4). Two
+adversarial behaviors must be taken into account: a corrupted
+child may send sub-shares that are inconsistent with any
+degree-τ polynomial, breaking reconstruction. Even consistent
+sub-shares must provably interpolate to the partial sum held
+by the child committee, not an adversarially chosen value.
+Both are handled by VSS-SUBSHARE [46, Prot. 6.8]. Each
+Pi ∈ Cch holds a share σi = f (αi) of the child’s partial sum,
+where f is the degree-τ sharing polynomial and αi is Pi’s
+evaluation point. Pi samples a fresh degree-τ polynomial gi
+with gi(0) = σi and sends gi(ωr ) to each parent P ′ r ∈ Cpa at
+that party’s evaluation point ωr . The functionality guarantees
+gi(0) = f (αi) via Reed-Solomon decoding over the honest
+children’s sub-shares. Each parent then locally computes
+σ′ r = X
+i∈Cch
+λi · gi(ωr ), (22)
+Protocol 5: INPUTSHARE
+Common input. The parties hold a description of
+F, distinct nonzero evaluation points {αi}Pi ∈C1,c , the
+public pivot pt, and the identifiers (sid, ssid).
+Aiding ideal-functionality initialization. Upon in-
+vocation, the trusted parties computing VSS-SHARE,
+MULTIPLY, and VSS-RECONST receive the static cor-
+rupted committee set Ic. The honest parties do not
+receive Ic.
+Input. Each honest leaf j ∈ Lc \ Bc holds xj ∈ [u]D .
+A Byzantine leaf may submit arbitrary values in F. The
+committee C1,c has size m and threshold τ < m/3.
+Output. Each Pi ∈ C1,c obtains [σc,d]i for every d ∈
+[D], where
+σc,d =
+X
+j∈Lc
+ebj,d,
+ebj,d =
+
+
+
+1[xj,d ≤ pt,d], j /∈ Bc,
+bj,d, bj,d ∈ {0, 1},
+0, otherwise.
+1. Share and validate. For every j ∈ Lc and d ∈
+[D], an honest leaf sets bj,d = 1[xj,d ≤ pt,d], while a
+Byzantine leaf may choose any bj,d ∈ F, and invokes
+VSS-SHARE(bj,d). A missing or rejected sharing is
+replaced by [0]. The committee computes
+[ej,d] ← MULTIPLY([bj,d], [1] − [bj,d]),
+ej,d ← VSS-RECONST([ej,d]),
+and sets
+[ebj,d] ←
+(
+[bj,d], ej,d = 0,
+[0], ej,d ̸= 0.
+2. Aggregate. For every d ∈ [D], each Pi locally
+computes
+[bσc,d]i ←
+X
+j∈Lc
+[ebj,d]i.
+3. Refresh. For every d ∈ [D], the committee invokes
+[zc,d] ← MULTIPLY([0], [0]).
+Here [0] denotes the public degree-τ sharing whose
+shares are all zero. By the definition of the BGW
+multiplication functionality, [zc,d] is a fresh uniformly
+random degree-τ sharing of zero, conditioned on the
+output shares selected by the corrupted committee
+members. Each Pi outputs
+[σc,d]i ← [bσc,d]i + [zc,d]i.
+where {λi} are the Lagrange coefficients interpolating f (0)
+from {f (αi)}i∈Cch . Since gi(0) = f (αi), equation (22) evalu-
+ates a fresh degree-τ polynomial at ωr whose constant term isP
+i λif (αi) = f (0), the value shared by the child committee.
+We describe the protocol for a single coordinate as it runs in
+parallel across all d ∈ [D].
+Protocol 6: RESHARE
+Input. Each Pi ∈ Cch holds
+σi = f (αi), deg(f ) ≤ τ,
+where f (0) is the shared secret.
+Output. Each P ′ r ∈ Cpa obtains
+σ′ r = f ′(ωr ),
+where f ′ is a degree-τ polynomial satisfying f ′(0) =
+f (0).
+1. Subsharing. Invoke
+VSS-SUBSHARE
+ 
+{σi}Pi ∈Cch , Cpa
+
+.
+For every sender Pi, each receiver P ′ r obtains gi(ωr ),
+where
+deg(gi) ≤ τ and gi(0) = σi = f (αi).
+2. Local recombination. Let λ1, . . . , λm be the public
+Lagrange coefficients for interpolation at zero over
+α1, . . . , αm. Each P ′ r ∈ Cpa locally computes
+σ′ r ←
+mX
+i=1
+λigi(ωr )
+and outputs σ′ r .
+D. BROADCAST DOWN
+We now present a simple protocol, exploiting the guarantees
+of a well formed tree, to reliably send down a public value
+through the tree. It exploits the honest supermajority assump-
+tion, where each parties from a parent committee send down
+the common public value to the parties of a child committee.
+For parties of that child committee, they locally agree if
+among all the received value, one have a multiplicity of over
+m/4. Under the assumption of synchronous communication,
+authenticated point-to-point channels
+E. NOISEGEN
+Protocol 8 details the DP noise-generation procedure. Each
+party contributes an independent bounded discrete-Gaussian
+sample, so the aggregate noise Zq contains at least m − τ
+honest samples regardless of adversarial behavior. The bit
+decomposition and the multiplicative check [β][1 − β] enforce
+that every accepted contribution is a well-formed integer in
+[−B, B − 1]; a contribution that fails validation is replaced by
+[0] rather than aborting, which preserves liveness at the cost of
+the corrupted parties’ noise only. The truncation to [−B, B−1]
+Protocol 7: BROADCAST DOWN (IN THE TREE)
+Input. Each P ′ r ∈ Cpa holds the same public value
+v ∈ R (e.g., a reconstructed pivot coordinate). Both
+committees have size m with threshold τ < m/4.
+Output. Each honest Pi ∈ Cch holds v.
+1. Send. Each P ′ r ∈ Cpa sends v to every Pi ∈ Cch
+over authenticated channels.
+2. Majority vote. At the end of the prescribed syn-
+chronous round, each Pi ∈ Cch replaces every missing
+message by ⊥. It outputs the unique value with multi-
+plicity greater than m/4, or ⊥ if no such value exists.
+introduces a statistical deviation from NZ(0, σ2 c ) of at most
+2 exp(−B2/2σ2 c ) per sample, which is negligible for ℓ ≥
+log2(σc) + ω(log λ). The choice p > max(m, 2(N + mB))
+guarantees that the sum P i ζ (q) i , added to any query result of
+magnitude at most N, does not wrap around modulo p.
+APPENDIX C
+SECURITY ANALYSIS PROOFS
+A. Security Proof Methodology
+In this section, we describe the definitions, results, and
+proof techniques we will use to prove the security of our
+cryptographic protocols. We primarily rely on results from the
+work from [46], [56], and [67]. We first the perfect security
+of our protocol in the standalone model [68], then use lifting
+theorem [67, Theorem 1.2] to push it into UC security [56].
+a) Execution and corruption model.: Here, we reiterate
+what has already been described in the Section III-A on the
+system model. In particular, regarding the execution of MPC
+protocols, the committee sizes m and τ and the maximum
+corruption threshold are defined. The attack model assumes
+static malicious adversaries A, implying a fixed set |I| ≤ τ.
+We assume the existence of authenticated private channels for
+secure point-to-point communication.
+b) Real and ideal executions: In the real execution, all
+parties run protocol Π, while the adversary A have additional
+input z and controls the parties indexed by I. REALΠ,A(z),I (x)
+is the random variable consisting of the adversary’s view (the
+full transcript of communication visible to him, together with
+the outputs of all honest parties.
+In the ideal execution, call to the protocol are replace to
+call to a trusted party computing the functionality FΠ, while
+an ideal model simulator S controls the corrupted parties and
+interacts with FΠ. IDEALF ,S(z),I (x) is the random variable
+consisting of the simulator’s output together with the outputs
+delivered by FΠ to the honest parties.
+Definition 4 (Perfect stand-alone security). A protocol Π
+perfectly realizes a functionality FΠ against static malicious
+corruptions of at most τ parties if, for every real-model
+adversary A, there exists an polynomial time ideal-model
+simulator S in that of A such that, for every corruption set
+Protocol 8: NOISEGEN
+Input. Privacy budget ρ, query count Niter ,
+σc =
+s
+Niter
+2ρ(m − τ ) , B = 2ℓ−1,
+p > max
+ 
+m, 2(N + mB)
+
+,
+and a committee C of size m with τ < m/4. Output.
+For each q ∈ [Niter ], a sharing
+[Zq ] =
+mX
+i=1
+[ζ (q) i ],
+where every honest ζ (q) i follows NZ(0, σ2 c ) conditioned
+on [−B, B − 1], and every accepted contribution lies
+in that interval.
+1. Sampling and sharing. Each Pi samples ζ (q) i from
+NZ(0, σ2 c ) until ζ (q) i ∈ [−B, B − 1], writes
+ζ (q) i + B =
+ℓ−1X
+j=0
+2j β(q) i,j ,
+and VSS-shares every bit β(q) i,j .
+2. Validation. For every bit, the committee opens
+[β(q) i,j ][1 − β(q) i,j ].
+If a sharing fails or any opened value is nonzero, the
+corresponding contribution is replaced by [0].
+3. Aggregate. For every accepted contribution, the
+committee locally computes
+[eζ (q) i ] =
+ℓ−1X
+j=0
+2j [β(q) i,j ] − B.
+For every rejected contribution, it sets
+[eζ (q) i ] = [0].
+The committee then locally computes
+[Zq ] =
+mX
+i=1
+[eζ (q) i ].
+I ⊆ [m] with |I| ≤ τ, every input vector x, and every auxiliary
+input z,
+REALΠ,A(z),I (x) ≡ IDEALFΠ ,S(z),I (x),
+where ≡ denotes equality of distributions.
+c) Hybrid execution: In a protocol Π running a
+(F1, . . . , Fk)-hybrid execution, parties use the protocol as in-
+tended but invoke trusted parties computing the functionalities
+(F1, . . . , Fk). The adversary A is still there with additional
+input z, controlling the parties indexed by I. When calling one
+of those functionalities, a unique sub-session identifier ssid is
+created to separate that instance from the other invocations.
+HYBRIDF1 ,...,Fk Π,A(z),I (x) is the random variable consisting of the
+adversary’s view (the full transcript of communication visible
+to him, together with the outputs of all honest parties). For
+a protocol Π running a (F1, . . . , Fk)-hybrid execution we
+denote Πρ1 ,...,ρk to the protocol that runs Π but for all
+i ∈ {1, . . . , k}, it runs sub-protocol ρi instead of calling ideal
+functionality Fi.
+Definition 5 (Perfect security in the hybrid model). A protocol
+Π perfectly realizes a functionality FΠ against static malicious
+corruptions of at most τ parties if, for every (F1, . . . , Fk)-
+hybrid model adversary A, there exists an polynomial time
+ideal-model simulator S in that of A such that, for every
+corruption set I ⊆ [m] with |I| ≤ τ, every input vector x,
+and every auxiliary input z,
+HYBRIDF1 ,...,Fk Π,A(z),I (x) ≡ IDEALFΠ ,S(z),I (x).
+Let Π be a protocol intended to realize a functionality
+FΠ calling ideal functionalities F1, . . . , Fk. For every static
+malicious adversary A, we construct an ideal-model simulator
+S such that, for every corruption set I with |I| ≤ τ, every
+input vector x, and every auxiliary input z,
+The simulator internally runs A, emulating honest parties
+and functionalities with canonical defaults for invalid mes-
+sages. It forwards extracted inputs to FΠ and fixes corrupted
+output shares while FΠ conditionally samples honest shares.
+If the simulator accesses A only through its input-output
+interface and never inspects, rewinds, or restarts it, it is
+straight-line and black-box.
+d) Lifting to UC security.: After proving (in the stan-
+dalone model) the perfect security of a protocol in the hybrid
+model, if the used simulator present the property of being
+straight-line, and blackbox, we can use the [67, Theorem
+1.2] lifting theorem which state that every protocol that is
+perfectly secure in the stand-alone model, and has a straight-
+line black-box simulator, is secure under concurrent general
+composition, equivalent to (static) universal composability. It
+allow to prove that a protocol Π UC-realizes FΠ in the hybrid
+model. Furthermore, if the ideal functionalities from the hybrid
+model are also UC-realized by some existing protocols, we
+can use the UC composition theorem [56], actually removing
+the ideal functionalities called by the protocol one, to states
+that the composition Π calling those sub-protocols UC-realizes
+FΠ.
+B. Existing UC Security Results
+Proof. Using the BGW full security proof in [46] already
+shows that VSS-SHARE, VSS-RECONST, VSS-SUBSHARE,
+MULTIPLY and VSS-RECONST are perfectly secure using a
+straight-line black-box simulator. Using [67, Theorem 1.2], it
+proves that those protocols are UC-Secure.
+C. UC Security of RESHARE
+1) Ideal Functionality: We now present the ideal function-
+ality FRESHARE in Func. C-C1, it is to be noted that it is
+equivalent to the Renew-Share functionality from [32].
+Functionality 5 FRESHARE
+Parameters. A sending committee Cch = {P1, . . . , Pm}
+with evaluation points α1, . . . , αm, and a receiving com-
+mittee Cpa = {P ′ 1, . . . , P ′ m} with evaluation points
+ω1, . . . , ωm.
+Input. The sending committee holds evaluations
+σi = f (αi), deg(f ) ≤ τ,
+where f (0) is the shared secret.
+Aiding ideal-functionality initialization. At the start
+of the execution, the corruption-aware functionality
+FVSS-SUBSHARE receives the static corrupted sets Ich ⊆ Cch
+and Ipa ⊆ Cpa. The honest parties do not receive these
+sets.
+Functionality.
+1) Invoke
+FVSS-SUBSHARE
+ 
+{σi}Pi ∈Cch , Cpa
+
+.
+For every i, let gi be the resulting degree-τ subsharing
+polynomial satisfying
+gi(0) = σi = f (αi).
+2) Let λ1, . . . , λm be the public Lagrange coefficients
+satisfying
+f (0) =
+mX
+i=1
+λif (αi).
+Define
+f ′(X) =
+mX
+i=1
+λigi(X).
+3) Deliver  
+SHARE, sid, ssid, f ′(ωr ) 
+to every P ′ r ∈ Cpa.
+Since
+f ′(0) =
+mX
+i=1
+λigi(0) =
+mX
+i=1
+λif (αi) = f (0),
+the outputs form a degree-τ sharing of the original secret.
+2) Security Analysis: We can now prove the following
+result:
+Lemma 4 (Security of the RESHARE protocol). Protocol
+RESHARE securely realizes FRESHARE under the universal
+composability framework against static malicious adversaries
+for f < m/4
+Proof. We first present the simulator SRESHARE in the ideal
+world, then prove that the transcript it generates is equivalent
+to that of the real execution.
+The simulator SRESHARE emulates the interface of
+FVSS-SUBSHARE for A by forwarding the corrupted senders’
+inputs to FRESHARE and giving A the subshares and leakage
+returned by FRESHARE.
+For every corrupted receiver P ′ r , the simulator obtains
+g1(ωr ), . . . , gm(ωr )
+from FRESHARE and gives these values to A as the output of
+the simulated FVSS-SUBSHARE call. It may locally compute
+f ′(ωr ) =
+mX
+i=1
+λigi(ωr ),
+although this value is already a deterministic function of A’s
+view.
+The simulator outputs whatever A outputs and halts. No
+additional messages or randomness are simulated because the
+recombination step is entirely local.
+We first establish perfect security in the FVSS-SUBSHARE-
+hybrid model. Let A be a static malicious adversary and let
+SRESHARE be the simulator described above.
+For each receiver P ′ r , let
+gr =
+ 
+g1(ωr ), . . . , gm(ωr )
+
+denote its output from FVSS-SUBSHARE. Define the deterministic
+map
+Lr (gr ) =
+mX
+i=1
+λigi(ωr ).
+The only local operation performed after the FVSS-SUBSHARE
+call is for each honest receiver P ′ r to output Lr (gr ). This
+operation sends no messages and uses no randomness.
+By construction, FRESHARE exposes to the simulator ex-
+actly the subshares and leakage that corrupted parties receive
+from FVSS-SUBSHARE. The simulator therefore generates the
+adversary’s hybrid-model view exactly. Furthermore, for every
+honest receiver P ′ r , both the protocol and FRESHARE output the
+same deterministic value Lr (gr ).
+Consequently,
+n
+HYBRIDFVSS-SUBSHARE
+RESHARE,A(z),I (σ)
+o
+≡
+
+IDEALFRESHARE ,SRESHARE (z),I (σ)
+	
+.
+Thus, RESHARE perfectly realizes FRESHARE in the
+FVSS-SUBSHARE-hybrid model.
+The simulator invokes A once, treats it as a black box,
+forwards messages online, and never rewinds it. It is therefore
+a straight-line black-box simulator of complexity polynomial
+in that of A. The perfect-security lifting theorem implies that
+RESHARE perfectly UC-realizes FRESHARE in the hybrid model.
+We then prove UC Security of INPUTSHARE using the UC
+composition theorem [56].
+D. UC Security of INPUTSHARE
+1) Ideal functionality: We now present the ideal function-
+ality FINPUTSHARE in Func. C-D1.
+Functionality 6 FINPUTSHARE
+Parameters. Leaves Lc; committee C1,c; Byzantine leaves
+Bc; corrupted committee members Ic ⊆ C1,c with |Ic| ≤
+τ < m/3; public pivot pt ∈ RD .
+Initialization. Upon invocation, FINPUTSHARE receives the
+static Byzantine-leaf set Bc and the static corrupted-
+committee set Ic, where |Ic| ≤ τ. Neither set is revealed
+to the honest parties.
+Functionality.
+1) For every honest j ∈ Lc \ Bc, receive
+(INPUT, sid, ssid, xj )
+and set
+ebj,d = 1[xj,d ≤ pt,d] (d ∈ [D]).
+Reveal to S only that j submitted an input.
+For every Byzantine j ∈ Bc, receive
+{βj,d}d∈[D] ∈ (F ∪ {⊥})D
+from S and set
+ebj,d =
+(
+βj,d, βj,d ∈ {0, 1},
+0, βj,d /∈ {0, 1} or βj,d = ⊥.
+2) For every d ∈ [D], set
+σc,d =
+X
+j∈Lc
+ebj,d ∈ F.
+3) Receive
+(CORRUPTEDSHARES, sid, ssid, {ρi,d}Pi ∈Ic ,d∈[D])
+from the ideal adversary before the prescribed
+corrupted-share deadline. For every missing or mal-
+formed ρi,d, set
+ρi,d = 0.
+For every d ∈ [D], independently choose a uniformly
+random polynomial
+fc,d ∈ F[X]
+of degree at most τ satisfying
+fc,d(0) = σc,d
+and
+fc,d(αi) = ρi,d (Pi ∈ Ic).
+4) Immediately send
+(SHARES, sid, ssid, {fc,d(αi)}d∈[D])
+to every honest Pi ∈ C1,c \ Ic.
+2) Security Analysis: We now prove the following result:
+Lemma 5 (Security of the INPUTSHARE protocol). Pro-
+tocol INPUTSHARE securely realizes FINPUTSHARE under the
+universal composability framework against static malicious
+adversaries for f < m/4
+Proof. We first present the simulator SINPUTSHARE in the ideal
+world, then prove that the transcript it generates is equivalent
+to that of the real execution.
+The simulator SINPUTSHARE interacts externally with
+FINPUTSHARE and internally invokes the hybrid-model
+adversary A. It internally emulates the honest leaves, the
+honest committee members, and all calls to VSS-SHARE,
+MULTIPLY, and VSS-RECONST.
+1) The simulator invokes A with its auxiliary input.
+2) For every honest leaf j /∈ Bc and coordinate d ∈ [D],
+the simulator chooses an independent uniformly random
+polynomial q(0) j,d ∈ F[X] of degree at most τ satisfying
+q(0) j,d (0) = 0.
+It internally simulates the corresponding VSS-SHARE
+invocation and gives A the shares {q(0) j,d (αi)}Pi ∈Ic that
+the corrupted committee members expect to receive.
+3) For every Byzantine leaf j ∈ Bc and coordinate d ∈ [D],
+the simulator internally obtains from A the polynomial or
+value submitted to VSS-SHARE. If the invocation fixes a
+valid degree-τ sharing, the simulator defines βj,d to be its
+constant term. If the invocation is missing or rejected, the
+simulator sets βj,d = ⊥. The simulator externally sends
+the resulting values {βj,d}j∈Bc ,d∈[D] to FINPUTSHARE.
+4) For every honest leaf and coordinate, the simulator inter-
+nally emulates the multiplication and reconstruction calls
+using the simulated sharings of 0 and 1. It simulates the
+reconstructed validation value as 0.
+5) For every Byzantine leaf and coordinate, let
+βj,d =
+(
+βj,d, βj,d ∈ F,
+0, βj,d = ⊥.
+The simulator internally emulates the multiplication and
+reconstruction calls so that the reconstructed value is
+ej,d = βj,d(1 − βj,d).
+It retains the simulated sharing precisely when ej,d = 0,
+and otherwise replaces it by the public sharing [0].
+6) For every d ∈ [D], the simulator locally aggregates the
+shares held by the corrupted committee members and
+obtains
+{[bσc,d]i}Pi ∈Ic .
+7) For every d ∈ [D], the simulator internally emulates the
+call
+[zc,d] ← MULTIPLY([0], [0]).
+Let ηi,d be the corrupted output share fixed during this
+simulated multiplication call. The simulator defines
+ρi,d = [bσc,d]i + ηi,d
+for every Pi ∈ Ic.
+8) The simulator externally sends
+(CORRUPTEDSHARES, sid, ssid, {ρi,d}Pi ∈Ic ,d∈[D])
+to FINPUTSHARE.
+9) The simulator outputs whatever A outputs and halts.
+Now we prove that the hybrid execution with adversary A is
+identically distributed to the ideal execution with SINPUTSHARE.
+A is a static malicious adversary controlling the Byzantine
+leaves Bc and the committee members in Ic, where |Ic| ≤ τ.
+For every honest leaf j /∈ Bc and coordinate d ∈ [D], let
+qj,d denote the uniformly random degree-τ polynomial used
+in the hybrid execution, so that qj,d(0) = bj,d.
+In the ideal execution, SINPUTSHARE instead chooses a uni-
+formly random degree-τ polynomial q(0) j,d satisfying q(0) j,d (0) =
+0.
+Since |Ic| ≤ τ, perfect privacy of Shamir sharing implies
+{qj,d(αi)}Pi ∈Ic ≡ {q(0) j,d (αi)}Pi ∈Ic .
+Independence of the sharing polynomials extends this equality
+jointly to all honest leaves and coordinates.
+Since [1 − bj,d] = [1] − [bj,d], the corrupted parties’ shares
+of both inputs to the validation multiplication are jointly
+identically distributed in the hybrid and ideal executions.
+Moreover, for every honest leaf, bj,d(1 − bj,d) = 0, whereas
+the simulator uses sharings of 0 and 1, whose product also has
+constant term 0.
+Hence, by the specifications of MULTIPLY and
+VSS-RECONST, the multiplication and reconstruction
+views of the corrupted parties are identically distributed in
+the two executions.
+For every Byzantine leaf and coordinate, the simulator
+internally invokes the same hybrid functionalities with A and
+therefore obtains the same value βj,d fixed by the correspond-
+ing VSS invocation. The reconstructed validation value is
+ej,d = βj,d(1 − βj,d).
+Since F is a field,
+ej,d = 0 ⇐⇒ βj,d ∈ {0, 1}.
+Consequently, the protocol and FINPUTSHARE use the same
+effective value ebj,d.
+It follows that the corrupted parties’ aggregate shares
+{[bσc,d]i}Pi ∈Ic
+are identically distributed in the hybrid and ideal executions.
+Fix a coordinate d, and let bfc,d denote the degree-τ poly-
+nomial defined by the aggregate sharing before refresh in the
+hybrid execution. Its constant term is
+bfc,d(0) = σc,d.
+In the refresh call, FMULTIPLY samples a polynomial Zc,d
+uniformly from the set
+{Z ∈ F[X] : deg(Z) ≤ τ, Z(0) = 0, Z(αi) = ηi,d for every Pi ∈ Ic} ,
+where the values {ηi,d}Pi ∈Ic are fixed by the corrupted parties
+during the hybrid call. The final sharing polynomial is
+fc,d = bfc,d + Zc,d.
+Its corrupted evaluations satisfy
+fc,d(αi) = [bσc,d]i + ηi,d = ρi,d.
+For fixed bfc,d, the map
+Z 7−→ bfc,d + Z
+is a bijection from the preceding set of zero-sharing polyno-
+mials to
+{f ∈ F[X] : deg(f ) ≤ τ, f (0) = σc,d, f (αi) = ρi,d for every Pi ∈ Ic} .
+Therefore, conditioned on the adversary’s view and the cor-
+rupted output shares {ρi,d}Pi ∈Ic , the final polynomial in the
+hybrid execution is uniform over exactly the set used by
+FINPUTSHARE. The refresh calls use independent randomness for
+distinct coordinates, so the same conclusion holds jointly for
+every d ∈ [D].
+The ideal functionality computes σc,d from the actual honest
+inputs and the effective Byzantine inputs. Since the values
+{ρi,d}Pi ∈Ic are identically distributed in the hybrid and ideal
+executions, and conditioned on these values the honest output
+shares have exactly the same distribution, we obtain
+
+HYBRIDINPUTSHARE,A(z),Ic (x)
+	
+≡
+
+IDEALFINPUTSHARE ,SINPUTSHARE (z),Ic (x)
+	
+.
+Thus, INPUTSHARE perfectly realizes FINPUTSHARE in the
+(VSS-SHARE, MULTIPLY, VSS-RECONST)-hybrid model.
+The simulator SINPUTSHARE is straight-line and black-box as
+it invokes A once, processes all messages in their prescribed
+order, maintains separate state for every ssid, and never
+rewinds. Since we established perfect security, we can use
+[67, Theorem 1.2] lifting theorem to prove to prove that
+INPUTSHARE UC-realizes FINPUTSHARE in the (VSS-SHARE,
+MULTIPLY, VSS-RECONST)-hybrid model against static ma-
+licious adversaries.
+E. UC Security of NOISEGEN
+1) Ideal Functionality: We now present the ideal function-
+ality FNOISEGEN in Func. C-E1.
+2) Security Analysis: We now prove the following lemma:
+Lemma 6 (Security of the NOISEGEN protocol). Protocol
+NOISEGEN securely realizes FNOISEGEN under the universal
+composability framework against static malicious adversaries
+for f < m/4
+Proof. We first construct the simulator SNOISEGEN in the ideal
+world and then prove that the resulting transcript is identically
+distributed to the transcript generated in the real world.
+The simulator SNOISEGEN interacts externally with FNOISEGEN
+and internally invokes the hybrid-model adversary A. It works
+mostly the same way as SINPUTSHARE. It emulates the hon-
+est parties and all calls to VSS-SHARE, MULTIPLY, and
+VSS-RECONST.
+Functionality 7 FNOISEGEN
+Parameters. A committee C = {P1, . . . , Pm} with
+distinct nonzero evaluation points α1, . . . , αm, a static
+corrupted set I ⊆ C satisfying |I| ≤ τ < m/4, a query
+count Niter , a truncation bound B = 2ℓ−1, and a public
+parameter σc.
+Functionality.
+1) For every honest Pi /∈ I and query q ∈ [Niter ],
+independently (through rejection sampling)
+ζ (q) i xNZ(0, σ2 c ) | [−B, B − 1].
+Let
+ζ (q) i + B =
+ℓ−1X
+j=0
+2j β(q) i,j
+be its unique bit decomposition. Reveal to the ideal
+adversary only that Pi submitted its contribution.
+2) For every corrupted Pi ∈ I and query q ∈ [Niter ],
+receive
+{ bβ(q) i,j }ℓ−1 j=0 ∈ (F ∪ {⊥})ℓ
+from the ideal adversary. Set
+eζ (q) i =
+
+
+
+ℓ−1X
+j=0
+2j bβ(q) i,j − B, bβ(q) i,j ∈ {0, 1} for every j,
+0, otherwise.
+For every honest Pi /∈ I, set
+eζ (q) i = ζ (q) i .
+3) For every q ∈ [Niter ], compute
+Zq =
+mX
+i=1
+eζ (q) i ∈ F.
+4) Receive
+(CORRUPTEDSHARES, sid, ssid, {ρr,q }Pr ∈I,q∈[Niter ])
+from the ideal adversary before the prescribed dead-
+line. Replace every missing or malformed ρr,q by 0.
+5) For every q ∈ [Niter ], independently sample a uni-
+formly random polynomial Fq ∈ F[X] of degree at
+most τ satisfying
+Fq (0) = Zq
+and
+Fq (αr ) = ρr,q (Pr ∈ I).
+6) For every honest Pr /∈ I, deliver
+(SHARE, sid, ssid, {Fq (αr )}q∈[Niter ])
+to Pr . The corrupted output shares are delivered
+directly to the ideal adversary.
+1) The simulator SNOISEGEN interacts externally with
+FNOISEGEN and internally invokes the hybrid-model adver-
+sary A.
+2) For every honest Pi /∈ I, query q, and bit position j,
+the simulator chooses an independent uniformly random
+polynomial Q(0) i,j ∈ F[X] of degree at most τ satis-
+fying Q(0) i,j (0) = 0. It internally simulates the corre-
+sponding VSS-SHARE invocation and gives A the shares
+{Q(0) i,j (αr )}Pr ∈I that the corrupted committee members
+expect to receive.
+3) It then simulates the multiplication and reconstruction
+calls and opens the validation value as 0.
+4) For every corrupted Pi ∈ I, query q, and bit position j, the
+simulator extracts the value bβ(q) i,j fixed by VSS-SHARE. If
+the sharing is missing or rejected, it sets bβ(q) i,j = ⊥. Oth-
+erwise, it simulates the multiplication and reconstruction
+calls and opens
+e(q) i,j = bβ(q) i,j   1 − bβ(q) i,j  .
+5) The contribution is accepted if and only if every extracted
+value are booleans. The simulator externally sends the
+extracted bit vectors to FNOISEGEN.
+6) The simulator performs the prescribed local aggregation
+using its simulated sharings. For every corrupted Pr ∈ I
+and query q, let ρr,q be the resulting aggregate share held
+by Pr . The simulator externally sends
+(CORRUPTEDSHARES, sid, ssid, {ρr,q }Pr ∈I,q∈[Niter ])
+to FNOISEGEN.
+7) Finally, the simulator outputs whatever A outputs and
+halts.
+We now prove that the transcripts in the real and ideal
+worlds are identically distributed. We work first in the
+hybrid model that includes VSS-SHARE,MULTIPLY and
+VSS-RECONST.
+The simulator follows SINPUTSHARE independently for every
+party Pi, query q, and bit position j. It simulates every
+honest bit by VSS-sharing 0, extracts the values fixed by cor-
+rupted dealers, and simulates the corresponding multiplication
+and reconstruction calls. It sends the extracted corrupted bit
+vectors to FNOISEGEN and replaces a corrupted contribution
+by [0] whenever a sharing fails or an extracted value is
+not a bit. Finally, it locally aggregates the corrupted par-
+ties’ simulated shares and sends the resulting output shares
+{ρr,q }Pr ∈I,q∈[Niter ] to FNOISEGEN.
+The hybrid execution is compared directly with the ideal
+execution generated by SNOISEGEN. As in the proof of
+INPUTSHARE in Section C-D2, for every honest bit the adver-
+sary sees at most τ evaluations of an independently random
+degree-τ Shamir polynomial, whose distribution is indepen-
+dant from the constant term. Therefore, putting simulator’s
+share of a dummy value does not change the adversary’s view.
+The corresponding validation values are 0 in both executions,
+so the validation transcripts and corrupted aggregate shares are
+identically distributed as well.
+For each query q, let Fq be the degree-τ polynomial
+obtained by aggregating all accepted bit-sharing polynomials.
+Its constant term is the intended noise value Zq . Conditioned
+on the adversary’s view and the corrupted evaluations
+{Fq (αr ) = ρr,q }Pr ∈I ,
+the polynomial Fq is uniformly distributed over all degree-
+τ polynomials satisfying these constraints, since at least one
+honest contribution provides independent Shamir randomness.
+This is exactly the output distribution prescribed by FNOISEGEN.
+Hence,
+HYBRIDNOISEGEN,A ≡ IDEALFNOISEGEN ,SNOISEGEN .
+The simulator is straight-line, black-box, and non-
+rewinding. We then use the same argument as in INPUTSHARE
+security analysis of Section C-D2 to prove the security of
+NOISEGEN.
+F. UC Security of GISKARD
+1) Ideal Functionality: The functional-
+ity FGISKARD is a stateful composition of
+INPUTSHARE,RESHARE,NOISEGEN,VSS-RECONST and
+BROADCAST DOWN and proceeds in Niter iterations. It
+preserves the current search intervals between iterations (as
+public data) and receives corrupted parties’ inputs adaptively
+after publishing the current pivot.
+2) Security Analysis: We now prove Theorem 2 :
+Proof. Consider the fully hybrid execution in which ev-
+ery invocation of INPUTSHARE, RESHARE, NOISEGEN,
+VSS-RECONST, and BROADCAST DOWN is replaced by its
+corresponding ideal functionality. The simulator SGISKARD in-
+ternally invokes A, forwards its adaptive inputs to FGISKARD,
+and simulates the interfaces of the aiding functionalities.
+We prove by induction on t that, at the beginning of
+iteration t, the hybrid and ideal executions have identical joint
+distributions of the adversary’s view and the honest parties’
+state (Leftt, Rightt, pt).
+For t = 1, both executions initialize the same search
+intervals and initial pivot.
+Assume the claim holds at the beginning of iteration t.
+Conditioned on the common transcript, the hybrid and ideal
+adversaries provide the same adaptive inputs for corrupted
+leaves. The ideal INPUTSHARE, RESHARE, and NOISEGEN
+calls produce the same distribution of the root committee’s
+shared noisy count in both executions. The VSS-RECONST
+call therefore produces the same noisy count, after which
+both executions apply the same deterministic interval update.
+Finally, BROADCAST DOWN delivers the same next pivot to
+every honest party. Thus, the induction hypothesis holds for
+iteration t + 1.
+After Niter iterations, the hybrid and ideal executions pro-
+duce the same final midpoint. Therefore,
+HYBRIDGISKARD,A ≡ IDEALFGISKARD ,SGISKARD .
+The preceding induction establishes perfect security in the
+fully hybrid model. Since all aiding protocols perfectly UC-
+realize their corresponding functionalities, the UC composition
+theorem [56] permits their ideal calls to be replaced by their
+real implementations. Consequently, GISKARD perfectly UC-
+realizes FGISKARD.
+Guaranteed output delivery follows from the guaranteed
+delivery of every aiding functionality and the deterministic
+nature of the remaining local computations.
+APPENDIX D
+ROBUSTNESS, DIFFERENTIAL PRIVACY AND COMPLEXITY
+PROOFS
+A. Proof of Theorem 3
+We first prove the following lemma
+Lemma 7 (Output bracket). Set k1 = ⌊n/2⌋ + 1 − f and
+k2 = ⌊n/2⌋ + 1. For any adaptive Byzantine strategy, the
+output satisfies ˆM = v + δ with v ∈ [h(k1 ), h(k2 )] and |δ| ≤
+q/2.
+Proof. Recall τ = ⌊n/2⌋ + 1, so τ = k2 and τ − f = k1;
+since f < n/2, both h(k1 ) and h(k2 ) are well defined.
+Let CH (p) := |{j ∈ H : xj ≤ p}|, as in (8). We claim that
+CH (Left) < k2 and CH (Right) ≥ k1 throughout.
+Initially CH (−u) = 0 (honest inputs exceed −u) and
+CH (u) = n − f ≥ k1. When Left ← pt, the observed
+C(pt) < τ and CB (pt) ≥ 0 give CH (pt) < k2; when
+Right ← pt, C(pt) ≥ τ and CB (pt) ≤ f give CH (pt) ≥ k1.
+Each step uses only the per-query bound 0 ≤ CB (pt) ≤ f,
+enforced by the bit-domain proof, so the invariant holds in all
+cases. The invariant means Left < h(k2 ) and h(k1 ) ≤ Right.
+At termination Right − Left ≤ q, so ˆM = (Left + Right)/2
+lies within q/2 of the nonempty interval [h(k1 ), h(k2 )]; taking
+v as its projection onto this interval gives |δ| ≤ q/2.
+We then get to the main robustness proof :
+Proof. Assume n > 2f. Let σ2 H := 1 |H| P j∈H(xj − ¯xH)2 and
+set k1 = ⌊n/2⌋ + 1 − f, k2 = ⌊n/2⌋ + 1. Since n > 2f, we
+have 1 ≤ k1, k2 ≤ n − f, and ⌈n/2⌉ − f ≥ 1, so all order
+statistics below exist and κ0 is finite. By the output bracket
+of Lemma 7, write ˆM = v + δ with v ∈ [h(k1 ), h(k2 )] and
+|δ| ≤ q/2. For any v ∈ [h(k1 ), h(k2 )],
+|{j ∈ H : xj ≤ v}| ≥ k1,
+|{j ∈ H : xj ≥ v}| ≥ |H| − k2 + 1 = ⌈n/2⌉ − f.
+If v ≥ ¯xH, each of the ⌈n/2⌉ − f values with xj ≥ v ≥ ¯xH
+contributes (xj − ¯xH)2 ≥ (v − ¯xH)2, so
+(⌈n/2⌉ − f )(v − ¯xH)2 ≤ X
+j∈H
+(xj − ¯xH)2 = |H| σ2 H.
+If v ≤ ¯xH, each of the at least k1 values with xj ≤ v ≤ ¯xH
+contributes (xj − ¯xH)2 ≥ (v − ¯xH)2, and k1 ≥ ⌈n/2⌉ − f
+holds for all n since ⌊n/2⌋ + 1 ≥ ⌈n/2⌉. In both cases,
+(v − ¯xH)2 ≤ κ0 σ2 H, κ0 := n − f ⌈n/2⌉ − f . (23)
+By the triangle inequality and (23),
+| ˆM − ¯xH| ≤ |v − ¯xH| + |δ| ≤ √κ0 σH + q 2 , (24)
+B. Proof of Theorem 4
+Proof. This proof will proceed in four steps : we first derive
+the ideal zCDP guarantee, we then account for the discretiza-
+tion of the Gaussian noise, we then convert it into (ϵ, δ)-DP
+and account for the truncation error.
+1) The count queries are of senstivity-1 (as one party may
+only shift the count by 1)n then for T training rounds and
+d update coordinate, so adding noise from N
+
+0, T dNiter 2ρ
+
+gives directly ρ/T dNiter-zCDP for each iteration. Finally
+with the additive composition theorem we get the ρ-zCDP
+guarantee.
+2) We use Proposition 13 in [57] as we work with
+coordinate-wise aggregation (so each coordinate are con-
+sidered independently). Then apply their formula for
+sensitivity 1, we have A := 1 2hσ2c , then by noting
+B − A = ϑDG√ hσc + ϑ2 DG 2 by direct expansion, we get min{A + ϑDG, B} = A + min{ϑDG, B − A} which
+follows from min(a + c, a + d) = a + min(c, d).
+3) Combining the previous two steps and composing over
+all T dNiter count queries gives
+¯ρ := ρ + ξDG. (25)
+Hence, the ideal untruncated mechanism satisfies ¯ρ-zCDP.
+By the standard zCDP to (ϵ, δ)-DP conversion, for any
+δ0 ∈ (0, 1), it satisfies (ε0, δ0)-DP with
+ε0 = ¯ρ + 2
+p
+¯ρ ln(1/δ0). (26)
+4) Each honest contribution produced by rejection sampling
+follows the discrete conditional Gaussian situated on
+{−B, . . . , B − 1}. Since the ideal discrete Gaussian
+assigns probability at most qB outside this domain, the
+total variation distance between one truncated sample and
+one ideal sample is at most qB . Over the T dNiterh honest
+contributions, the total variation distance is therefore at
+most
+βtr = min {1, T dNiterhqB } . (27)
+For the rank error, the aggregate honest noise has variance
+σ2 and satisfies
+Pr[|Z| > ηDP] ≤ 2 exp
+
+− η2 DP
+2σ2
+
+= β T dNiter . (28)
+A union bound over the T dNiter noisy count queries
+therefore gives an additional rank error of at most ηDP
+simultaneously over all coordinates with probability at
+least 1 − β. Combining this event with the probability
+of no truncation gives the claimed probability at least
+1 − β − βtr.
+5) Furthermore, We must consider the breakdown point of
+our aggregation function at (f < n/2) and is equivalent
+to the number of corrupted inputs that this function can
+tolerate. By relating this to lemma 7, we see that this
+affects the entire range of values that the median can
+take. Since the DP mechanism introduces a rank error, we
+simply need to treat it as a Byzantine fault to be tolerated,
+which reduces the effective tolerance for inputs to
+fDP = f − ηDP (29)
+Furthermore, considering that in the root committee there
+may be up to τ corrupted parties, they may end up
+shifting the rank by at most τ B rank, thus getting the final
+effective tolerance of this robust aggregation function
+C. Proof of Theorem 5
+Proof. Corruption is static and fixed before seed is sam-
+pled. Since seed is unpredictable, each committee is a uni-
+formly random m-subset of [n], so its corruption count fol-
+lows Hyp(n, f, m). By Hoeffding’s reduction [69], upper-
+tail bounds for this hypergeometric are upper bounded by
+those of X ∼ Bin(m, f /n). We bound Pr[X ≥ m/4] via
+a multiplicative Chernoff bound:
+Pr[X ≥ m/4] ≤ exp
+ 
+−
+
+1 − 3n 4(n − f ) 2 · m(n − f ) 2n ! .
+Substituting f /n = 1/4 − ϵ,
+Pr[X ≥ m/4] ≤ exp
+
+− 16ϵ2
+(3 + 4ϵ)2 · m(3/4 + ϵ) 2 
+= exp
+
+− 2ϵ2m 3 + 4ϵ  .
+The total number of committees is O(n), so a union bound
+gives:
+Pr[failure] ≤ n · exp
+
+− 2ϵ2m 3 + 4ϵ  .
+For Pr[failure] ≤ n−c with any desired constant c > 0, taking
+logarithms:
+ln n − 2ϵ2m 3 + 4ϵ ≤ −c ln n
+m ≥ (1 + c)(3 + 4ϵ) 2ϵ2 ln n.
+Since ϵ ∈ (0, 1/4) is fixed, this gives m = O(ϵ−2 ln n).
+D. Proof of Theorem 6
+Before starting the proof, lets show the communicaton costs
+of each sub-protocol taken in isolation [46]:
+• VSS-SHARE (single instance, m parties): O(m2) per
+party and O(m2) total network communication. (Non-
+optimistic cost : O(m3) per party and O(m4) total.)
+• MULTIPLY ( τ < m/4): O(m2) per party via
+VSS-SUBSHARE applied directly to the local products
+aibi, with total network cost O(m3). (Non-optimistic
+cost: O(m4) per party and O(m5) total.)
+• INPUTSHARE: a committee party handles n/kL leaves,
+each requiring one VSS-SHARE and one MULTIPLY
+for bit verification, giving O
+ 
+(n/kL) · m2 per party.
+(Non-optimistic cost: O
+ 
+(n/kL) · m4 per party.) Local
+aggregation of validated shares is communication-free by
+additive homomorphism.
+• RESHARE: since resharing uses VSS-SUBSHARE, it
+costs O(m2) per party on both sides and O(m3) in total
+per child-to-parent transfer, while a parent receiving from
+k children pays O(km2) per party. (Non-optimistic cost:
+O(m4) per party on both sides and O(m5) total per
+transfer, while a parent receiving from k children pays
+O(km4) per party.)
+• VSS-RECONST (committee output): O(m) per party.
+(Non-optimistic cost: unchanged at O(m) per party.)
+Proof. Let B = kL denote the number of base committees
+and let b =
+ n
+B
+
+be the maximum number of leaves served
+by one base committee. We have the constraint that Bm ≤ n
+as the committee are disjoint within a tree level. In the best
+configuration we then have
+B = Θ(n/m), b = Θ(m), L = Θ(logk(n/m)) .
+For constant k and m = Θ(log n), this implies L = Θ(log n).
+For part (i) we assume that in the worst-case a party
+may participate as one leaf role, one base role, at most
+L − 1 intermediate committee roles, and one root committee
+role. Plugging optimistic sub-protocol cost, the worst case
+communication per coordinate and per iteration is bounded
+by Hence its communication per coordinate and per iteration
+is bounded by
+O
+ 
+m2 + bm2 + Lkm2 + qm3 + Lkm  ,
+where the last term accounts for broadcasting down the public
+output thought the tree. With b = O(km) we get
+O
+ 
+km3 + Lkm2 + qm3 .
+Then, with k, q = O(1) and m, L = Θ(log n) we have
+∆eff max = O   dNiter log3 n  .
+Plugging non optimistic sub-protocols cost yield
+∆eff max = O   dNiter log5 n  .
+For part (ii) we consider total communication over the entire
+network. The base level contains Bm = Θ(n/m)m = Θ(n)
+distinct committee member, each handling the output from
+Θ(m) leaves. With the cost of INPUTSHAREit means that at
+the base level the total cost per iteration is dnm3. Then for the
+cost of RESHARE, we count the number of committee edges
+to get the number of RESHARE instance. We get that this is
+L−1X
+j=0
+kj = O(kL) = O(n/m).
+As such, plugging the cost of RESHARE we get
+O
+
+d n m m3  = O(dnm2).
+. For the broadcast down, we still use the edge count, getting
+O
+
+d n m m2  = O(dnm).
+. Finally, NOISEGEN costs O(qm3) per root member and
+therefore O(dqm4) globally.
+We then see that INPUTSHARE cost dominates asymptoti-
+cally , yielding
+O
+ 
+dNitern log3 n  .
+Finally for non optimistic execution,
+∆eff max = O   dNiter log5 n  .

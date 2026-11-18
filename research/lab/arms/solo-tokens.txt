@@ -1,0 +1,4 @@
+# SOLO study B: does the gap to backprop close or widen with more tokens? 10m, 40M tokens
+solo K=1 lr=0.003 cos_every=200 --preset 10m --seq 256 --batch 16 --tokens 40000000 --seconds 100000 --eval-every 30 --label s-10m-k1-40m
+solo K=2 lr=0.003 cos_every=200 --preset 10m --seq 256 --batch 16 --tokens 40000000 --seconds 100000 --eval-every 30 --label s-10m-k2-40m
+solo K=3 lr=0.003 cos_every=200 --preset 10m --seq 256 --batch 16 --tokens 40000000 --seconds 100000 --eval-every 30 --label s-10m-k3-40m

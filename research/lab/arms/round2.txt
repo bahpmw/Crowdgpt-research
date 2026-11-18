@@ -1,0 +1,27 @@
+# MOSAIC core (W=4 workers, H=30, top-64/4096 + 2-bit + EF, median clip)
+mosaic K=1 --label r2-mosaic-k1
+mosaic K=2 --label r2-mosaic-k2
+mosaic K=3 workers=6 --label r2-mosaic-k3w6
+mosaic K=1 workers=6 --label r2-mosaic-k1w6
+mosaic K=2 outer=nesterov --label r2-mosaic-k2-nest
+mosaic K=2 depth=2 --label r2-mosaic-k2-d2
+mosaic K=2 topk=0 --label r2-mosaic-k2-dense
+# scale out: more workers per module
+mosaic K=2 workers=8 --label r2-mosaic-k2w8
+mosaic K=1 workers=8 --label r2-mosaic-k1w8
+# robustness
+mosaic K=2 byz=1 attack=flip clipmed=0 --label r2-mosaic-k2-byz-mean
+mosaic K=2 byz=1 attack=flip --label r2-mosaic-k2-byz-clip
+mosaic K=2 byz=1 attack=flip gauntlet=1 --label r2-mosaic-k2-byz-gauntlet
+mosaic K=2 byz=1 attack=noise gauntlet=1 --label r2-mosaic-k2-byznoise-gauntlet
+mosaic K=2 gauntlet=1 --label r2-mosaic-k2-gauntlet
+mosaic K=1 byz=1 attack=flip gauntlet=1 --label r2-mosaic-k1-byz-gauntlet
+# churn, non-IID, heterogeneous speeds
+mosaic K=2 drop=0.25 --label r2-mosaic-k2-drop25
+mosaic K=2 noniid=1 --label r2-mosaic-k2-noniid
+mosaic K=1 noniid=1 --label r2-mosaic-k1-noniid
+mosaic K=2 speeds=[1,1,0.25,0.5] het=sync --label r2-mosaic-k2-het-sync
+mosaic K=2 speeds=[1,1,0.25,0.5] het=budget --label r2-mosaic-k2-het-budget
+# more workers per round (crowd width; compare at equal tokens)
+mosaic K=2 workers=16 --label r2-mosaic-k2w16
+mosaic K=1 workers=16 --label r2-mosaic-k1w16

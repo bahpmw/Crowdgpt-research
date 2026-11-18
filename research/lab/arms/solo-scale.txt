@@ -1,0 +1,13 @@
+# SOLO scaling study A: model size x number of modules, 4M tokens, seq 256 x batch 16, fp32 MPS
+solo K=1 lr=0.003 cos_every=50 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --label s-10m-k1
+solo K=2 lr=0.003 cos_every=50 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --label s-10m-k2
+solo K=3 lr=0.003 cos_every=50 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --label s-10m-k3
+solo K=6 lr=0.003 cos_every=50 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --label s-10m-k6
+solo K=2 lr=0.003 heads=private cos_every=50 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --label s-10m-k2-priv
+solo K=1 lr=0.001 cos_every=50 --preset 100m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 60 --label s-100m-k1
+solo K=2 lr=0.001 cos_every=50 --preset 100m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 60 --label s-100m-k2
+solo K=4 lr=0.001 cos_every=50 --preset 100m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 60 --label s-100m-k4
+solo K=6 lr=0.001 cos_every=50 --preset 100m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 60 --label s-100m-k6
+solo K=1 lr=0.0006 cos_every=50 --preset 300m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 120 --label s-300m-k1
+solo K=2 lr=0.0006 cos_every=50 --preset 300m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 120 --label s-300m-k2
+solo K=6 lr=0.0006 cos_every=50 --preset 300m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --eval-every 120 --label s-300m-k6

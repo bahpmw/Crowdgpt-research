@@ -1,0 +1,19 @@
+[s-10m-k1] start eval 8.3612
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[s-10m-k1] it 1 t    0.1s tok   0.004M eval 8.1353 up/step 0.000MB {'loss0': 8.3509, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 2 t    0.1s tok   0.008M eval 7.6035 up/step 0.000MB {'loss0': 8.139, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 3 t    0.2s tok   0.012M eval 7.3075 up/step 0.000MB {'loss0': 7.6229, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 5 t    0.3s tok   0.020M eval 7.0838 up/step 0.000MB {'loss0': 7.1291, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 13 t    0.5s tok   0.053M eval 7.0545 up/step 0.000MB {'loss0': 7.0601, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 25 t    1.0s tok   0.102M eval 7.0198 up/step 0.000MB {'loss0': 6.951, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 49 t    1.8s tok   0.201M eval 6.9109 up/step 0.000MB {'loss0': 6.9468, 'cos0': 1.0, 'cosIt': 0}
+[s-10m-k1] it 123 t    4.7s tok   0.504M eval 6.3414 up/step 0.000MB {'loss0': 6.4631, 'cos0': 1.0, 'cosIt': 100}
+[s-10m-k1] it 245 t    9.3s tok   1.004M eval 6.0144 up/step 0.000MB {'loss0': 6.0691, 'cos0': 1.0, 'cosIt': 200}
+[s-10m-k1] it 266 t   10.1s tok   1.090M eval 5.9588 up/step 0.000MB {'loss0': 5.9605, 'cos0': 1.0, 'cosIt': 250}
+[s-10m-k1] it 489 t   18.6s tok   2.003M eval 5.6574 up/step 0.000MB {'loss0': 5.6089, 'cos0': 1.0, 'cosIt': 450}
+[s-10m-k1] it 531 t   20.2s tok   2.175M eval 5.6021 up/step 0.000MB {'loss0': 5.6013, 'cos0': 1.0, 'cosIt': 500}
+[s-10m-k1] it 796 t   30.2s tok   3.260M eval 5.3685 up/step 0.000MB {'loss0': 5.4018, 'cos0': 1.0, 'cosIt': 750}
+[s-10m-k1] it 977 t   37.1s tok   4.002M eval 5.2636 up/step 0.000MB {'loss0': 5.3053, 'cos0': 1.0, 'cosIt': 950}
+{"label": "s-10m-k1", "steps": 977, "startLoss": 8.361234903335571, "finalLoss": 5.263646841049194, "bestLoss": 5.263646841049194, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}

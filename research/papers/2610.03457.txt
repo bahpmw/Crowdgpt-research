@@ -1,0 +1,414 @@
+Cross-Facility LLM Pre-training on HPC:
+Elastic Aggregation, Data Leasing, and Queue-Aware Placement
+Zarè Palanciyan1, Thomas van Osch1, Douwe van der Wal1, Olivera Kotevska2, and Tim
+Kok1
+1SURF, Amsterdam, The Netherlands
+2Oak Ridge National Laboratory, Oak Ridge, TN, USA
+Abstract
+Academic compute is fragmented: allocations are granted per facility, and facilities differ in accelerators
+and software stacks, schedule jobs independently, and share neither a network nor a filesystem. We present
+a system that pools such allocations to pre-train a single language model across three supercomputers
+on two continents, up to 7,400km apart: Snellius (NVIDIA H100), LUMI and Frontier (both AMD
+MI250X). It combines (i) DiLoCo-style two-loop training with an elastic, token-weighted Nesterov outer
+step for which zero, one or many live sites are all normal states; (ii) DARL, a data-leasing protocol whose
+heartbeat-backed leases guarantee that, within an epoch, no sample is trained twice or lost under crashes,
+late joins and work stealing; and (iii) queue-aware placement driven by unprivileged sbatch --test-only
+probes. Training Qwen3-0.6B on C4 for 20,000 optimiser steps, the three-site run reaches a held-out
+perplexity of 34.7, against 28.2 for a centralised baseline. Per-round overhead (weight exchange and
+checkpointing) stays near 110s regardless of the number of local steps H, so its share of wall-clock time
+falls from 32% at H=100 to 5.7% at H=1,000 and 3.1% at H=2,000. In a 23.8h three-site run with
+four site departures, 1.2% of granted data blocks were reclaimed and none was duplicated or lost. In an
+idealised queue-model projection, queue-aware placement shortens time-to-target by 18–43% compared
+with waiting for all sites to be allocated. Cross-site pre-training is thus operational rather than competitive:
+it turns fragmented allocations into one training run at a measured cost.
+1 Introduction
+Training frontier-grade foundation models in an acceptable time span requires more capacity than a single
+supercomputer in the public research sector provides. The individual allocations that high-performance
+computing (HPC) systems currently award are not enough to train a language model. Researchers must
+therefore aggregate capacity across national, regional and leadership-class facilities. That capacity is
+fragmented, with allocation divided over different facilities, each with different hardware, a separate queue,
+and its own expiry (e.g., the 19 AI Factories and 13 AI Factory Antennas established by the European
+Union[1]). Academic groups must combine those pieces into one training run and not a series of unrelated
+jobs. This is the practical obstacle that researchers must overcome to train models at the scale of industry.
+We therefore ask what an effective distributed training system looks like in a real deployment on public
+research infrastructure. Such a system must solve three problems simultaneously. The first is training logistics:
+how sites divide the corpus and exchange weights when they share neither a filesystem nor a network. The
+second is metascheduling: how to coordinate independent batch jobs at different facilities, when none can start
+on demand. The third is infrastructure: every system brings its own accelerators, software stack, connectivity
+rules, and site policy. Leave any one unsolved, and the run does not start, does not finish, or does not
+converge.
+The setup for this experiment is training a single 0.6B-parameter language model on disjoint shards of
+a dataset without repetition distributed across LUMI [17, 18], Frontier [9] and Snellius [24]. Through the
+novel distributed allocation and remote leasing (DARL) leasing protocol, the run is flexible in late joins and
+scheduled churns. We also report a comparison against centralised training. Our contributions are as follows:
+1
+arXiv:2610.03457v1  [cs.DC]  2 Oct 2026
+Elastic aggregation. A Flower-based [2] outer loop applies a token-weighted Nesterov step [6, 11]. For
+this loop, 0, 1 or N live sites are all normal states. A solo round takes the full outer step. A generation check
+rejects stale contributions. A joiner adopts the current global model and schedule.
+DARL. A dynamic data-leasing protocol. A coordinator leases disjoint blocks of the pre-tokenised corpus
+under heartbeat TTL contracts. The protocol guarantees that within an epoch no sample is trained twice
+and that no sample is lost, even as sites join and leave (§3.2).
+Live queue-aware planning. Scheduled sbatch –test-only probes and sacct wall-time statistics
+feed a planner. The planner simulates the run round-by-round. It then chooses site membership, job shape
+and accumulation (§3.3).
+2 Related work
+Low-communication and federated optimisation. Local stochastic gradient descent (SGD) and its
+descendants [25, 16] established that replicas may take many local steps between synchronisations. DiLoCo [6]
+scaled the recipe to language models with an inner AdamW loop and an outer Nesterov step on averaged
+deltas. OpenDiLoCo [13] and INTELLECT-1 [12] then demonstrated geo-distributed runs at increasing
+scale. The aggregation itself descends from FedAvg [19] and its server-side-momentum variants [10, 21, 11].
+Photon [22] reported that federated pre-training beat a centralised baseline. At matched tokens, however, its
+federated configuration takes roughly 8× more optimiser steps, with local batches with higher local learning
+rates than centralised. The comparison with a federation with a different optimisation regime is therefore
+improper. Our campaign matches tokens and steps and the combined per-step batch, which removes that
+mechanism by design. The two studies answer different questions.
+Geo-distributed systems and queue-aware placement. Other work treats cross-site training as a
+systems and scheduling problem. Measurements of training on spot VMs across several continents show that
+the latency between continents and the ratio of compute to communication limit how well it scales, and that
+data-transfer fees can exceed the cost of the VMs [8]. An analytical model shows that data parallelism across
+cloud regions slows down sharply, while pipeline parallelism keeps its throughput but costs more in transfer
+fees [26]. DT-FM schedules training over decentralised GPUs joined by slow links [30]. Sailor chooses how
+many GPUs of each type to use in each cloud zone and re-plans when their availability changes [27]. None of
+these works models the batch queue through which HPC systems run every job.
+Fairshare and backfill set start times, and walltime caps bound how long any replica can live. A job
+that ends is not preempted but simply finished. The relevant literature is therefore queue-wait and runtime
+prediction from scheduler history [23, 4, 28], which targets the placement of independent jobs within a single
+facility. Only recently has that signal reached training itself. xFFL orchestrates federated runs across facilities
+through a workflow manager [5]. FedQueue predicts per-facility admission delays and absorbs them inside
+the aggregation rule, buffering late arrivals and down-weighting stale updates [14].
+A field-tested LLM pre-training setup with elastic aggregation, dynamic data-leasing protocol, queue-aware
+distributed job allocation separates current work from existing literature.
+3 System
+3.1 Two-loop training and elastic aggregation
+Following DiLoCo, each site i runs H=100 inner AdamW steps from the current global model w(t), then
+uploads its delta ∆(t) i = θ(t) i −w(t) together with the token count it consumed. With token shares pi, the
+server applies an outer Nesterov step
+v(t+1) =w(t) +η∑ i pi∆(t) i , w(t+1) =v(t+1) +β ( v(t+1) −v(t)) , (1)
+with η=0.7, β=0.9 [6]; our implementation is pinned in tests against torch.optim.SGD with Nesterov
+momentum to 2 × 10−6. Setting β=0,η=1 recovers exact FedAvg. Three changes to Eq. 1 make the outer
+optimisation loop elastic, so sites can join or leave at any round. First, a round with a single live contributor
+takes the full step (η=1), instead of discarding 1 −η of its update. Second, every delta records the merge
+2
+round it was derived from, and the server rejects stale generations, a requeued job that trained from an old
+global model cannot poison the average. Third, the authoritative global step advances by the maximum steps
+any contributor took. Weights cross the WAN as bfloat16 (1.32GiB per message for this model), inline in the
+gRPC message below the 2GiB cap and streamed tensor-by-tensor through the blob store above it, a small
+HTTP PUT/GET service on the same VM. For sites reachable only via an HTTP forward proxy that does
+not permit long-lived gRPC streams, the same round protocol runs exclusively over short HTTP requests.
+3.2 Distributed Allocation and Remote Leasing (DARL)
+Clusters must not train on overlapping samples, and no sample may be lost when a node fails. A window
+trained twice in an epoch is counted twice in the token-weighted average of Eq. 1, tilting the merged model
+toward whichever site duplicated it; a window dropped when a site vanishes shrinks the epoch with no record
+that it did. Heterogeneous sites also drain data at different rates and their availability is asynchronous, so any
+static partition is wasteful. DARL is a dynamic data-leasing protocol: a central coordinator holds the only
+authoritative map of which data blocks are unassigned, leased, or committed, and clusters lease contiguous
+blocks under heartbeat-backed time-to-live (TTL) contracts.
+Every site holds an identical pre-tokenised dataset D of N sample windows. The coordinator partitions D
+into M = ⌈N/K⌉ blocks of K consecutive samples; K trades statistical mixing against I/O efficiency, since
+one block is one contiguous read. Because corpora such as C4 are not shuffled on disk, assigning block ranges
+naively would give each site a different topical slice of the corpus and induce drift between the site models, so
+DARL shuffles at block level with a deterministic global permutation πs of the M blocks, generated from a
+shared seed s by the Durstenfeld variant of Fisher-Yates [7]. A digest of (N,K,s) is checked at registration,
+such that two sites cannot silently join with different block spaces. Lease granularity matches the DiLoCo
+inner phase, which consumes H·B·W·A samples (H inner steps, per-rank batch B, W ranks, A accumulation
+steps): Mphase = max
+(
+1,⌈HBWA/K⌉
+)
+blocks per lease.
+Leases expire on a TTL of α ¯tstep + βRoundTripTime (with α=2.5) refreshed by heartbeats, so a crashed
+site’s untouched data returns to the pool automatically; a drained site steals the untouched tail of the largest
+outstanding lease; and grants are proportionally sized to each site’s measured commit rate, so fast sites are
+neither starved nor hoarding. Exactly-once coverage is an ordering guarantee: a site checkpoints before it
+commits blocks, so its weights and its data-consumption record can only fail together.
+3.3 Scheduling
+Placement across facilities is a question no batch scheduler answers: each site schedules only its own machine,
+and prior cross-facility systems (§2) hide admission delay rather than choose where to submit. Choosing
+requires queue-time estimates alongside each site’s walltime cap and per-GPU throughput, and obtaining
+them is the hard part on production HPC, where most sites expose no scheduler API and do not permit
+cronjobs. All three of our sites run Slurm, so a single unprivileged mechanism suffices.
+Observing queue times. For each site c we define a set of job shapes Sc; a shape fixes a partition, node
+count, GPUs per node and walltime. Every ⟨∆⟩ the collector runs sbatch --test-only per shape, placing
+the job against the live queue without enqueuing it. Slurm assumes every queued job runs to its requested
+walltime and is therefore systematically pessimistic; we discount each estimate by ⟨γ⟩, derived from realized
+walltime usage in a trailing sacct window.
+Planning submissions. Work is expressed in data units, an arbitrary quantum of which one outer round
+consumes ⟨R⟩; each site carries a per-GPU rate from ⟨historical job logs⟩. A waterfill [3] assigns outstanding
+units to the soonest-available site to minimise predicted round completion, splitting proportionally to
+throughput when several are free and capping each job at the site’s walltime limit and optionally adding
+reserve time to compensate for other sites starting later. Parameters: a minimum units per job, the discount
+⟨γ⟩, reserve ⟨ρ⟩, and a maximum probe age beyond which a site is excluded. The plan is recomputed every
+⟨∆⟩, so newly free capacity is folded in without disturbing running jobs. Misprediction costs calendar time
+only: a job that starts late leases no shards (§3.2), so no work is lost or duplicated and the reserve ⟨ρ⟩ can
+dampen the impact.
+3
+4 Results
+Training is done with torchtitan [15] on an Qwen3-0.6B model [29], trained on a pre-tokenised C4 dataset [20].
+Federation is managed by Flower [2]. Exact model details can be found in the Appendix B.
+0 1 2 3 4
+Training tokens (billions)
+30
+50
+100
+200
+500Training perplexity
+(a) vs. tokens
+Snellius 4×H100
+LUMI 8×MI250X
+Fed. DiLoCo
+Fed. DiLoCo 3-site
+0 5 10 15 20
+Connected wall-clock time (hours)
+(b) vs. wall-clock
+Figure 1: Training perplexity against training tokens (a) and against connected wall-clock time (b). Both
+centralised runs use a batch size of 96. Fed. DiLoCo is the two-site run (LUMI and Snellius). Fed. DiLoCo
+3-site is an elastic run over Frontier, LUMI and Snellius. LUMI and Frontier train together and then dropout,
+and Snellius continues the run on its own.
+Quality and time (Fig. 1). At matched tokens and matched steps, centralised training wins on quality
+and on wall-clock time. It reaches a perplexity of 28.2 in 5h41m on Snellius, against 37.5 in 19h48m for
+two-site DiLoCo. Two-site DiLoCo reaches an effective 55k tok/s, against 192k tok/s for centralised training.
+First, a higher peak learning rate is a large improvement without federation (28.2→24.5). Second, this
+outcome is the designed consequence of matching steps and per-step batch. Photon’s federated advantage at
+matched tokens came from clients that took ∼8× more steps, and those steps higher local learning rate [22].
+Our controls remove that mechanism.
+Distributed overhead. Figure 2 shows that having equal global batch size on heterogenous hardware
+can stall all GPUs but the slowest. Filling the barrier with a larger global batch size on faster hardware, for
+example, increasing the gradient accumulation steps, can minimize this overhead. DiLoCo naturally scales
+the learning rate accordingly. To test the synchronization overhead in a federated run, two clients on LUMI
+have started with different round synchronization intervals H. The per-round wall-clock time into compute
+(local training plus periodic held-out validation) and overhead (inter-site weight transfer plus checkpoint I/O,
+neither of which touches the GPU). Figure 2(b) decomposes the overhead. At H = 1000 synchronisation
+steps the training effectively takes 95% of the total round time.
+Table 1: Per-round wall-clock time split into compute and synchronization overhead, across local step counts
+H. All three runs use identical transport (inline/gRPC) and sites (LUMI).
+H Compute (s) Overhead (s) Total (s) Overhead share
+100 235.9 111.9 347.8 32.2%
+1000 1774.2 107.0 1881.2 5.7%
+2000 3601.8 115.8 3717.7 3.1%
+Overhead is essentially flat in absolute terms across a 20× range of H (Table 1). Because it is sized by
+the model, not by training length, communication alone varies by under 10s across all three runs (94.5s /
+90.4s / 98.7s). The overhead’s share of wall-clock time falls from 32.2% at H=100 to 3.1% at H=2000, as
+compute grows linearly. Finding a good H must balance overhead costs and model convergence as higher
+synchronization steps will suffer more from training drift.
+Transport implementation: gRPC vs. HTTP. At H = 100, we compare two implementations of
+the weight-exchange step: embedding weights directly in Flower’s preferred gRPC control messages (inline)
+4
+versus publishing them to a file for clients to fetch over HTTP (blob).
+Table2: Per-roundoverhead(communication+checkpoint+evaluation)undertwotransportimplementations,
+at H=100.
+Transport Overhead (s) Median (s) ∆ vs. gRPC
+inline / gRPC 176.0 174.0 —
+blob / HTTP 161.8 155.6 −14.2s (−8.1%)
+The blob variant reduced round overhead by 14.2s on average (Table 2). Flower’s gRPC in our implemen-
+tation serializes the model as 310 separate per-tensor byte fields rather than one packed stream, adding more
+overhead that scales with tensor count; the blob path instead streams tensors into a single sequential file, and
+publishes weights once Thus, for LLM pretraining HTTP-based communication is preferred.
+0 100 200
+Inner-phase seconds
+LUMI  8 × GCD
+Snellius 4 × H100
+Snellius 1 × H100 GA5
+LUMI  1 × GCD
+170s
+idle 127s (75%)43s
+169s
+idle 13s (8%)155s
+barrier
+barrier
+unbalanced
+balanced
+(a) Filling the barrier
+0 500 1000 1500 2000
+Seconds per round
+Training  1711 s 1883 s
+Eval 65 s
+Merge 17 s
+Comms 90 s
+compute 94%
+federation overhead 5.7%
+(b) Compute vs. federation overhead
+Figure 2: (a) The unbalanced, H=100, at fast site finishes 127s early and idles 75% of the phase. With
+calibrated accumulation (aSnellius=5) the sites land 13s apart, 8% idle. (b) At a H=1,000, 1,881s round run
+91% of the compute is the same work a centralised run would also do.
+Table 3: The DARL coordinator’s ledger for the three-site run (Frontier, LUMI, Snellius against one VM;
+2,692 blocks of 1,024 windows). Lost blocks of a vanished site holding them got returned to the pool on TTL
+expiry. Per-site committed counts sum to the coordinator’s own total (2,045), so nothing was skipped either.
+No site was configured with a share: the 5.5 : 3.0 : 1.0 split is what the sites’ own commit rates produced.
+site ranks RTT # of entry blocks TTL
+(ms) grants granted committed lost expiries
+Frontier 8 347 2 173 1,195 1,181 14 2
+LUMI 8 70 1 96 656 649 7 1
+Snellius 4 3 1 57 219 215 4 1
+total 326 2,070 2,045 25 4
+Data leasing (Table 3). In the three-site run, Frontier, LUMI and Snellius leased from one VM over
+23.8h, with per-site round trip times (RTT’s) from 3ms to 347ms. The run ended with the sites committing
+2,045 blocks. The per-site counts sum exactly to the coordinator’s own total, so there was no duplication.
+Every site departure, crash or clean, cost exactly its one in-flight lease, and the TTL returned that lease to
+the pool. Frontier’s first job died while it held nine blocks. The coordinator re-granted those nine blocks, five
+to LUMI and four to Frontier’s own restart, and the sites successfully committed every one of them, with not
+duplicate blocks being committed.
+The ledger makes two things quantitative. First, nobody configured a share, and no static share would
+have been right. Snellius delivered 32% of an equal third of the corpus and Frontier delivered 173% of it, a
+5.5× spread. A pre-split corpus would have turned that spread into an unfinishable slow shard. A crashed site
+5
+would also have removed its whole shard from the epoch, rather than one lease. Every site runs the identical
+loader over the identical corpus, so all three walk the same prefix. The unique corpus trained then collapses
+to the largest site’s share alone, 1,181 blocks against 2,045, which is 1.73× less for the same compute.
+Second, a departure forfeits exactly one lease. The coordinator grants one span at a time. A vanishing
+site can therefore lose only the⌈HBWA/K⌉ blocks it was holding. Long inner phases, H, make the failure
+unit more expensive. The TTL’s α ¯tstep scaling keeps live sites with longer phases safe. Meaning that the
+effect of a crash is dependent on H.
+Scheduler. The queue-aware scheduler is tested against a Qwen3-0.6B, 100B-token-target federated run
+across LUMI and Snellius, under a QoS of 4 nodes per site, a single node per allocation and a maximum
+walltime of 8h, comparing three queue scenarios. Table 4 assumes 0% barrier awaits for simplicity: neither
+site ever waits on the other. Wait is each site’s queue delay before its first job; Active is how long it trains
+before the target is reached; Jobs counts individual node-allocations (LUMI chains 1h jobs, Snellius chains 8h
+jobs, both back-to-back with no re-queueing gap) to cover Active; Tokens is that site’s resulting share of the
+100B target. Snellius’ NVIDIA H100 are significantly faster in throughput than LUMI as can be seen in the
+number of processed tokens for Snellius, suggesting the throughput-awareness of the scheduler.
+Table 4: Scheduler allocation for a 100B-token Qwen3-0.6B run across LUMI and Snellius under three queue
+conditions, assuming 0% idle.
+Scenario Site Shape (GPU×h) Wait Active Jobs Tokens
+A: No queue (1.11 d to 100B) LUMI 8×1h 0.1 h 26.6 h 108 29.9B Snellius 4×8h 0.2 h 26.5 h 16 70.1B
+B: Snellius busy 40h, LUMI free (2.28 d to 100B) LUMI 8×1h 0.2 h 54.4 h 220 61.3B Snellius 4×8h 40.0 h 14.6 h 8 38.7B
+C: LUMI busy 40h, Snellius free (1.58 d to 100B)* LUMI 8×1h 40.0 h 0.0 h 0 0.0B Snellius 4×8h 0.2 h 37.8 h 20 100.0B
+*Snellius alone reaches 100B (37.8h) before LUMI’s 40h wait is over, so LUMI never joins.
+5 Conclusion
+In this paper we have described a system for LLM pre-training across three heterogeneous supercomputers
+differing in hardware, network connectivity, and batch-scheduling policy. On top of DiLoCo, it introduces
+elastic aggregation, DARL, and queue-aware planning to provide the flexibility and resilience that batch-
+scheduled infrastructure requires. After 20,000 optimiser steps, the three-site run reaches a held-out perplexity
+of 34.7, against 28.2 for a centralised baseline. At H = 1000 only 6% measured communication overhead.
+Data coverage held throughout: across four site departures in a three-site run, 1.2% of granted blocks were
+reclaimed and no block was lost or trained twice. The value of cross-site training today is therefore operational
+rather than competitive: it turns fragmented allocations into one training run, at an overhead we can quantify.
+Limitations. This was a proof of concept at a single small model scale, one epoch, and one site topology,
+without downstream benchmarking. Future work should test production-scale training across more facilities,
+with stronger fault tolerance and a planner informed by historical queue traces rather than only live probes.
+References
+[1] AI Factories. AI Factories - the european high performance computing joint undertaking (eurohpc ju).
+https://www.eurohpc-ju.europa.eu/ai-factories_en. Accessed 2026-08-28.
+[2] D. J. Beutel, T. Topal, A. Mathur, X. Qiu, J. Fernandez-Marques, Y. Gao, L. Sani, K. H. Li, T. Parcollet,
+P. Porto Buarque de Gusmão, and N. D. Lane. Flower: A friendly federated learning research framework,
+2020. arXiv preprint arXiv:2007.14390.
+[3] S. Boyd and L. Vandenberghe. Convex Optimization. Cambridge University Press, Cambridge, UK,
+2004.
+6
+[4] N. Brown, G. Gibb, E. Belikov, and R. Nash. Predicting batch queue job wait times for informed
+scheduling of urgent HPC workloads. In Proceedings of the Cray User Group (CUG), 2022. arXiv
+preprint arXiv:2204.13543.
+[5] I. Colonnelli, R. Birke, G. Malenza, G. Mittone, A. Mulone, J. Galjaard, L. Y. Chen, S. Bassini,
+G. Scipione, J. Martinovič, V. Vondrák, and M. Aldinucci. Cross-facility federated learning. Procedia
+Computer Science, 240:3–12, 2024. doi: 10.1016/j.procs.2024.07.003.
+[6] A. Douillard, Q. Feng, A. A. Rusu, R. Chhaparia, Y. Donchev, A. Kuncoro, M. Ranzato, A. Szlam, and
+J. Shen. DiLoCo: Distributed low-communication training of language models, 2023. arXiv preprint
+arXiv:2311.08105.
+[7] R. Durstenfeld. Algorithm 235: Random permutation. Communications of the ACM, 7(7):420, 1964.
+doi: 10.1145/364520.364540.
+[8] A. Erben, R. Mayer, and H.-A. Jacobsen. How can we train deep learning models across clouds and
+continents? an experimental study. Proc. VLDB Endow., 17(6):1214–1226, Feb. 2024. ISSN 2150-8097.
+doi: 10.14778/3648160.3648165. URL https://doi.org/10.14778/3648160.3648165.
+[9] Frontier. Frontier: OLCF exascale supercomputer. https://www.olcf.ornl.gov/frontier/. Oak
+Ridge Leadership Computing Facility, Oak Ridge National Laboratory, Tennessee, USA. Accessed
+2026-08-26.
+[10] T.-M. H. Hsu, H. Qi, and M. Brown. Measuring the effects of non-identical data distribution for federated
+visual classification, 2019. arXiv preprint arXiv:1909.06335.
+[11] Z. Huo, Q. Yang, B. Gu, L. Carin, and H. Huang. Faster on-device training using new federated
+momentum algorithm, 2020. arXiv preprint arXiv:2002.02090.
+[12] S. Jaghouar, J. M. Ong, M. Basra, F. Obeid, J. Straube, M. Keiblinger, E. Bakouch, L. Atkins, M. Panahi,
+C. Goddard, M. Ryabinin, and J. Hagemann. INTELLECT-1 technical report, 2024. arXiv preprint
+arXiv:2412.01152.
+[13] S. Jaghouar, J. M. Ong, and J. Hagemann. OpenDiLoCo: An open-source framework for globally
+distributed low-communication training, 2024. arXiv preprint arXiv:2407.07852.
+[14] Y. Li, E. Dey, Z. Li, K. Raghavan, R. Madduri, and K. Kim. FedQueue: Queue-aware federated learning
+for cross-facility HPC training, 2026. arXiv preprint arXiv:2605.02125.
+[15] W. Liang, T. Liu, L. Wright, W. Constable, A. Gu, C.-C. Huang, I. Zhang, W. Feng, H. Huang, J. Wang,
+S. Purandare, G. Nadathur, and S. Idreos. TorchTitan: One-stop PyTorch native solution for production
+ready LLM pre-training, 2024. arXiv preprint arXiv:2410.06511.
+[16] T. Lin, S. U. Stich, K. K. Patel, and M. Jaggi. Don’t use large mini-batches, use local SGD. In
+International Conference on Learning Representations (ICLR), 2020. arXiv preprint arXiv:1808.07217.
+[17] LUMI. LUMI: Large unified modern infrastructure. https://lumi-supercomputer.eu/. EuroHPC
+Joint Undertaking pre-exascale supercomputer, hosted by CSC in Kajaani, Finland, and the LUMI
+consortium. Accessed 2026-08-26.
+[18] LUMI Docs. LUMI user documentation. https://docs.lumi-supercomputer.eu/. Accessed 2026-08-
+26.
+[19] H. B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. Agüera y Arcas. Communication-efficient
+learning of deep networks from decentralized data. In Proceedings of the 20th International Conference
+on Artificial Intelligence and Statistics (AISTATS), volume 54 of Proceedings of Machine Learning
+Research, pages 1273–1282. PMLR, 2017.
+7
+[20] C. Raffel, N. Shazeer, A. Roberts, K. Lee, S. Narang, M. Matena, Y. Zhou, W. Li, and P. J. Liu.
+Exploring the limits of transfer learning with a unified text-to-text transformer. Journal of Machine
+Learning Research, 21(140):5485 – 5551, 2020.
+[21] S. J. Reddi, Z. Charles, M. Zaheer, Z. Garrett, K. Rush, J. Konečný, S. Kumar, and H. B. McMahan.
+Adaptive federated optimization. In International Conference on Learning Representations (ICLR), 2021.
+arXiv preprint arXiv:2003.00295.
+[22] L. Sani, A. Iacob, Z. Cao, R. Lee, B. Marino, Y. Gao, D. Cai, Z. Li, W. Zhao, X. Qiu, and N. D. Lane.
+Photon: Federated LLM pre-training, 2024. arXiv preprint arXiv:2411.02908.
+[23] W. Smith, V. Taylor, and I. Foster. Using run-time predictions to estimate queue wait times and improve
+scheduler performance. In Job Scheduling Strategies for Parallel Processing (JSSPP), Lecture Notes in
+Computer Science, pages 202–219. Springer, 1999. doi: 10.1007/3-540-47954-6_11.
+[24] Snellius. Snellius: The dutch national supercomputer. https://www.surf.nl/en. Operated by SURF,
+Amsterdam, The Netherlands. Accessed 2026-08-26.
+[25] S. U. Stich. Local SGD converges fast and communicates little. In International Conference on Learning
+Representations (ICLR), 2019. arXiv preprint arXiv:1805.09767.
+[26] F. Strati, P. Elvinger, T. Kerimoglu, and A. Klimovic. ML training with cloud GPU shortages: Is cross-
+region the answer? In Proceedings of the 4th Workshop on Machine Learning and Systems (EuroMLSys),
+pages 107–116, 2024. doi: 10.1145/3642970.3655843.
+[27] F. Strati, Z. Zhang, G. Manos, I. Sánchez Périz, Q. Hu, T. Chen, B. Buzcu, S. Han, P. Delgado, and
+A. Klimovic. Sailor: Automating distributed training over dynamic, heterogeneous, and geo-distributed
+clusters. In Proceedings of the ACM SIGOPS 31st Symposium on Operating Systems Principles (SOSP),
+pages 204–220, 2025. doi: 10.1145/3731569.3764839. arXiv preprint arXiv:2504.17096.
+[28] C. Vercellino, A. Scionti, G. Varavallo, P. Viviani, G. Vitali, and O. Terzo. A machine learning approach
+for an HPC use case: The jobs queuing time prediction. Future Generation Computer Systems, 143:
+215–230, 2023. doi: 10.1016/j.future.2023.01.020.
+[29] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv, C. Zheng, D. Liu,
+et al. Qwen3 technical report, 2025. arXiv preprint arXiv:2505.09388.
+[30] B. Yuan, Y. He, J. Q. Davis, T. Zhang, T. Dao, B. Chen, P. Liang, C. Ré, and C. Zhang. Decentralized
+training of foundation models in heterogeneous environments. In Advances in Neural Information
+Processing Systems 35 (NeurIPS), pages 25464–25477, 2022. arXiv preprint arXiv:2206.01288.
+8
+A HPC sites
+In Table 5 the HPC sites for the experiments are detailed. All experiments were run under non-root privileges.
+Table 5: The three systems in this work with their hardware, software, network connectivity and batch
+configurations.
+Snellius LUMI Frontier
+Hardware
+Accelerator 4× NVIDIA H100 4× AMD MI250X 4× AMD MI250X
+Devices per node 4 GPUs 8 GCDs 8 GCDs
+Intra-node link NVLink / NVSwitch Infinity Fabric Infinity Fabric
+Inter-node fabric InfiniBand NDR 200 4× Slingshot-11 4× Slingshot-11
+Parallel filesystem GPFS Lustre Lustre
+Software environment
+Stack CUDA ROCm ROCm
+Delivery bare-metal modules Apptainer container Apptainer container
+Connectivity
+Compute-node egress direct outbound outbound via NAT HTTP(S) forward proxy
+Long-lived gRPC supported supported reaped by proxy loadbal-
+ancer
+Slurm batch system
+Slurm REST API exposed not exposed selectively exposed
+Cron / timed jobs unavailable unavailable unavailable
+Collector mechanism chained Slurm jobs chained Slurm jobs user cronjob
+Sub-node allocation yes (CPU partition) yes (small partition) no (full node only)
+Max walltime 120h 48h (standard partition) 24h
+B Training configuration
+Below in Table 6 is the language model setup detailed.
+Model Qwen3-0.6B, 28 layers
+Tokeniser OpenEuroLLM 128k (131,328-row tied embedding)
+Checkpoint 1.32GiB
+Data C4, 5B tokens
+Sequence length 2048
+Precision bfloat16
+Peak LR 3 × 10−4
+Micro batch size 8
+Global batch size 96 by accumulation, or 32 Snellius + 64 LUMI/Frontier
+Table 6: Training configuration shared by all runs.
+C License
+All external assets are used under their published licences: torchtitan [15] (BSD-3-Clause, © Meta Platforms),
+which also supplies the Qwen3 [29] model definition; Flower [2] 1.33 (Apache-2.0); the OpenEuroLLM 128k
+9
+tokeniser (Apache-2.0); and the C4 corpus [20] (ODC-BY, subject to the Common Crawl terms of use). The
+code released with this paper is Apache-2.0.
+10

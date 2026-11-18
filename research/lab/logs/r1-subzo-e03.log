@@ -1,0 +1,25 @@
+[r1-subzo-e03] start eval 8.3665
+[r1-subzo-e03] it 1 t    0.1s tok   0.001M eval 8.3698 up/step 1.606MB {'loss': 8.35, 'coreNorm': 497.094}
+[r1-subzo-e03] it 2 t    0.1s tok   0.002M eval 8.3582 up/step 1.606MB {'loss': 8.3736, 'coreNorm': 339.643}
+[r1-subzo-e03] it 5 t    0.3s tok   0.005M eval 8.3576 up/step 1.606MB {'loss': 8.3693, 'coreNorm': 289.141}
+[r1-subzo-e03] it 10 t    0.5s tok   0.010M eval 8.3569 up/step 1.606MB {'loss': 8.3472, 'coreNorm': 218.794}
+[r1-subzo-e03] it 20 t    0.8s tok   0.020M eval 8.3444 up/step 1.606MB {'loss': 8.3356, 'coreNorm': 176.8}
+[r1-subzo-e03] it 49 t    2.0s tok   0.050M eval 8.3375 up/step 1.606MB {'loss': 8.3451, 'coreNorm': 195.974}
+[r1-subzo-e03] it 98 t    3.9s tok   0.100M eval 8.3208 up/step 1.606MB {'loss': 8.312, 'coreNorm': 162.539}
+[r1-subzo-e03] it 196 t    7.8s tok   0.201M eval 8.3082 up/step 1.606MB {'loss': 8.2775, 'coreNorm': 133.1}
+[r1-subzo-e03] it 256 t   10.1s tok   0.262M eval 8.2702 up/step 1.606MB {'loss': 8.2636, 'coreNorm': 186.325}
+[r1-subzo-e03] it 489 t   19.3s tok   0.501M eval 8.1219 up/step 1.606MB {'loss': 8.0824, 'coreNorm': 234.786}
+[r1-subzo-e03] it 510 t   20.1s tok   0.522M eval 8.1012 up/step 1.606MB {'loss': 8.0841, 'coreNorm': 175.452}
+[r1-subzo-e03] it 764 t   30.1s tok   0.782M eval 7.9343 up/step 1.606MB {'loss': 7.9176, 'coreNorm': 76.992}
+[r1-subzo-e03] it 977 t   38.5s tok   1.000M eval 7.8484 up/step 1.606MB {'loss': 7.7616, 'coreNorm': 65.009}
+[r1-subzo-e03] it 1018 t   40.2s tok   1.042M eval 7.8318 up/step 1.606MB {'loss': 7.8193, 'coreNorm': 67.095}
+[r1-subzo-e03] it 1272 t   50.2s tok   1.303M eval 7.7630 up/step 1.606MB {'loss': 7.8185, 'coreNorm': 86.252}
+[r1-subzo-e03] it 1525 t   60.2s tok   1.562M eval 7.7156 up/step 1.606MB {'loss': 7.6705, 'coreNorm': 83.353}
+[r1-subzo-e03] it 1779 t   70.2s tok   1.822M eval 7.6649 up/step 1.606MB {'loss': 7.672, 'coreNorm': 51.447}
+[r1-subzo-e03] it 1954 t   77.2s tok   2.001M eval 7.6374 up/step 1.606MB {'loss': 7.7953, 'coreNorm': 106.869}
+[r1-subzo-e03] it 2032 t   80.2s tok   2.081M eval 7.6281 up/step 1.606MB {'loss': 7.5453, 'coreNorm': 75.384}
+[r1-subzo-e03] it 2286 t   90.3s tok   2.341M eval 7.6033 up/step 1.606MB {'loss': 7.5529, 'coreNorm': 54.454}
+[r1-subzo-e03] it 2540 t  100.3s tok   2.601M eval 7.5737 up/step 1.606MB {'loss': 7.653, 'coreNorm': 30.489}
+[r1-subzo-e03] it 2794 t  110.3s tok   2.861M eval 7.5513 up/step 1.606MB {'loss': 7.5771, 'coreNorm': 35.603}
+[r1-subzo-e03] it 3040 t  120.0s tok   3.113M eval 7.5305 up/step 1.606MB {'loss': 7.5198, 'coreNorm': 32.413}
+{"label": "r1-subzo-e03", "steps": 3040, "startLoss": 8.366497993469238, "finalLoss": 7.530548453330994, "bestLoss": 7.530548453330994, "diverged": false, "upBytesPerStep": 1605632.0, "tokens": 3112960}

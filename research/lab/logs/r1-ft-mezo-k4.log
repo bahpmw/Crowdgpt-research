@@ -1,0 +1,25 @@
+[r1-ft-mezo-k4] start eval 5.5977
+[r1-ft-mezo-k4] it 1 t    0.1s tok   0.001M eval 5.5977 up/step 0.000MB {'projGrad': 0.7029}
+[r1-ft-mezo-k4] it 2 t    0.1s tok   0.002M eval 5.5977 up/step 0.000MB {'projGrad': -0.8779}
+[r1-ft-mezo-k4] it 5 t    0.2s tok   0.005M eval 5.5977 up/step 0.000MB {'projGrad': 0.957}
+[r1-ft-mezo-k4] it 10 t    0.3s tok   0.010M eval 5.5978 up/step 0.000MB {'projGrad': -0.082}
+[r1-ft-mezo-k4] it 20 t    0.6s tok   0.020M eval 5.5976 up/step 0.000MB {'projGrad': 0.7982}
+[r1-ft-mezo-k4] it 49 t    1.4s tok   0.050M eval 5.5975 up/step 0.000MB {'projGrad': 0.9117}
+[r1-ft-mezo-k4] it 98 t    2.7s tok   0.100M eval 5.5974 up/step 0.000MB {'projGrad': -0.2017}
+[r1-ft-mezo-k4] it 196 t    5.5s tok   0.201M eval 5.5973 up/step 0.000MB {'projGrad': 0.9487}
+[r1-ft-mezo-k4] it 354 t   10.1s tok   0.362M eval 5.5970 up/step 0.000MB {'projGrad': -0.0017}
+[r1-ft-mezo-k4] it 489 t   14.0s tok   0.501M eval 5.5970 up/step 0.000MB {'projGrad': -0.0968}
+[r1-ft-mezo-k4] it 701 t   20.1s tok   0.718M eval 5.5970 up/step 0.000MB {'projGrad': 0.9234}
+[r1-ft-mezo-k4] it 977 t   28.0s tok   1.000M eval 5.5968 up/step 0.000MB {'projGrad': -0.9558}
+[r1-ft-mezo-k4] it 1051 t   30.1s tok   1.076M eval 5.5966 up/step 0.000MB {'projGrad': -0.8972}
+[r1-ft-mezo-k4] it 1400 t   40.1s tok   1.434M eval 5.5965 up/step 0.000MB {'projGrad': 0.2177}
+[r1-ft-mezo-k4] it 1749 t   50.1s tok   1.791M eval 5.5962 up/step 0.000MB {'projGrad': -0.3972}
+[r1-ft-mezo-k4] it 1954 t   56.0s tok   2.001M eval 5.5960 up/step 0.000MB {'projGrad': 0.4268}
+[r1-ft-mezo-k4] it 2098 t   60.1s tok   2.148M eval 5.5957 up/step 0.000MB {'projGrad': -0.5174}
+[r1-ft-mezo-k4] it 2449 t   70.2s tok   2.508M eval 5.5954 up/step 0.000MB {'projGrad': 0.5593}
+[r1-ft-mezo-k4] it 2797 t   80.2s tok   2.864M eval 5.5957 up/step 0.000MB {'projGrad': 0.0787}
+[r1-ft-mezo-k4] it 3145 t   90.2s tok   3.220M eval 5.5959 up/step 0.000MB {'projGrad': -0.7505}
+[r1-ft-mezo-k4] it 3494 t  100.2s tok   3.578M eval 5.5953 up/step 0.000MB {'projGrad': -2.1348}
+[r1-ft-mezo-k4] it 3841 t  110.2s tok   3.933M eval 5.5951 up/step 0.000MB {'projGrad': -0.0768}
+[r1-ft-mezo-k4] it 4181 t  120.0s tok   4.281M eval 5.5952 up/step 0.000MB {'projGrad': -2.3868}
+{"label": "r1-ft-mezo-k4", "steps": 4181, "startLoss": 5.597691893577576, "finalLoss": 5.595189332962036, "bestLoss": 5.595082521438599, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4281344}

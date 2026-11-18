@@ -1,0 +1,874 @@
+LOCA: FORWARD-ONLY LLM TUNING AFTER ONE-SHOT
+CALIBRATION WITH LOCAL CREDIT ASSIGNMENT
+Linhan Xia1,4,† Rui Liu2,† Zhaofeng Zhang3,5,† Yihao Wang6 Binrui Shen7 Shengxin Zhu7,8*
+1University of Oklahoma 2Imperial College London 3University of Michigan
+4Tencent 5University of Edinburgh 6University of Southern California
+7Beijing Normal University 8Beijing Normal-Hong Kong Baptist University
+†These authors contributed equally to this work. * Corresponding Author: shengxin.zhu@bnu.edu.cn
+ABSTRACT
+Parameter-efficient post-training reduces the number of trainable parameters, but still requires repeated
+end-to-end backpropagation through the frozen backbone. Every adaptation step therefore needs
+backward-capable hardware and must store or recompute activations. We ask whether this repeated
+backward chain can be replaced by a one-time calibration. We introduce Local Credit Assignment
+(LoCA), a two-stage method for small-shift adaptation. One probe backward pass fits a low-rank map
+at each transformer block from the final prediction error to a local hidden-state correction. LoCA then
+reuses these maps to form blockwise regression targets from forward activations and fits low-rank
+adapters with closed-form ridge solves. No further backbone backward pass is required. We evaluate
+LoCA on five discriminative benchmarks with Qwen2.5 models from 0.5B to 14B. In 16 of 25
+reported task–scale comparisons, LoCA yields lower evaluation cross-entropy than the corresponding
+LoRA run. Its measured full-run GPU peak, including calibration, is 26–29% lower than LoRA’s.
+After calibration, its CPU steady-state memory is 36–52% lower and its per-pass time is 43–48%
+lower. A shared scale-normalized candidate set is reused across all tested Qwen2.5 sizes and on
+SmolLM2-1.7B. LoCA thus amortizes global credit assignment into one calibration and enables later
+forward-only tuning when repeated backpropagation is impractical. The code associated with this
+paper is available here.
+Keywords Backpropagation-Free · Feedback Alignment · Parameter-Efficient Tuning · Resource-Constrained Training
+1 Introduction
+Post-training includes instruction tuning [1], domain adaptation [2], and preference alignment [? ]. Even when only
+adapters are updated, these methods usually backpropagate through the frozen backbone. They must store or recompute
+activations, propagate gradients, and maintain optimizer states [3]. Fine-tuning can therefore use up to 12× the memory
+of inference [4]. The need for repeated backpropagation substantially increases the cost, making the method less
+practical than forward-only inference.
+Parameter-efficient fine-tuning reduces trainable parameters and optimizer states, but it retains the backward chain.
+LoRA [5] and adapter- or prompt-based methods [6, 7, 8] still propagate gradients through the backbone. For example,
+PEFT for a 13B model can require 6× inference memory [4]. These methods reduce several costs of backpropagation,
+but do not remove repeated backward execution.
+Forward-only methods offer another trade-off. MeZO estimates update directions from function values [9, 4]. Its
+memory use is close to inference, while its convergence and tuning can be affected by estimator variance [10, 11].
+Feedback alignment uses fixed feedback matrices [12, 13], but often relies on forward weights adapting to those
+matrices [14]. A frozen backbone cannot use this mechanism. Local learning avoids global propagation [15, 16, 17],
+but its targets usually support representation learning or compression [18]. Taken together, this trade-off motivates us to
+combine their complementary strengths by using a proper scheduling.
+arXiv:2608.03020v2  [cs.AI]  7 Aug 2026
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+We study small, targeted changes to a strong pretrained model, a more common practical setting than training a model
+from scratch. Our goal is to avoid the high computational cost in this regime. Prior work uses low-rank parameter
+updates for this setting [19, 20, 5]. We apply the same local view to credit assignment. When the representation change
+is small, we separate two tasks. The first estimates how each block output should change. The second fits adapter
+parameters to that change.
+We introduce Local Credit Assignment fine-tuning (LoCA) for this two-stage setting. During calibration, one probe
+backward pass fits a low-rank feedback operator for each block. During adaptation, these operators turn the final-layer
+error into local adapter targets. Each adapter is fitted by ridge regression. After calibration, an outer iteration needs
+forward execution and local linear solves, but no backbone backward pass. A device without backward support must
+receive operators calibrated for the same checkpoint and target distribution.
+In the tested discriminative tasks, LoCA recovers most of LoRA’s cross-entropy improvement and uses less measured
+memory. We also reuse one normalized candidate set across model sizes and on a second model family. Results from
+individual cells are treated as observations, not as evidence that LoCA is generally better than LoRA.
+Our contributions are as follows.
+1. Calibrated local credit. LoCA reuses feedback operators from one probe backward pass during a later
+forward-only tuning stage.
+2. Closed-form local updates. Each residual adapter is fitted by a ridge solve. A scale-normalized target lets us
+reuse the same candidate set across the tested models.
+3. Empirical study. We compare quality, memory, and iteration count with LoRA and matched-adapter MeZO
+on five benchmarks and 0.5B–14B models.
+This paper is organized as follows. Section 2 reviews related work on efficient fine-tuning and local training methods.
+Section 3 presents the LoCA framework and its closed-form local update procedure. Section 4 evaluates LoCA against
+representative baselines and analyzes its efficiency and limitations. Section 5 discusses the scope of the method, and
+Section 6 concludes the paper.
+2 Related Work
+Parameter- and memory-efficient fine-tuning. Adapters [6], prompt methods [7, 8], and LoRA [5] reduce the number
+of trainable parameters. Other methods reduce memory in different ways. GaLore projects gradients [21], LOMO
+combines gradient computation and parameter updates [22], QLoRA quantizes frozen weights [23], and checkpointing
+recomputes activations [24]. BAdam updates blocks in sequence [25]. These methods reduce parts of the training cost,
+but still use backward differentiation through at least part of the model. LoCA keeps a low-rank adapter but changes
+how its update is obtained.
+Zeroth-order and forward-only optimization. Zeroth-order methods estimate update directions from function values
+[9]. MeZO applies this idea to LLM fine-tuning with inference-level memory [4]. Recent work uses low-rank [26, 27],
+sparse [28], or curvature-aware perturbations [29]. These methods retain the memory benefit of forward-only execution,
+but their iteration count and tuning can depend on estimator variance [10, 11]. We compare with Adapter-MeZO,
+which perturbs the same low-rank adapter parameters as LoCA. LoCA uses fixed local solves rather than stochastic
+perturbation updates.
+Feedback alignment. Feedback alignment trains networks without exact transposed weights [12]. Direct feedback
+alignment sends the top-layer error to each layer [13], although transformers remain difficult [30]. Its success often
+depends on forward weights adapting to the fixed feedback [14]. This option is limited when the backbone is frozen.
+LoCA instead fits the feedback once to the frozen model and then keeps it fixed.
+Local and layer-wise learning. Local learning uses separate objectives for different layers [15, 16, 17]. Forward
+gradients have also been combined with local losses [31]. Most of these targets support representation learning or
+compression [18]. LoCA keeps the blockwise structure, but forms its targets from a first-order change in the post-training
+loss. It then fits each adapter with a ridge solve.
+3 Methodology
+LoCA assumes that adaptation stays near the calibrated model state. It separates credit calibration from adapter fitting.
+Calibration uses one probe backward pass to fit low-rank maps from the top-layer error to blockwise credit signals.
+2
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Figure 1: LoRA and the post-calibration LoCA loop. One probe backward pass fits Fℓ before this loop. Later iterations
+use forward propagation and local ridge solves.
+After calibration, each outer iteration uses no backbone backward pass. The block parameter is found by solving a local
+ridge objective. This solve is exact for a fixed local target. It does not imply that global cross-entropy decreases at every
+outer iteration. Figure 1 shows the post-calibration loop.
+3.1 Local Targets
+Following the setting of LoRA [5], we consider a pre-trained transformer with L frozen blocks. Let hℓ ∈ Rd be the
+hidden state after block ℓ, with the hidden embedding h0. A frozen head Wu ∈ RV ×d maps hL to logits z = WuhL
+over vocabulary of size V . We attach a low-rank adapter to each block. The adapted hidden state is
+hℓ = ¯hℓ + BℓAℓhℓ−1, (1)
+where ¯hℓ is the frozen block output, Aℓ ∈ Rr×d is a fixed random projection, and Bℓ ∈ Rd×r is fitted. Setting Bℓ = 0
+recovers the frozen model. For one block solve, the current forward states and all other adapters are fixed. Thus, ¯hℓ and
+pℓ = Aℓhℓ−1 are fixed with respect to Bℓ. The state hℓ is then linear in Bℓ, which makes the block objective a convex
+quadratic.
+Unlike LoRA [5], LoCA does not update every adapter from one global CE gradient. It gives each block a regression
+target τℓ ∈ Rd and solves
+min
+Bℓ
+Ex
+ hℓ − τℓ 2 (2)
+for each block. The post-calibration solve does not propagate gradients across blocks. The remaining question is how to
+choose τℓ.
+A perturbation δhℓ changes the loss by δL ≈ ⟨gℓ, δhℓ⟩, where gℓ = ∂L/∂hℓ. A first-order target is
+ˆτℓ = hℓ − η gℓ. (3)
+In the conventional setting, computing gℓ at every optimization step requires the repeated backward passes we aim to
+eliminate. We approximate it during tuning by replacing the input-dependent Jacobian product with a fixed matrix
+Fℓ ∈ Rd×d:
+τℓ = hℓ − η Fℓ e, (4)
+where e = W ⊤ u   softmax(z) − onehot(y)  is the top-layer error from the frozen head. Once Fℓ is fixed, this target
+does not require a backbone backward pass.
+3.2 The Feedback Operator
+The operator Fℓ maps the top-layer error e to an estimate of gℓ. Random feedback gives a mean cosine alignment near
+zero in our calibration test, αℓ = cos ∠(Fℓe, gℓ) ≈ −0.005. It therefore provides little useful direction in this setting.
+3
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Feedback alignment can improve as forward weights change [14], but the LoCA backbone is frozen. We instead fit Fℓ
+to the frozen model.
+We fit an untruncated feedback map bFℓ once from samples of the backward mapping. One probe backward pass through
+the frozen model yields per-token gradients gℓ and top-layer errors e, stacked as eGℓ and eE. We solve
+bFℓ = arg min F
+F eE − eGℓ 2 F + β∥F ∥2 F , (5)
+where β > 0. Writing its singular value decomposition as bFℓ = U ΣV ⊤, we retain Fℓ = UkΣkV ⊤ k with k = 8. Thus,
+Fℓ is a rank-k approximation to the regularized fit rather than the full fitted map. On the probe data, its cosine alignment
+with the true hidden-state gradients is 0.3–0.5. We treat this fixed map as a local approximation whose alignment may
+degrade as repeated updates move the model away from the calibrated state. In the small-shift regime, however, it can
+carry useful backward-derived credit into forward-only adaptation without requiring further backward passes.
+3.3 Closed-Form Per-Block Solve
+For a fixed τℓ, each block gives a ridge problem. Its residual target is
+ρℓ := τℓ − ¯hℓ = B(t) ℓ pℓ − η Fℓe, (6)
+where B(t) ℓ is the current adapter. Over N predicted tokens, block ℓ minimizes
+X
+n
+∥Bℓp(n) ℓ − ρ(n) ℓ ∥2 + λ∥Bℓ∥2 F . (7)
+This strictly convex problem has the unique closed-form minimizer
+B⋆ ℓ = Cℓ   Gℓ + λIr −1 , (8)
+where λ > 0 is the ridge regularization coefficient, and
+Gℓ =
+X
+n
+p(n) ℓ p(n)⊤ ℓ , Cℓ = X
+n
+ρ(n) ℓ p(n)⊤ ℓ . (9)
+The block parameter uses no gradient optimizer, learning-rate schedule, or optimizer state. The coefficient η remains a
+target-size hyperparameter.
+Three details are useful in practice. First, Gℓ and Cℓ are additive over batches. Their persistent storage is O(L(r2 + dr))
+and does not grow with the number of training tokens. Calibration creates one temporary backward graph. Its peak is
+included in the GPU measurements in Table 2. Second, we keep the frozen model as a candidate and return it when no
+adapted snapshot improves held-out CE. This fallback protects the selected validation objective, not unseen test metrics.
+Third, the block solve is deterministic when the probe data, projection, data order, and numerical implementation are
+fixed. These choices can still cause variation across runs.
+3.4 Full Algorithm
+The closed-form solution above gives B⋆ ℓ for a fixed target. The target changes after an adapter update because later
+hidden states and the error e also change. LoCA therefore repeats the procedure for T outer steps. Each step runs a
+forward pass, updates the targets, and solves the block objectives. A Jacobi schedule uses one shared forward pass
+for all blocks. A Gauss–Seidel schedule refreshes later states after each block. Each solve minimizes its current local
+objective. Global CE can still be non-monotone, so we select T by held-out CE.
+The step size η in (4) is an absolute quantity, and the norm of e varies across model sizes. In practice, a fixed η that
+works at 0.5B returns the frozen model at 14B. We reduce this sensitivity by normalizing the target correction to the
+residual-stream scale:
+τℓ = hℓ − ¯η Fℓ e, ¯η = η · RMS(hℓ−1) RMS(Fℓ e) , (10)
+so η is the relative change to the residual stream. We reuse the same candidate set across all tested model sizes and
+architectures.
+4
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Model Task Frozen LoRA Adapter-MeZO LoCA RCE Racc
+0.5B
+SST-2 2.463 0.261 0.183 0.399 0.94 0.96
+BoolQ 0.827 0.409 0.315 0.363 1.11 0.82
+ARC-Easy 2.990 2.210 2.319 2.123 1.11 0.79
+OpenBookQA 4.707 4.264 3.837 3.645 2.40 0.85
+HellaSwag 3.450 2.920 3.050 2.860 1.11 0.72
+1.5B
+SST-2 3.894 0.112 0.204 0.448 0.91 0.87
+BoolQ 0.527 0.399 0.276 0.304 1.74 0.82
+ARC-Easy 2.398 2.156 2.065 1.851 2.26 0.77
+OpenBookQA 4.120 3.700 3.910 3.620 1.19 0.74
+HellaSwag 2.917 2.655 2.717 2.635 1.08 0.82
+3B
+SST-2 8.294 0.184 0.213 0.283 0.98 0.96
+BoolQ 1.914 0.325 0.287 0.269 1.04 0.85
+ARC-Easy 2.621 2.147 1.984 1.859 1.61 1.31
+OpenBookQA 3.980 3.550 3.900 3.610 0.86 0.69
+HellaSwag 2.740 2.480 2.690 2.520 0.85 0.71
+7B
+SST-2 5.200 0.160 0.420 0.205 0.99 0.93
+BoolQ 0.819 0.426 0.293 0.253 1.44 ‡
+ARC-Easy 2.442 2.086 1.754 1.721 2.03 0.87
+OpenBookQA 3.860 3.380 3.790 3.320 1.13 0.78
+HellaSwag 2.610 2.340 2.580 2.390 0.81 0.84
+14B
+SST-2 4.850 0.135 0.510 0.128 1.00 0.97
+BoolQ 1.445 0.426 0.183 0.221 1.20 ‡
+ARC-Easy 2.444 2.438† 1.474 1.642 † 0.95
+OpenBookQA 3.740 3.220 3.760 3.290 0.87 0.70
+HellaSwag 2.500 2.200 2.520 2.240 0.87 0.88
+† indicates that the corresponding recovery ratio is not meaningful because the LoRA improvement over the frozen model is
+negligible. ‡ indicates that the accuracy recovery is omitted because the LoRA accuracy gain is zero or near zero.
+Table 1: Main benchmark results. We report evaluation CE, where lower is better, together with CE and accuracy
+recovery ratios.
+4 Experiments
+4.1 Setup
+Models and tasks. We test Qwen2.5 at 0.5B, 1.5B, 3B, 7B, and 14B parameters [32]. We also test SmolLM2-1.7B [33].
+The tasks are SST-2 [34], BoolQ [35], ARC-Easy and ARC-Challenge [36], OpenBookQA [37], and HellaSwag [38].
+Baselines and metrics. We compare with the frozen model, LoRA [5], and MeZO [4]. Full-parameter MeZO perturbs a
+much larger parameter space and weakens with model size in supplementary Figure S1. Our main comparison therefore
+uses Adapter-MeZO, which perturbs the same low-rank adapter parameters as LoCA and LoRA. We report per-token
+CE and ranking accuracy. Recovery gives a normalized summary of the frozen-to-LoRA gap.
+Table 1 reports the results.
+RCE = CEfrozen − CEours CEfrozen − CELoRA , (11)
+Racc = accours − accfrozen accLoRA − accfrozen , (12)
+so R = 1 matches the reported LoRA value. Recovery can be unstable when the frozen-to-LoRA gap is near zero. We
+therefore treat raw CE and accuracy as the main metrics and use recovery as a descriptive summary. We omit ratio
+claims for near-zero denominators.
+Protocol. LoCA uses rank r = 32, at most 40 outer iterations, and early stopping on held-out CE. We select η from the
+stated candidate set on the same held-out metric. MeZO scales its learning rate by 1/
+√
+D and searches it at each model
+5
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Adapter-MeZO LoCA LoRA LoCA/LoRA
+GPU peak training memory (MB)
+0.5B 2,197 4,420 6,254 0.71×
+1.5B 5,669 6,646 9,109 0.73×
+3B 9,079 9,248 12,612 0.73×
+7B 9,154 11,520 15,647 0.74×
+CPU steady-state memory (MB)
+0.5B 879 1,279 2,664 0.48×
+1.5B 1,741 2,845 5,633 0.51×
+3B 2,015 2,590 4,875 0.53×
+7B 3,533 4,186 6,582 0.64×
+CPU wall-clock per pass (s)
+0.5B 8.9 5.9 10.3 0.57×
+1.5B 26.0 14.2 25.5 0.56×
+3B 28.7 15.0 29.0 0.52×
+7B 55.4 29.5 55.2 0.53×
+Table 2: Resources beyond the loaded model. GPU peak includes probe calibration. CPU steady-state memory and
+per-pass time describe post-calibration tuning.
+Model Task abs-η RCE rms CE rms RCE
+0.5B SST-2 0.94 (tuned) 0.249 1.02
+1.5B SST-2 0.91 (tuned) 0.168 1.00
+3B SST-2 0.89 (tuned) 0.148 0.92
+7B SST-2 0.82 (tuned) 0.152 0.94
+SmolLM2 SST-2 ≈0 0.371 0.93
+SmolLM2 BoolQ 0.06 0.391 1.02
+SmolLM2 ARC-Easy 0.07 1.677 1.29
+SmolLM2 ARC-Chal. 0.02 2.318 0.93
+Table 3: Scale-normalized targets with one shared candidate set across the tested models.
+size. Unless noted otherwise, table cells are single runs with seed 0. We interpret cell-level differences as descriptive
+rather than statistically significant. Runs use NVIDIA L40S GPUs or 32 GB CPU-only servers. We do not include
+GaLore or LOMO because they retain backward differentiation and address a different cost trade-off.
+4.2 Main Results
+Experiment 1 compares the frozen model, LoRA, Adapter-MeZO, and LoCA on five model sizes and five tasks.
+LoCA’s CE recovery ranges from 0.81 to 2.40 in the reported cells. It obtains lower CE than the corresponding LoRA
+run in 16 of the 25 task–scale cells. These cells are single runs, so the count is descriptive and does not show general
+superiority over LoRA.
+On BoolQ at 7B and 14B, the reported LoRA runs lower CE while ranking accuracy falls from 0.824 to 0.636
+and from 0.852 to 0.364. LoCA reaches 0.840 and 0.864 in these cells. This CE–accuracy gap is consistent with
+completion-format overfitting, but the current experiment does not isolate that cause.
+4.3 Resource Use
+Table 2 reports memory beyond the loaded model. LoCA uses 0.71–0.74× the GPU peak memory of LoRA and 0.48–
+0.64× its CPU steady-state memory. The GPU peak is measured over the full LoCA run and includes the temporary
+graph used for calibration. After calibration, LoCA stores the streaming statistics Gℓ ∈ Rr×r and Cℓ ∈ Rd×r . Their
+size is O(L(r2 + dr)) and does not grow with the number of training tokens. On BoolQ at length 512, LoRA reaches
+32.3 GB and LoCA reaches 16.3 GB. LoRA is killed on the 32 GB device, while LoCA completes the run.
+Adapter-MeZO uses the least memory in the table. It perturbs parameters in place and stores no gradient graph or
+optimizer state. Its update estimate is stochastic and needs 103–104 perturbation steps in our runs, together with a
+learning-rate search at each scale.
+6
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+After calibration, one LoCA pass costs about one forward pass. On CPU, its measured per-pass time is 1.7–1.9× lower
+than LoRA’s. On 1.5B ARC-Easy, 3,000 Adapter-MeZO steps take 4.2 hours. On 1.5B ARC-Challenge, the measured
+LoCA run reaches lower CE in 1.7× less wall-clock. We did not record calibration latency separately, so the general
+timing claim is limited to post-calibration cost. The GPU peak-memory result still includes calibration.
+4.4 Cross-Family Results
+The target-size coefficient η is sensitive to model scale. We normalize it by the residual-stream norm, which makes it a
+relative change. We use the candidate set {0.003, 0.01, 0.03} at every tested scale and select a value by held-out CE.
+The search range is not redesigned for each model.
+On SST-2, the normalized candidate set gives recoveries of 1.02, 1.00, 0.92, and 0.94 across four sizes. The hand-tuned
+absolute values give 0.94, 0.91, 0.89, and 0.82. Thus, one shared candidate set works across the tested scales, although
+held-out selection is still used within that set.
+We also test SmolLM2-1.7B. Reusing the absolute η gives recovery from 0 to 0.07 across four tasks. With target
+normalization, recovery ranges from 0.93 to 1.29 and averages about 1.04. These results support the use of relative
+target size on a second model family. They do not show that normalization will transfer to every architecture.
+5 Discussion
+Across the 25 combinations of Qwen2.5 model scales and tasks, LoCA reports lower evaluation CE than the correspond-
+ing LoRA run in 16 cases. Although these cells are mainly single runs, and therefore do not establish that LoCA is
+generally better than LoRA, they show that LoCA is not merely an inaccurate copy of the LoRA update. Whereas LoRA
+follows the global CE gradient, LoCA optimizes regularized low-rank objectives and selects a snapshot by held-out CE.
+These choices define a different adaptation path. Ridge regularization, the low-rank constraint, and held-out selection
+may jointly discourage large local changes, although our experiments do not isolate their effects. BoolQ illustrates
+another difference. At 7B and 14B, LoRA lowers CE while ranking accuracy falls from 0.824 to 0.636 and from
+0.852 to 0.364. LoCA reaches accuracies of 0.840 and 0.864 in the same cells. While this pattern is consistent with
+completion-format overfitting, the current experiments do not establish that cause. More broadly, because the local
+objectives impose a different inductive bias from global gradient updates, they may also lead to different generalization
+behavior.
+Although both LoCA and Adapter-MeZO reduce the need for repeated backward passes, they obtain update information
+in different ways. MeZO applies zeroth-order SGD to language-model tuning, estimating an update direction from
+random perturbations and function-value differences [4]. This gives MeZO an inference-level memory footprint, but
+each query provides a stochastic directional estimate rather than an exact solution to the current objective. Classical
+zeroth-order theory shows that, when gradients are replaced by random function-value estimators, the resulting methods
+incur additional variance and may suffer dimension-dependent query or convergence costs [10, 11]. It’s also worth
+mentioning that, although random feedback is distinct from zeroth-order estimation, the random-map tested when
+constructing feedback operator exhibits near-zero in-probe alignment with the true hidden-state gradient, whereas
+calibration produces substantially better-aligned feedback. These analyses rely on assumptions that do not directly
+describe non-convex LLM tuning. Nevertheless, they identify a general cost of random function-value probes. Recent
+work has therefore introduced variance-reduced MeZO variants, which are designed to improve stability and convergence
+in language-model tuning [? ].
+By contrast, once the forward states and local target are fixed, the ridge objective used by LoCA is a regularized convex
+quadratic. When λ > 0, this objective has a unique closed-form solution. The block update uses sufficient statistics
+accumulated from the current data, rather than repeatedly estimating random directions. It also avoids an iterative
+learning-rate schedule inside the block solve. The benefit of the closed form is not a guarantee of global optimality.
+Instead, it removes optimization error within the current local subproblem. Because other adapters and hidden states
+change after an update, the local target also changes across outer iterations. Global CE therefore need not decrease at
+every step.
+Since the two methods pay for update information in different ways, their iteration counts also differ substantially in
+our experiments. Adapter-MeZO requires between 103 and 104 perturbation steps, whereas LoCA uses at most 40 outer
+iterations. LoCA still requires the target-size coefficient and ridge regularization to be selected, and its calibration cost
+is not zero. Moreover, because calibration latency was not recorded separately, the current measurements do not support
+a universal end-to-end speed claim. The observed trade-off is more specific. Adapter-MeZO has the lowest memory
+use, while LoCA exchanges one probe backward pass for structured local updates and fewer later iterations.
+7
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+When the local correction is expressed relative to the residual-stream scale, the same candidate set can be reused across
+Qwen2.5 models from 0.5B to 14B and on SmolLM2-1.7B. An absolute correction, in contrast, changes substantially
+with model size and architecture. This result suggests that relative representation change is more portable than an
+absolute hidden-state correction. It does not make LoCA hyperparameter-free, since a value is still selected from the
+shared set by held-out CE. The supported claim is therefore that the candidate range transfers across the tested models,
+not that one fixed value works without validation.
+Because the fixed feedback maps are calibrated near the base model, the present results are limited to discriminative
+tasks that require relatively small representation changes. The approximation may weaken when tuning moves far from
+the calibration point or when the task requires a larger shift. Such settings may require a new calibration pass or an
+input-dependent feedback map. Long-form generation and large distribution shifts are also outside the current study.
+LoCA should therefore be viewed as a two-stage method rather than a method that removes backward computation
+entirely. One probe backward pass calibrates the feedback maps, after which adaptation uses forward execution and
+local closed-form solves. A device without backward support can receive the calibrated maps from a training-capable
+host. The reported GPU peak includes calibration, whereas CPU steady-state memory and per-pass time describe
+the later stage. In this sense, LoCA amortizes repeated global credit assignment into one calibration pass, allowing
+subsequent tuning to proceed through forward computation and local solves.
+6 Conclusion
+We presented LoCA, a two-stage method that separates global credit calibration from adapter fitting. One probe
+backward pass fits low-rank maps from the final-layer error to blockwise corrections. After calibration, these maps turn
+forward activations into local targets, and each adapter is fitted by a closed-form ridge solve. The main idea is therefore
+to reuse calibrated credit information rather than reconstruct it through every tuning step.
+Across five discriminative benchmarks and Qwen2.5 models from 0.5B to 14B, LoCA reports lower evaluation CE than
+the corresponding LoRA run in 16 of 25 comparisons. Since most cells are single runs, this count is descriptive and
+does not establish general superiority. The measured GPU peak over the full run, including calibration, is 26 to 29%
+lower than LoRA’s. After calibration, CPU steady-state memory is 36 to 52% lower and per-pass time is 43 to 48%
+lower. A shared scale-normalized candidate set is also reused across the tested Qwen2.5 sizes and on SmolLM2-1.7B,
+with held-out selection within that set.
+The current evidence is limited to small-shift adaptation on discriminative tasks. Fixed feedback maps may become less
+accurate after a large model change or a long tuning path, and long-form generation remains untested. Future work
+should study when recalibration is needed and whether input-dependent feedback can support larger shifts. LoCA is not
+entirely free of backward computation. Instead, it defines a practical boundary: a training-capable host performs one
+calibration pass, while later adaptation can run through forward computation and local solves on an inference-oriented
+device.
+Acknowledgments
+This work was supported in part by the National Key Technologies Research and Development Program
+(2025YFG0202100; 2025YFG0202600). The authors have no competing interests to declare that are relevant to
+the content of this article.
+References
+[1] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang,
+Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie
+Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, and Ryan Lowe. Training language models
+to follow instructions with human feedback. In Advances in Neural Information Processing Systems, volume 35,
+2022.
+[2] Suchin Gururangan, Ana Marasovi´c, Swabha Swayamdipta, Kyle Lo, Iz Beltagy, Doug Downey, and Noah A.
+Smith. Don’t stop pretraining: Adapt language models to domains and tasks. In Proceedings of the 58th Annual
+Meeting of the Association for Computational Linguistics, pages 8342–8360, 2020.
+[3] Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In International Conference on
+Learning Representations, 2015.
+8
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+[4] Sadhika Malladi, Tianyu Gao, Eshaan Nichani, Alex Damian, Jason D. Lee, Danqi Chen, and Sanjeev Arora.
+Fine-tuning language models with just forward passes. In Advances in Neural Information Processing Systems,
+volume 36, 2023.
+[5] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu
+Chen. LoRA: Low-rank adaptation of large language models. In International Conference on Learning Represen-
+tations, 2022.
+[6] Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin de Laroussilhe, Andrea Gesmundo,
+Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for NLP. In Proceedings of the 36th
+International Conference on Machine Learning, pages 2790–2799, 2019.
+[7] Xiang Lisa Li and Percy Liang. Prefix-Tuning: Optimizing continuous prompts for generation. In Proceedings of
+the 59th Annual Meeting of the Association for Computational Linguistics, pages 4582–4597, 2021.
+[8] Brian Lester, Rami Al-Rfou, and Noah Constant. The power of scale for parameter-efficient prompt tuning. In
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing, pages 3045–3059,
+2021.
+[9] James C. Spall. Multivariate stochastic approximation using a simultaneous perturbation gradient approximation.
+IEEE Transactions on Automatic Control, 37(3):332–341, 1992.
+[10] John C. Duchi, Michael I. Jordan, Martin J. Wainwright, and Andre Wibisono. Optimal rates for zero-order
+convex optimization: The power of two function evaluations. IEEE Transactions on Information Theory, 61(5):
+2788–2806, 2015.
+[11] Yurii Nesterov and Vladimir Spokoiny. Random gradient-free minimization of convex functions. Foundations of
+Computational Mathematics, 17(2):527–566, 2017.
+[12] Timothy P. Lillicrap, Daniel Cownden, Douglas B. Tweed, and Colin J. Akerman. Random synaptic feedback
+weights support error backpropagation for deep learning. Nature Communications, 7:13276, 2016.
+[13] Arild Nøkland. Direct feedback alignment provides learning in deep neural networks. In Advances in Neural
+Information Processing Systems, volume 29, 2016.
+[14] Maria Refinetti, Stéphane d’Ascoli, Ruben Ohana, and Sebastian Goldt. Align, then memorise: The dynamics of
+learning with feedback alignment. In Proceedings of the 38th International Conference on Machine Learning,
+pages 8925–8935, 2021.
+[15] Eugene Belilovsky, Michael Eickenberg, and Edouard Oyallon. Greedy layerwise learning can scale to ImageNet.
+In Proceedings of the 36th International Conference on Machine Learning, pages 583–593, 2019.
+[16] Arild Nøkland and Lars Hiller Eidnes. Training neural networks with local error signals. In Proceedings of the
+36th International Conference on Machine Learning, pages 4839–4850, 2019.
+[17] Geoffrey Hinton. The forward-forward algorithm: Some preliminary investigations. arXiv preprint
+arXiv:2212.13345, 2022.
+[18] Xiaoqi Jiao, Yichun Yin, Lifeng Shang, Xin Jiang, Xiao Chen, Linlin Li, Fang Wang, and Qun Liu. TinyBERT:
+Distilling BERT for natural language understanding. In Findings of the Association for Computational Linguistics:
+EMNLP 2020, pages 4163–4174, 2020.
+[19] Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimension of objective
+landscapes. In International Conference on Learning Representations, 2018.
+[20] Armen Aghajanyan, Sonal Gupta, and Luke Zettlemoyer. Intrinsic dimensionality explains the effectiveness of
+language model fine-tuning. In Proceedings of the 59th Annual Meeting of the Association for Computational
+Linguistics, pages 7319–7328, 2021.
+[21] Jiawei Zhao, Zhenyu Zhang, Beidi Chen, Zhangyang Wang, Anima Anandkumar, and Yuandong Tian. GaLore:
+Memory-efficient LLM training by gradient low-rank projection. In Proceedings of the 41st International
+Conference on Machine Learning, 2024.
+[22] Kai Lv, Yuqing Yang, Tengxiao Liu, Qinghui Gao, Qipeng Guo, and Xipeng Qiu. Full parameter fine-tuning for
+large language models with limited resources. In Proceedings of the 62nd Annual Meeting of the Association for
+Computational Linguistics, pages 8187–8198, 2024.
+[23] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. QLoRA: Efficient finetuning of quantized
+LLMs. In Advances in Neural Information Processing Systems, volume 36, 2023.
+[24] Tianqi Chen, Bing Xu, Chiyuan Zhang, and Carlos Guestrin. Training deep nets with sublinear memory cost.
+arXiv:1604.06174, 2016.
+9
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+[25] Qijun Luo, Hengxu Yu, and Xiao Li. BAdam: A memory efficient full parameter optimization method for large
+language models. In Advances in Neural Information Processing Systems, volume 37, 2024.
+[26] Ziming Yu, Pan Zhou, Sike Wang, Jia Li, and Hua Huang. Zeroth-order fine-tuning of LLMs in random subspaces.
+In Proceedings of the IEEE/CVF International Conference on Computer Vision, 2025.
+[27] Yiming Chen, Yuan Zhang, Liyuan Cao, Kun Yuan, and Zaiwen Wen. Enhancing zeroth-order fine-tuning for
+language models with low-rank structures. In International Conference on Learning Representations, 2025.
+[28] Yong Liu, Zirui Zhu, Chaoyu Gong, Minhao Cheng, Cho-Jui Hsieh, and Yang You. Sparse MeZO: Less parameters
+for better performance in zeroth-order LLM fine-tuning. arXiv preprint arXiv:2402.15751, 2024.
+[29] Yanjun Zhao, Sizhe Dang, Haishan Ye, Guang Dai, Yi Qian, and Ivor W. Tsang. Second-order fine-tuning
+without pain for LLMs: A Hessian informed zeroth-order optimizer. In International Conference on Learning
+Representations, 2025.
+[30] Julien Launay, Iacopo Poli, François Boniface, and Florent Krzakala. Direct feedback alignment scales to modern
+deep learning tasks and architectures. In Advances in Neural Information Processing Systems, volume 33, 2020.
+[31] Mengye Ren, Simon Kornblith, Renjie Liao, and Geoffrey Hinton. Scaling forward gradient with local losses. In
+International Conference on Learning Representations, 2023.
+[32] Qwen Team. Qwen2.5 technical report. arXiv:2412.15115, 2024.
+[33] Loubna Ben Allal, Anton Lozhkov, Elie Bakouch, Gabriel Martín Blázquez, Guilherme Penedo, Lewis Tunstall,
+et al. SmolLM2: When smol goes big – data-centric training of a small language model. arXiv:2502.02737, 2025.
+[34] Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D. Manning, Andrew Ng, and Christopher
+Potts. Recursive deep models for semantic compositionality over a sentiment treebank. In Proceedings of the
+2013 Conference on Empirical Methods in Natural Language Processing, pages 1631–1642, 2013.
+[35] Christopher Clark, Kenton Lee, Ming-Wei Chang, Tom Kwiatkowski, Michael Collins, and Kristina Toutanova.
+BoolQ: Exploring the surprising difficulty of natural yes/no questions. In Proceedings of the 2019 Conference of
+the North American Chapter of the Association for Computational Linguistics, pages 2924–2936, 2019.
+[36] Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and Oyvind Tafjord.
+Think you have solved question answering? try ARC, the AI2 reasoning challenge. arXiv:1803.05457, 2018.
+[37] Todor Mihaylov, Peter Clark, Tushar Khot, and Ashish Sabharwal. Can a suit of armor conduct electricity? a
+new dataset for open book question answering. In Proceedings of the 2018 Conference on Empirical Methods in
+Natural Language Processing, pages 2381–2391, 2018.
+[38] Rowan Zellers, Ari Holtzman, Yonatan Bisk, Ali Farhadi, and Yejin Choi. HellaSwag: Can a machine really finish
+your sentence? In Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics,
+pages 4791–4800, 2019.
+10
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Appendix
+A Scope and Roadmap
+This section expands the opening of the main paper’s Methodology section. It fixes the scope of the two-stage claim
+and states how the remaining sections support the equations in the main paper.
+LoCA separates credit calibration from adapter fitting. In Stage I, one probe backward pass through the frozen base
+model produces hidden-state gradients used to fit the feedback maps {Fℓ}L ℓ=1. In Stage II, these maps are fixed. Each
+outer iteration then uses a forward pass, the analytic error at the frozen language-model head, and blockwise ridge
+solves; it does not differentiate through a backbone block.
+Sections S2–S8 expand the Methodology section of the main paper. The mathematical statements have three distinct
+scopes:
+1. the language-model-head error and the two ridge minimizers are exact for the stated fixed data;
+2. fixed feedback defines a virtual hidden-state descent step only under explicit alignment and smoothness conditions;
+3. the fitted adapter need not realize that virtual step exactly, and the full outer iteration is not claimed to decrease
+global cross-entropy monotonically.
+Sections S9–S13 provide experimental context for the setup, main benchmark, resource study, scale normalization, and
+MeZO baselines.
+B Sequence-Level Notation and the Affine Adapter
+This section expands “Local Targets” and Eq. (1) of the main paper. Its purpose is to show why a block solve is linear
+in Bℓ while retaining the cross-token dependence created by self-attention.
+Consider a decoder-only transformer with L frozen blocks and hidden width d. For a sequence with K positions, stack
+the hidden states after block ℓ by columns:
+Hℓ = [hℓ,1, . . . , hℓ,K ] ∈ Rd×K . (13)
+The vector hℓ in the main paper denotes one column of Hℓ. LoCA adds a direct low-rank correction to the output
+residual stream:
+Hℓ = ¯Hℓ + BℓAℓHℓ−1 = ¯Hℓ + BℓP all ℓ , (14)
+where
+¯Hℓ := f base ℓ (Hℓ−1), Aℓ ∈ Rr×d, Bℓ ∈ Rd×r , P all ℓ := AℓHℓ−1 ∈ Rr×K . (15)
+For one block solve, the current forward states and all other adapters are fixed. Hence ¯Hℓ and P all ℓ are fixed with respect
+to Bℓ, and
+Hℓ = ¯Hℓ + BℓP all ℓ (16)
+is exactly affine in Bℓ. The block solve therefore does not linearize the adapter.
+Let wt ≥ 0 be the loss weight at position t; a masked position has wt = 0. For one sequence, the scalar training loss is
+L =
+KX
+t=1
+wt ℓCE(hL,t, yt). (17)
+The ridge objective in the main paper is accumulated over N selected prediction positions from the training data. Their
+projected features are denoted
+Pℓ = [p(1) ℓ , . . . , p(N ) ℓ ] ∈ Rr×N . (18)
+Using only selected prediction positions is part of the local surrogate, not an exact reduction of the global gradient. A
+masked context position can still have a nonzero lower-layer gradient because it can affect later unmasked losses.
+11
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+C Exact Head Error and Full Hidden-State Credit
+This section expands the top-layer error in “Local Targets” and clarifies what the feedback operator in “The Feedback
+Operator” approximates. It separates the exact head derivative from the cross-token, cross-layer gradient supplied by
+the probe backward pass.
+The frozen language-model head is Wu ∈ RV ×d. At position t,
+zt = WuhL,t, ℓCE(hL,t, yt) = −zt,yt + log
+VX
+j=1
+exp(zt,j ). (19)
+Lemma C.1 (Top-layer error). The contribution of position t to the derivative with respect to the last hidden state is
+et := wt∇hL,t ℓCE = wtW ⊤ u   softmax(zt) − onehot(yt)  . (20)
+Thus et = 0 at a zero-weight position.
+The vector e in the main paper is the single-position case with unit weight. Here wt also covers masking and loss
+reduction.
+Proof. For logit coordinate i,
+∂ℓCE
+∂zt,i
+= −1[i = yt] + exp(zt,i)P
+j exp(zt,j ) . (21)
+Multiplication by wt and the chain rule through zt = WuhL,t give (20).
+Stack E = [e1, . . . , eK ] ∈ Rd×K and define the exact gradient of the scalar sequence loss with respect to the block
+output by
+Gℓ := ∇Hℓ L = [gℓ,1, . . . , gℓ,K ] ∈ Rd×K . (22)
+If Jℓ+1:L is the Jacobian of the current downstream adapted network, with all current adapters held fixed, then
+vec(Gℓ) = J ⊤ ℓ+1:L vec(E). (23)
+Equivalently, causal attention gives the positionwise expression
+gℓ,s =
+KX
+t=s
+ ∂hL,t
+∂hℓ,s
+⊤
+et. (24)
+Consequently, es = 0 does not generally imply gℓ,s = 0.
+One probe backward pass computes all matrices {Gℓ} in (23). During Stage II, LoCA instead applies the same d × d
+map independently to the top errors:
+Qℓ := FℓE. (25)
+This is a tokenwise predictor of hidden-state credit, not an exact factorization of the full sequence Jacobian. The
+approximation begins at (25), not at the language-model head.
+D Ideal Targets and Conditional Virtual Descent
+This section expands Eqs. (3)–(4) in “Local Targets” and the alignment discussion in “The Feedback Operator.” It
+explains why the ideal target matches the global gradient locally and gives the precise condition under which fixed
+feedback defines a virtual descent step.
+For a fixed current forward pass, the differential of the global loss caused by a perturbation ∆Hℓ is
+dL = ⟨Gℓ, ∆Hℓ⟩F . (26)
+Since dHℓ = (dBℓ)P all ℓ , the exact global adapter gradient is
+∇Bℓ L = Gℓ(P all ℓ )⊤. (27)
+If Gℓ were available at every iteration, the ideal hidden-state target with absolute representation-space step sℓ > 0 would
+be
+bHℓ = Hℓ − sℓGℓ. (28)
+12
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+At the current Bℓ, the gradient of 1 2
+ ¯Hℓ + BℓP all ℓ − bHℓ  2 F equals sℓ∇Bℓ L. Thus the ideal full-state target reproduces the global adapter-gradient direction at the current forward state.
+LoCA replaces Gℓ by Qℓ = FℓE and forms the virtual target
+Tℓ = Hℓ − sℓQℓ. (29)
+The following result concerns this virtual change in one block output. It does not yet concern the fitted adapter.
+Proposition D.1 (Single-block virtual descent under alignment). Consider one block and one batch, so sℓ is a scalar.
+Fix the current downstream adapted network and suppose that the upper-network loss, viewed as a function of Hℓ, has
+Mℓ-Lipschitz gradient on a convex set containing {Hℓ − asℓQℓ : 0 ≤ a ≤ 1}, where Mℓ > 0. Then
+L(Hℓ − sℓQℓ) − L(Hℓ) ≤ −sℓ ⟨Gℓ, Qℓ⟩F + Mℓs2 ℓ 2 ∥Qℓ∥2 F . (30)
+If Qℓ ̸= 0 and
+⟨Gℓ, Qℓ⟩F ≥ γℓ ∥Qℓ∥2 F (γℓ > 0), (31)
+then every
+0 < sℓ < 2γℓ Mℓ (32)
+gives a strict decrease for the virtual single-block step.
+Proof. The descent lemma on the stated convex set gives
+L(Hℓ + ∆) ≤ L(Hℓ) + ⟨Gℓ, ∆⟩F + Mℓ 2 ∥∆∥2 F . (33)
+Substitute ∆ = −sℓQℓ and then use (31). The resulting upper bound is
+−sℓ
+
+γℓ − Mℓsℓ 2  ∥Qℓ∥2 F , (34)
+which is negative under (32).
+When both matrices are nonzero, the diagnostic cosine is
+αℓ = ⟨Gℓ, Qℓ⟩F ∥Gℓ∥F ∥Qℓ∥F . (35)
+Positive cosine makes −Qℓ a first-order descent direction, but the admissible step also depends on relative magnitude
+and local curvature.
+Corollary D.2 (Relative feedback error). Suppose Gℓ ̸= 0 and ∥Qℓ − Gℓ∥F ≤ ε ∥Gℓ∥F for 0 ≤ ε < 1. Then the virtual step is strictly descending whenever
+0 < sℓ < 2(1 − ε) Mℓ(1 + ε)2 . (36)
+Proof. Cauchy–Schwarz and the triangle inequality give
+⟨Gℓ, Qℓ⟩F ≥ (1 − ε) ∥Gℓ∥2 F , (37)
+∥Qℓ∥F ≤ (1 + ε) ∥Gℓ∥F . (38)
+Substitution into (30) proves the claim.
+E One-Shot Calibration of the Feedback Map
+This section derives Eq. (5) in “The Feedback Operator.” It shows the exact ridge solution used during Stage I and the
+precise effect of the subsequent rank-k truncation.
+The probe loss uses the same masking, weighting, and reduction convention as the adaptation loss. One backward pass
+gives the exact hidden-state gradients in (23). Select the Np probe positions used by the calibration procedure and stack
+their top errors and exact gradient columns as
+eE = [e(1), . . . , e(Np )] ∈ Rd×Np , eGℓ = [g(1) ℓ , . . . , g(Np ) ℓ ] ∈ Rd×Np . (39)
+13
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Because of (24), a column of eGℓ may already aggregate credit from several later losses. The calibration therefore fits
+a predictor from a same-position top error to that exact gradient column; it does not identify a d × d sequence-level
+Jacobian.
+The alignment diagnostic in the main paper uses the stacked prediction and exact probe gradient for each block. The
+value −0.005 is the mean blockwise cosine for random feedback, while 0.3–0.5 is the observed range after fitting.
+These are in-probe diagnostics, not guarantees for later iterations.
+The full ridge fit is
+bFℓ = arg min
+F ∈Rd×d
+F eE − eGℓ  2 F + β ∥F ∥2 F , β > 0. (40)
+Theorem E.1 (Feedback ridge solution). Problem (40) is strictly convex and has the unique solution
+bFℓ = eGℓ eE⊤  eE eE⊤ + βId −1 . (41)
+Equivalently,
+bFℓ = eGℓ   eE⊤ eE + βINp −1 eE⊤. (42)
+Proof. The gradient of the objective is
+2(F eE − eGℓ) eE⊤ + 2βF. (43)
+The first-order condition is
+F ( eE eE⊤ + βId) = eGℓ eE⊤. (44)
+For nonzero x,
+x⊤( eE eE⊤ + βId)x =  eE⊤x  2 + β ∥x∥2 > 0, (45)
+so the matrix is positive definite, proving uniqueness and (41). The push-through identity
+eE⊤( eE eE⊤ + βId)−1 = ( eE⊤ eE + βINp )−1 eE⊤ (46)
+gives (42). In implementation, these expressions are evaluated by solving a linear system rather than forming an explicit
+inverse.
+Let bFℓ = U ΣV ⊤, with σ1 ≥ σ2 ≥ · · · ≥ 0. The map retained by LoCA is
+Fℓ = UkΣkV ⊤ k , k = 8 in the experiments. (47)
+Lemma E.2 (Rank-truncation error). With the convention σk+1 = 0 when k is at least the rank of bFℓ,
+ bFℓ − Fℓ  2 F = X j>k σ2 j , (48) ( bFℓ − Fℓ)e  ≤ σk+1 ∥e∥ . (49)
+Proof. The first identity is the Eckart–Young truncated-SVD property. The second follows from
+ bFℓ − Fℓ  2 = σk+1.
+The truncation is the best rank-k Frobenius approximation to the fitted matrix bFℓ. It is not, in general, the exact
+optimizer of a rank-constrained version of (40), whose data-fit term is weighted by the probe covariance. Nor does the
+calibration theorem provide an out-of-distribution or long-horizon alignment guarantee.
+F Closed-Form Block Fit and Target Realization
+This section expands “Closed-Form Per-Block Solve” and Eqs. (6)–(9) of the main paper. It derives the exact ridge
+minimizer and separates exact optimization of the local quadratic from exact realization of the virtual hidden-state
+target.
+14
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+At outer iteration t, let Pℓ ∈ Rr×N stack the selected projected features. For position n, write q(n) ℓ = Fℓe(n) and let
+s(n) ℓ be the absolute step used for its mini-batch. Its residual target is
+ρ(n) ℓ = B(t) ℓ p(n) ℓ − s(n) ℓ q(n) ℓ , Rℓ = [ρ(1) ℓ , . . . , ρ(N ) ℓ ]. (50)
+All positions in one mini-batch share the same step. During the solve, Pℓ and Rℓ are fixed.
+The local objective is
+Φℓ(B) = ∥BPℓ − Rℓ∥2 F + λ ∥B∥2 F , λ > 0. (51)
+Define
+Gℓ := PℓP ⊤ ℓ ∈ Rr×r , Cℓ := RℓP ⊤ ℓ ∈ Rd×r . (52)
+Theorem F.1 (Unique closed-form block minimizer). Problem (51) is strictly convex and has the unique minimizer
+B⋆ ℓ = Cℓ(Gℓ + λIr )−1. (53)
+Moreover, for every B ∈ Rd×r ,
+Φℓ(B) − Φℓ(B⋆ ℓ ) = tr   (B − B⋆ ℓ )(Gℓ + λIr )(B − B⋆ ℓ )⊤ ≥ 0. (54)
+The inequality is strict unless B = B⋆ ℓ .
+Proof. Expanding the data-fit term gives
+Φℓ(B) = tr(BPℓP ⊤ ℓ B⊤) − 2 tr(RℓP ⊤ ℓ B⊤) + tr(RℓR⊤ ℓ ) + λ tr(BB⊤). (55)
+Thus
+∇B Φℓ(B) = 2B(Gℓ + λIr ) − 2Cℓ. (56)
+For nonzero x ∈ Rr ,
+x⊤(Gℓ + λIr )x = P ⊤ ℓ x 2 + λ ∥x∥2 > 0. (57)
+Therefore Gℓ + λIr is positive definite, the objective is strictly convex, and the first-order condition gives (53).
+Substituting B = B⋆ ℓ + ∆ and using B⋆ ℓ (Gℓ + λIr ) = Cℓ gives (54).
+The desired displacement at fitted position n is −s(n) ℓ q(n) ℓ . Stack these displacements as Dtar ℓ . The fitted adapter realizes
+∆fit ℓ = (B⋆ ℓ − B(t) ℓ )Pℓ. (58)
+Their difference is exactly the data residual
+Efit ℓ := ∆fit ℓ − Dtar ℓ = B⋆ ℓ Pℓ − Rℓ. (59)
+It need not vanish because the target can lie outside the adapter feature span and because ridge regularization trades fit
+against ∥B∥2 F . Moreover, Section S4 uses all sequence positions, whereas the implemented fit uses selected prediction positions. This restriction is another approximation.
+For an isolated update of Bℓ with its cached input held fixed, the direct change at all sequence positions is
+∆H dir ℓ = (B⋆ ℓ − B(t) ℓ )P all ℓ . (60)
+Under the smoothness assumption of Section S4,
+L(Hℓ + ∆H dir ℓ ) − L(Hℓ) ≤ 
+Gℓ, ∆H dir ℓ  F + Mℓ 2 ∆H dir ℓ 2 F . (61)
+This bound applies to the isolated cached-input change. It is not the full state change after a Jacobi update, because
+simultaneous upstream updates also change Hℓ−1 and P all ℓ . Neither this bound nor the ridge theorem guarantees descent
+of the outer iteration.
+15
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+G Streaming Statistics and Numerical Solution
+This section expands the practical paragraph after Eq. (9) in “Closed-Form Per-Block Solve.” It proves that the exact
+sufficient statistics can be accumulated by mini-batch and states the numerical solve actually required.
+Partition the N fitted positions into mini-batches I1, . . . , IM . Then
+Gℓ =
+MX
+m=1
+X
+n∈Im
+p(n) ℓ p(n)⊤ ℓ , (62)
+Cℓ =
+MX
+m=1
+X
+n∈Im
+ρ(n) ℓ p(n)⊤ ℓ . (63)
+Each mini-batch can be discarded after its contribution has been accumulated. For explicit nonnegative weights an, the
+same derivation uses
+Gℓ =
+X
+n
+anp(n) ℓ p(n)⊤ ℓ , (64)
+Cℓ =
+X
+n
+anρ(n) ℓ p(n)⊤ ℓ . (65)
+The corresponding objective is P n an Bp(n) ℓ − ρ(n) ℓ  2 + λ ∥B∥2 F . The ridge term keeps the system positive definite
+even when the observed features do not span Rr .
+The persistent statistics require r2 + dr values per block and do not grow with the total number of accumulated tokens.
+Numerically, LoCA solves
+(Gℓ + λIr )X = C ⊤ ℓ , B⋆ ℓ = X ⊤, (66)
+using a positive-definite linear solver. No explicit matrix inverse is required.
+H Scale-Normalized Targets and the Outer Iteration
+This section expands “Full Algorithm” and Eq. (10) of the main paper. It defines RMS precisely, distinguishes the
+dimensionless target coefficient from the absolute step used in Section S4, and explains why exact block solves do not
+imply convergence of the outer loop.
+For a nonempty matrix X ∈ Ra×b, define
+RMS(X) := ∥X∥F√
+ab
+. (67)
+The implementation uses a separate scalar for each block and mini-batch. For one such batch, let η ≥ 0 be the
+dimensionless candidate selected by held-out CE and define
+¯ηℓ =
+
+
+
+η RMS(Hℓ−1) RMS(Qℓ) , RMS(Qℓ) > 0,
+0, Qℓ = 0,
+Dtar ℓ = −¯ηℓQℓ. (68)
+Here ¯ηℓ is the absolute step sℓ used in Section S4. When Section S6 accumulates several mini-batches, each target
+column uses the step computed for its own mini-batch.
+Proposition H.1 (Target magnitude and positive scale invariance). If Qℓ ̸= 0, then
+RMS(Dtar ℓ ) = η RMS(Hℓ−1). (69)
+Replacing Qℓ by aQℓ for any a > 0 leaves Dtar ℓ unchanged.
+Proof. Absolute homogeneity of RMS gives
+RMS(Dtar ℓ ) = ¯ηℓ RMS(Qℓ) = η RMS(Hℓ−1). (70)
+For a > 0, both the denominator of ¯ηℓ and Qℓ acquire the same factor a, which cancels.
+16
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+Equation (69) concerns the virtual target, not the direct cached-input change in (60). Moreover, the sufficient descent
+bound in (32) applies to ¯ηℓ, not directly to the shared coefficient η. Scale normalization supports transfer of a candidate
+range; it is not a descent theorem and does not make LoCA hyperparameter-free.
+Let D(B(t)) denote all local data produced by the current forward pass, including {Pℓ, ¯Hℓ, Qℓ, Rℓ}L ℓ=1, and let S apply
+the blockwise ridge solutions. A Jacobi outer update is
+B(t+1) = S   D(B(t))  . (71)
+Theorem S6.1 proves that every component of S minimizes its current local quadratic. It does not imply that S ◦ D is a
+contraction. After an update, the projected features, frozen-block outputs, top error, local targets, and realization errors
+can all change. Consequently, the next iteration solves different quadratics and global CE can be non-monotone. The
+main paper therefore selects the returned snapshot by held-out CE and retains the frozen model as a candidate.
+A Jacobi schedule forms all local data from one shared forward pass and then solves blocks independently. A Gauss–
+Seidel schedule refreshes downstream states after a block update and therefore requires additional partial forward
+computation. No convergence theorem is claimed for either schedule on the nonlinear adapted transformer.
+I Experimental Setup and Recovery Metrics
+This section corresponds to “Experiments–Setup.” It records the comparison boundary, explains the recovery ratios, and
+states which experimental conclusions are descriptive.
+The main comparison uses the frozen model, LoRA, Adapter-MeZO, and LoCA. Adapter-MeZO perturbs the same
+low-rank adapter parameterization as LoCA and LoRA; full-parameter MeZO is reported separately in Section S13.
+The primary reported metrics are per-token cross-entropy (CE) and ranking accuracy.
+The recovery ratios in the main paper are
+RCE = CEfrozen − CELoCA CEfrozen − CELoRA , (72)
+Racc = accLoCA − accfrozen accLoRA − accfrozen . (73)
+A value of one matches the reported LoRA value. When the frozen-to-LoRA denominator is positive, a value above one
+means that LoCA improves more than LoRA in that cell. The ratio is unstable near a zero denominator, so such cells
+are flagged or omitted and raw CE and accuracy remain primary.
+LoCA uses adapter rank r = 32, at most 40 outer iterations, and held-out CE for early stopping and for selecting η
+from the stated candidate set. Unless otherwise noted, table cells are single runs at seed 0. Cell-level differences and
+counts are therefore descriptive rather than estimates of population-level superiority.
+J Experiment 1: Main Benchmark Comparison
+This section corresponds to “Experiments–Main Results” and Table 1. It explains the two observations that need
+qualification: the count of lower-CE cells and the CE–accuracy discrepancy on BoolQ.
+Across the 25 reported Qwen2.5 task–scale cells, LoCA has lower evaluation CE than the corresponding LoRA run in
+16 cells. This count shows that the local ridge path can differ materially from the LoRA optimization path. Because
+most cells are single runs, it is not evidence that LoCA is generally superior to LoRA.
+For cells with a positive frozen-to-LoRA denominator, recovery above one means that LoCA improves more than the
+reported LoRA run. It is not a significance test, and it can become large when the denominator is small. The main paper
+therefore also reports the raw metrics.
+On BoolQ at 7B and 14B, the LoRA runs reduce CE while ranking accuracy falls from 0.824 to 0.636 and from 0.852
+to 0.364. The LoCA runs reach 0.840 and 0.864. This establishes a mismatch between token-level CE and answer
+ranking in those runs. Completion-format overfitting is a plausible interpretation, but the experiment does not isolate it
+causally.
+K Experiment 2: Resource Use
+This section corresponds to “Experiments–Resource Use” and Table 2. It explains the measurement boundary and
+connects the observed storage to the sufficient statistics derived in Section S7.
+17
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+For each block and N fitted positions, the principal Stage II operations are
+Pℓ = AℓHℓ−1 : O(N dr), (74)
+Qℓ = FℓE : O(N dk), (75)
+Gℓ = PℓP ⊤ ℓ : O(N r2), (76)
+Cℓ = RℓP ⊤ ℓ : O(N dr), (77)
+B⋆ ℓ : O(r3 + dr2). (78)
+The low-rank feedback cost uses Fℓe = Uk(Σk(V ⊤ k e)). The exact head error additionally applies W ⊤ u once per top
+error; this shared head computation is not multiplied by the number of blocks.
+Beyond the frozen checkpoint and ordinary inference buffers, the persistent Stage II storage is
+O
+ 
+Lr2 + Ldr + Ldk  , (79)
+up to constant factors for the fixed projections, adapters, and two feedback factors. The sufficient-statistic term does not
+grow with the total number of processed tokens, although batch size and sequence length still affect transient forward
+buffers.
+The GPU peak in Table 2 is measured over the full LoCA run and includes the temporary backward graph used in Stage I.
+The CPU steady-state memory and per-pass time describe Stage II after calibration. These are different measurement
+boundaries and should not be combined into a claim that the complete method is forward-only or that calibration has
+zero cost.
+Adapter-MeZO has the lowest memory in the table because it stores neither a backward graph nor ridge statistics. In
+the reported runs, it instead uses 103–104 perturbation steps. LoCA uses at most 40 outer iterations, but still pays for
+calibration and for selecting η and λ. The measurements support the stated memory and per-pass comparisons; because
+calibration latency was not separately recorded, they do not establish a universal end-to-end speed advantage.
+L Experiment 3: Scale-Normalized Cross-Family Transfer
+This section corresponds to “Experiments–Cross-Family Results” and Table 3. It explains exactly what transfers across
+model sizes and what is still selected on held-out data.
+The normalized experiment reuses the candidate set
+η ∈ {0.003, 0.01, 0.03} (80)
+for each model reported in Table 3 of the main paper. A value is still selected from this set by held-out CE. Thus the
+candidate range is reused without redesign, but one fixed value is not used without validation.
+On Qwen2.5 SST-2, the normalized candidate set yields the recoveries reported in Table 3 across four model sizes. The
+comparison with separately tuned absolute coefficients tests whether relative residual-stream change is more portable
+than an absolute hidden-state correction. It does not prove scale invariance outside the tested models.
+The SmolLM2-1.7B rows provide the cross-family check. Reusing the absolute coefficient gives recovery between 0
+and 0.07 on the four reported tasks, whereas the normalized target gives recovery between 0.93 and 1.29. This supports
+the relative target parameterization on a second family. It does not make the method hyperparameter-free or establish
+transfer to arbitrary architectures.
+M Precise Boundary of the Forward-Only Claim
+After calibration, assume that the following objects are available on the adaptation device: the frozen checkpoint, fixed
+projections Aℓ, low-rank feedback factors for Fℓ, and the current adapters Bℓ. Then one outer iteration consists of:
+1. a forward pass through the adapted frozen model;
+2. evaluation of (20) at the frozen head;
+3. application of Fℓe using fixed low-rank factors;
+4. streaming accumulation of Gℓ and Cℓ;
+5. positive-definite linear solves for Bℓ.
+18
+
+LoCA: Forward-Only LLM Tuning after One-Shot Calibration with Local Credit Assignment
+None of these steps differentiates through a backbone block. Therefore the adaptation loop is backward-free after
+calibration. The complete method is not backpropagation-free, because producing the calibrated feedback maps requires
+the one probe backward pass described in Section S5. A backward-capable host may perform calibration and transfer
+the resulting maps to an inference-oriented adaptation device, provided the checkpoint and calibration assumptions
+match.
+N MeZO Comparison and Full-Parameter Context
+This section corresponds to the Adapter-MeZO discussion in “Related Work,” “Experiments–Setup,” and the Discussion
+section. It explains why Adapter-MeZO is the matched baseline and reports the separate full-parameter MeZO scaling
+observation used in the main paper.
+Adapter-MeZO is the main comparison because it perturbs the same low-rank adapter parameterization as LoCA and
+LoRA. The methods therefore act on comparable parameter spaces even though they obtain their updates differently:
+Adapter-MeZO uses random function-value perturbations, whereas LoCA solves the current local ridge objectives.
+In the reported runs, Adapter-MeZO has the smallest memory footprint but uses 103–104 perturbation steps and a
+learning-rate search at each scale.
+Figure 2: Full-parameter MeZO on BoolQ across the tested model sizes. Left: best evaluation CE within the reported
+runs. Right: evaluation CE at step 10,000. The full-parameter result worsens with scale in this setting, motivating the
+matched Adapter-MeZO baseline in the main benchmark.
+Figure 2 is limited to BoolQ on the tested Qwen2.5 sizes. It does not establish algorithmic divergence, a long-context
+result, or a general claim about all tasks or zeroth-order methods.
+19

@@ -1,0 +1,23 @@
+[r1-loo-n32] start eval 8.3665
+[r1-loo-n32] it 1 t    0.5s tok   0.001M eval 8.3662 up/step 0.000MB {'gradNorm': 486226.75, 'fitStd': 0.00283}
+[r1-loo-n32] it 2 t    0.6s tok   0.002M eval 8.3660 up/step 0.000MB {'gradNorm': 484301.125, 'fitStd': 0.00261}
+[r1-loo-n32] it 5 t    1.0s tok   0.005M eval 8.3647 up/step 0.000MB {'gradNorm': 489552.219, 'fitStd': 0.00185}
+[r1-loo-n32] it 10 t    1.7s tok   0.010M eval 8.3601 up/step 0.000MB {'gradNorm': 487861.75, 'fitStd': 0.00225}
+[r1-loo-n32] it 20 t    3.2s tok   0.020M eval 8.3479 up/step 0.000MB {'gradNorm': 488413.875, 'fitStd': 0.00188}
+[r1-loo-n32] it 49 t    7.2s tok   0.050M eval 8.3012 up/step 0.000MB {'gradNorm': 487054.594, 'fitStd': 0.00305}
+[r1-loo-n32] it 72 t   10.5s tok   0.074M eval 8.2713 up/step 0.000MB {'gradNorm': 486496.219, 'fitStd': 0.00339}
+[r1-loo-n32] it 98 t   14.2s tok   0.100M eval 8.2107 up/step 0.000MB {'gradNorm': 485771.344, 'fitStd': 0.00288}
+[r1-loo-n32] it 143 t   20.5s tok   0.146M eval 8.0936 up/step 0.000MB {'gradNorm': 486597.812, 'fitStd': 0.00239}
+[r1-loo-n32] it 196 t   28.0s tok   0.201M eval 7.8907 up/step 0.000MB {'gradNorm': 485408.781, 'fitStd': 0.00299}
+[r1-loo-n32] it 214 t   30.5s tok   0.219M eval 7.8440 up/step 0.000MB {'gradNorm': 488053.188, 'fitStd': 0.00213}
+[r1-loo-n32] it 285 t   40.6s tok   0.292M eval 7.7473 up/step 0.000MB {'gradNorm': 486215.531, 'fitStd': 0.00201}
+[r1-loo-n32] it 356 t   50.6s tok   0.365M eval 7.6778 up/step 0.000MB {'gradNorm': 485596.219, 'fitStd': 0.00194}
+[r1-loo-n32] it 427 t   60.6s tok   0.437M eval 7.6327 up/step 0.000MB {'gradNorm': 487580.188, 'fitStd': 0.00177}
+[r1-loo-n32] it 489 t   69.4s tok   0.501M eval 7.5964 up/step 0.000MB {'gradNorm': 485500.156, 'fitStd': 0.00149}
+[r1-loo-n32] it 498 t   70.6s tok   0.510M eval 7.5902 up/step 0.000MB {'gradNorm': 486108.875, 'fitStd': 0.00152}
+[r1-loo-n32] it 569 t   80.7s tok   0.583M eval 7.5694 up/step 0.000MB {'gradNorm': 486342.25, 'fitStd': 0.00164}
+[r1-loo-n32] it 640 t   90.7s tok   0.655M eval 7.5454 up/step 0.000MB {'gradNorm': 485645.375, 'fitStd': 0.00182}
+[r1-loo-n32] it 711 t  100.7s tok   0.728M eval 7.5276 up/step 0.000MB {'gradNorm': 486436.594, 'fitStd': 0.00132}
+[r1-loo-n32] it 782 t  110.8s tok   0.801M eval 7.5061 up/step 0.000MB {'gradNorm': 486818.219, 'fitStd': 0.00098}
+[r1-loo-n32] it 847 t  120.0s tok   0.867M eval 7.4856 up/step 0.000MB {'gradNorm': 485677.406, 'fitStd': 0.00147}
+{"label": "r1-loo-n32", "steps": 847, "startLoss": 8.366497993469238, "finalLoss": 7.48557448387146, "bestLoss": 7.48557448387146, "diverged": false, "upBytesPerStep": 136.0, "tokens": 867328}

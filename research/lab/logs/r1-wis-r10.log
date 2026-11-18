@@ -1,0 +1,23 @@
+[r1-wis-r10] start eval 8.3665
+[r1-wis-r10] it 1 t    0.1s tok   0.005M eval 8.3664 up/step 0.000MB {'projGrad': -1.8053}
+[r1-wis-r10] it 6 t    0.2s tok   0.010M eval 8.3664 up/step 0.000MB {'projGrad': 1.0056}
+[r1-wis-r10] it 16 t    0.5s tok   0.020M eval 8.3661 up/step 0.000MB {'projGrad': -0.268}
+[r1-wis-r10] it 45 t    1.4s tok   0.050M eval 8.3635 up/step 0.000MB {'projGrad': -4.6835}
+[r1-wis-r10] it 94 t    2.9s tok   0.100M eval 8.3607 up/step 0.000MB {'projGrad': -0.5774}
+[r1-wis-r10] it 188 t    5.8s tok   0.201M eval 8.3537 up/step 0.000MB {'projGrad': 1.3895}
+[r1-wis-r10] it 325 t   10.1s tok   0.349M eval 8.3416 up/step 0.000MB {'projGrad': -2.4738}
+[r1-wis-r10] it 469 t   14.5s tok   0.501M eval 8.3307 up/step 0.000MB {'projGrad': -0.3924}
+[r1-wis-r10] it 650 t   20.1s tok   0.694M eval 8.3158 up/step 0.000MB {'projGrad': 0.9332}
+[r1-wis-r10] it 937 t   29.0s tok   1.000M eval 8.2852 up/step 0.000MB {'projGrad': -0.8488}
+[r1-wis-r10] it 973 t   30.1s tok   1.037M eval 8.2797 up/step 0.000MB {'projGrad': 1.3494}
+[r1-wis-r10] it 1296 t   40.1s tok   1.380M eval 8.2071 up/step 0.000MB {'projGrad': -2.3112}
+[r1-wis-r10] it 1620 t   50.1s tok   1.729M eval 8.1153 up/step 0.000MB {'projGrad': 1.2832}
+[r1-wis-r10] it 1878 t   58.1s tok   2.001M eval 8.0273 up/step 0.000MB {'projGrad': -1.8301}
+[r1-wis-r10] it 1944 t   60.1s tok   2.073M eval 8.0032 up/step 0.000MB {'projGrad': 0.8278}
+[r1-wis-r10] it 2268 t   70.1s tok   2.417M eval 7.8918 up/step 0.000MB {'projGrad': -0.0942}
+[r1-wis-r10] it 2592 t   80.1s tok   2.761M eval 7.8005 up/step 0.000MB {'projGrad': 1.5864}
+[r1-wis-r10] it 2914 t   90.1s tok   3.107M eval 7.7247 up/step 0.000MB {'projGrad': 0.0205}
+[r1-wis-r10] it 3237 t  100.2s tok   3.450M eval 7.6646 up/step 0.000MB {'projGrad': 0.1552}
+[r1-wis-r10] it 3561 t  110.2s tok   3.794M eval 7.6243 up/step 0.000MB {'projGrad': -1.4057}
+[r1-wis-r10] it 3878 t  120.0s tok   4.131M eval 7.5933 up/step 0.000MB {'projGrad': -1.0641}
+{"label": "r1-wis-r10", "steps": 3878, "startLoss": 8.366497993469238, "finalLoss": 7.593290448188782, "bestLoss": 7.593290448188782, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4130816}

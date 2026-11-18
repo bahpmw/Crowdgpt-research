@@ -1,0 +1,14 @@
+# SOLO study D: pipeline staleness (peers stream activations with s steps of delay), 10m K=2, 10M tokens
+solo K=1 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k1-10m
+solo K=2 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k2-st0
+solo K=2 lr=0.003 stale=1 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k2-st1
+solo K=2 lr=0.003 stale=2 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k2-st2
+solo K=2 lr=0.003 stale=4 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k2-st4
+solo K=2 lr=0.003 stale=8 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k2-st8
+solo K=3 lr=0.003 stale=4 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --label s-10m-k3-st4
+solo K=1 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --seed 1 --label s-10m-k1-seed1
+solo K=2 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --seed 1 --label s-10m-k2-seed1
+solo K=3 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --seed 1 --label s-10m-k3-seed1
+solo K=1 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --seed 2 --label s-10m-k1-seed2
+solo K=2 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --seed 2 --label s-10m-k2-seed2
+solo K=3 lr=0.003 --preset 10m --seq 256 --batch 16 --tokens 4000000 --seconds 100000 --seed 2 --label s-10m-k3-seed2

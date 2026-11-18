@@ -1,0 +1,139 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-wismezo",
+ "method": "wismezo",
+ "cfg": {},
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 15.0,
+ "steps": 491,
+ "totals": {
+  "tokens": 523264,
+  "fwd": 4042752.0,
+  "bwd": 0.0,
+  "up": 23568.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 4042752.0
+ },
+ "startLoss": 8.366497993469238,
+ "finalLoss": 8.328217506408691,
+ "bestLoss": 8.328217506408691,
+ "diverged": false,
+ "upBytesPerStep": 48.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 8.366497993469238
+  },
+  {
+   "it": 1,
+   "seconds": 0.192,
+   "tokens": 5120,
+   "compute": 12288.0,
+   "up": 48.0,
+   "down": 0.0,
+   "evalLoss": 8.366422653198242,
+   "projGrad": -1.8053
+  },
+  {
+   "it": 6,
+   "seconds": 0.344,
+   "tokens": 10240,
+   "compute": 53248.0,
+   "up": 288.0,
+   "down": 0.0,
+   "evalLoss": 8.36640739440918,
+   "projGrad": 1.0056
+  },
+  {
+   "it": 16,
+   "seconds": 0.647,
+   "tokens": 20480,
+   "compute": 135168.0,
+   "up": 768.0,
+   "down": 0.0,
+   "evalLoss": 8.36611294746399,
+   "projGrad": -0.268
+  },
+  {
+   "it": 45,
+   "seconds": 1.522,
+   "tokens": 50176,
+   "compute": 372736.0,
+   "up": 2160.0,
+   "down": 0.0,
+   "evalLoss": 8.363508224487305,
+   "projGrad": -4.6835
+  },
+  {
+   "it": 94,
+   "seconds": 3.007,
+   "tokens": 100352,
+   "compute": 774144.0,
+   "up": 4512.0,
+   "down": 0.0,
+   "evalLoss": 8.360725402832031,
+   "projGrad": -0.5774
+  },
+  {
+   "it": 166,
+   "seconds": 5.206,
+   "tokens": 178176,
+   "compute": 1368064.0,
+   "up": 7968.0,
+   "down": 0.0,
+   "evalLoss": 8.354937553405762,
+   "projGrad": 0.6137
+  },
+  {
+   "it": 188,
+   "seconds": 5.865,
+   "tokens": 200704,
+   "compute": 1548288.0,
+   "up": 9024.0,
+   "down": 0.0,
+   "evalLoss": 8.353667497634888,
+   "projGrad": 1.3895
+  },
+  {
+   "it": 332,
+   "seconds": 10.213,
+   "tokens": 356352,
+   "compute": 2736128.0,
+   "up": 15936.0,
+   "down": 0.0,
+   "evalLoss": 8.341131210327148,
+   "projGrad": 2.5311
+  },
+  {
+   "it": 469,
+   "seconds": 14.352,
+   "tokens": 500736,
+   "compute": 3862528.0,
+   "up": 22512.0,
+   "down": 0.0,
+   "evalLoss": 8.3307044506073,
+   "projGrad": -0.3924
+  },
+  {
+   "it": 491,
+   "seconds": 15.012,
+   "tokens": 523264,
+   "compute": 4042752.0,
+   "up": 23568.0,
+   "down": 0.0,
+   "evalLoss": 8.328217506408691,
+   "projGrad": -3.109
+  }
+ ]
+}

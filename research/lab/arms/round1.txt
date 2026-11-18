@@ -1,0 +1,53 @@
+# baselines
+adam lr=0.003 --label r1-adam
+dust pop=8 chunk=8 lr=0.05 --label r1-dust8
+dust pop=32 chunk=16 lr=0.05 --label r1-dust32
+mezo k=1 eps=0.001 lr=0.0001 --label r1-mezo
+mezo k=4 eps=0.001 lr=0.0001 --label r1-mezo-k4
+# SOLO (2609.35440)
+solo K=1 --label r1-solo-bp
+solo K=2 cos_every=100 --label r1-solo-k2
+solo K=3 cos_every=100 --label r1-solo-k3
+solo K=2 heads=private cos_every=100 --label r1-solo-k2-priv
+solo K=2 stale=4 --label r1-solo-k2-stale4
+# SZO-kappa (2611.08712)
+szo kind=np n=16 --label r1-szo-np16
+szo kind=szo1 n=16 aware=true --label r1-szo-szo1-16a
+szo kind=szo1 n=4 aware=true --label r1-szo-szo1-4a
+szo kind=ntwp n=16 --label r1-szo-ntwp16
+# LoCA (2608.03020)
+loca calib=10 --label r1-loca-c10
+loca calib=50 exact_last=true --label r1-loca-c50-xl
+locaft --init ckpt/adam30.pt --label r1-locaft
+locaft solver=adam --init ckpt/adam30.pt --label r1-locaft-lora
+adam lr=0.003 --init ckpt/adam30.pt --label r1-ft-adam
+# WIS-MeZO (2611.16317)
+wismezo k=4 eps=0.001 lr=0.0001 r=0.1 tau=100 --label r1-wis-r10
+wismezo k=4 eps=0.001 lr=0.0001 r=0.1 tau=100 mask=random --label r1-wisrand-r10
+mezo k=4 eps=0.001 lr=0.0001 --init ckpt/adam30.pt --label r1-ft-mezo-k4
+wismezo k=4 eps=0.001 lr=0.0001 r=0.05 tau=100 --init ckpt/adam30.pt --label r1-ft-wis-r05
+# EGGROLL unrolled / LOO-ROLL (2609.10980)
+loo n=32 sigma=0.001 lr=0.5 --label r1-loo-n32
+loo n=32 sigma=0.001 lr=0.5 baseline=mirror --label r1-mirror-n32
+mezo k=16 eps=0.001 lr=0.0001 --label r1-mezo-k16
+# ZO-Muon (2602.17155)
+zomuon r=64 nq=8 mu=0.001 eta=0.03 --label r1-zomuon-e03
+zomuon r=64 nq=8 mu=0.001 eta=0.03 ortho=false --label r1-subzo-e03
+# ZO at the Edge of Stability (2604.14669)
+eos n=4 eps=0.001 beta=0 c=0.05 --label r1-eos-c05-b0
+eos n=4 eps=0.001 beta=0.9 c=0.05 --label r1-eos-c05-b9
+# MobileSpec (2611.04797)
+mobilespec pairs=15 mu_rel=0.03 alpha=1 --label r1-ms-scratch
+mobilespec pairs=15 mu_rel=0.03 alpha=1 --init ckpt/adam30.pt --label r1-ms-ft
+mezo k=15 eps=0.001 lr=0.0001 --init ckpt/adam30.pt --label r1-ft-mezo-k15
+# SparseLoCo / Covenant-72B (2603.08163)
+adam lr=0.003 workers=4 --label r1-adam4
+sparseloco topk=0 --label r1-sl-diloco-sgd
+sparseloco --label r1-sl-sparseloco
+sparseloco beta=0 --label r1-sl-noef
+sparseloco byz=1 attack=flip --label r1-sl-byz-mean
+sparseloco byz=1 attack=flip gauntlet=1 gscale=0.25 --label r1-sl-byz-gauntlet
+# Decoupled DiLoCo (2604.21428)
+ddiloco async=0 --label r1-dd-sync
+ddiloco mom=0.5 --label r1-dd-async-m5
+ddiloco mom=0.5 quant=4 --label r1-dd-async-m5-int4

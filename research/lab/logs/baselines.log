@@ -1,0 +1,65 @@
++ P=../../.venv/bin/python
++ ../../.venv/bin/python harness.py adam lr=0.003 --seconds 120 --label base-adam
+[base-adam] start eval 8.3665
+[base-adam] it 1 t    0.2s tok   0.001M eval 8.1908 up/step 29.373MB {}
+[base-adam] it 1054 t   10.2s tok   1.079M eval 5.8593 up/step 29.373MB {}
+[base-adam] it 2147 t   20.2s tok   2.199M eval 5.6624 up/step 29.373MB {}
+[base-adam] it 3253 t   30.2s tok   3.331M eval 5.5667 up/step 29.373MB {}
+[base-adam] it 4323 t   40.2s tok   4.427M eval 5.5040 up/step 29.373MB {}
+[base-adam] it 5384 t   50.2s tok   5.513M eval 5.4555 up/step 29.373MB {}
+[base-adam] it 6452 t   60.2s tok   6.607M eval 5.4457 up/step 29.373MB {}
+[base-adam] it 7531 t   70.2s tok   7.712M eval 5.4329 up/step 29.373MB {}
+[base-adam] it 8589 t   80.2s tok   8.795M eval 5.4028 up/step 29.373MB {}
+[base-adam] it 9630 t   90.2s tok   9.861M eval 5.3898 up/step 29.373MB {}
+[base-adam] it 10653 t  100.2s tok  10.909M eval 5.3912 up/step 29.373MB {}
+[base-adam] it 11680 t  110.2s tok  11.960M eval 5.3672 up/step 29.373MB {}
+[base-adam] it 12676 t  120.0s tok  12.980M eval 5.3773 up/step 29.373MB {}
+{"label": "base-adam", "steps": 12676, "startLoss": 8.366497993469238, "finalLoss": 5.377313613891602, "bestLoss": 5.36716902256012, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 12980224}
++ ../../.venv/bin/python harness.py dust pop=8 chunk=8 lr=0.05 --seconds 120 --label base-dust8
+[base-dust8] start eval 8.3665
+[base-dust8] it 1 t    1.3s tok   0.001M eval 8.3658 up/step 14.687MB {'gradNorm': 22.1983, 'forwards': 63}
+[base-dust8] it 9 t   12.6s tok   0.009M eval 8.3505 up/step 14.687MB {'gradNorm': 20.6166, 'forwards': 63}
+[base-dust8] it 17 t   23.9s tok   0.017M eval 8.3168 up/step 14.687MB {'gradNorm': 21.9263, 'forwards': 63}
+[base-dust8] it 25 t   35.2s tok   0.026M eval 8.2643 up/step 14.687MB {'gradNorm': 21.3789, 'forwards': 63}
+[base-dust8] it 33 t   46.6s tok   0.034M eval 8.1713 up/step 14.687MB {'gradNorm': 21.8875, 'forwards': 63}
+[base-dust8] it 40 t   56.7s tok   0.041M eval 8.0554 up/step 14.687MB {'gradNorm': 19.2477, 'forwards': 63}
+[base-dust8] it 47 t   66.7s tok   0.048M eval 7.9193 up/step 14.687MB {'gradNorm': 16.9947, 'forwards': 63}
+[base-dust8] it 54 t   76.7s tok   0.055M eval 7.7692 up/step 14.687MB {'gradNorm': 14.3127, 'forwards': 63}
+[base-dust8] it 61 t   86.8s tok   0.062M eval 7.6499 up/step 14.687MB {'gradNorm': 17.7935, 'forwards': 63}
+[base-dust8] it 68 t   96.9s tok   0.070M eval 7.5584 up/step 14.687MB {'gradNorm': 14.6113, 'forwards': 63}
+[base-dust8] it 75 t  106.9s tok   0.077M eval 7.4840 up/step 14.687MB {'gradNorm': 5.7205, 'forwards': 63}
+[base-dust8] it 82 t  117.0s tok   0.084M eval 7.4278 up/step 14.687MB {'gradNorm': 12.0737, 'forwards': 63}
+[base-dust8] it 85 t  121.3s tok   0.087M eval 7.4083 up/step 14.687MB {'gradNorm': 10.2271, 'forwards': 63}
+{"label": "base-dust8", "steps": 85, "startLoss": 8.366497993469238, "finalLoss": 7.408284306526184, "bestLoss": 7.408284306526184, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 87040}
++ ../../.venv/bin/python harness.py dust pop=32 chunk=16 lr=0.05 --seconds 120 --label base-dust32
+[base-dust32] start eval 8.3665
+[base-dust32] it 1 t    5.6s tok   0.001M eval 8.3655 up/step 14.687MB {'gradNorm': 10.8679, 'forwards': 126}
+[base-dust32] it 3 t   17.4s tok   0.003M eval 8.3612 up/step 14.687MB {'gradNorm': 10.6444, 'forwards': 126}
+[base-dust32] it 5 t   28.9s tok   0.005M eval 8.3541 up/step 14.687MB {'gradNorm': 10.8891, 'forwards': 126}
+[base-dust32] it 7 t   40.5s tok   0.007M eval 8.3443 up/step 14.687MB {'gradNorm': 10.5017, 'forwards': 126}
+[base-dust32] it 9 t   52.0s tok   0.009M eval 8.3311 up/step 14.687MB {'gradNorm': 10.3842, 'forwards': 126}
+[base-dust32] it 11 t   63.4s tok   0.011M eval 8.3150 up/step 14.687MB {'gradNorm': 10.4738, 'forwards': 126}
+[base-dust32] it 13 t   74.9s tok   0.013M eval 8.2954 up/step 14.687MB {'gradNorm': 11.1839, 'forwards': 126}
+[base-dust32] it 15 t   86.4s tok   0.015M eval 8.2709 up/step 14.687MB {'gradNorm': 10.821, 'forwards': 126}
+[base-dust32] it 17 t   97.8s tok   0.017M eval 8.2391 up/step 14.687MB {'gradNorm': 10.7288, 'forwards': 126}
+[base-dust32] it 19 t  109.2s tok   0.019M eval 8.1994 up/step 14.687MB {'gradNorm': 10.3409, 'forwards': 126}
+[base-dust32] it 21 t  120.7s tok   0.022M eval 8.1522 up/step 14.687MB {'gradNorm': 10.6943, 'forwards': 126}
+{"label": "base-dust32", "steps": 21, "startLoss": 8.366497993469238, "finalLoss": 8.15223503112793, "bestLoss": 8.15223503112793, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 21504}
++ ../../.venv/bin/python harness.py mezo k=1 eps=0.001 lr=0.0001 --seconds 120 --label base-mezo
+[base-mezo] start eval 8.3665
+[base-mezo] it 1 t    0.0s tok   0.001M eval 8.3666 up/step 0.000MB {'projGrad': 1.2274}
+[base-mezo] it 1309 t   10.0s tok   1.340M eval 8.3162 up/step 0.000MB {'projGrad': 0.1411}
+[base-mezo] it 2596 t   20.0s tok   2.658M eval 8.2406 up/step 0.000MB {'projGrad': -3.3088}
+[base-mezo] it 3878 t   30.0s tok   3.971M eval 8.0747 up/step 0.000MB {'projGrad': -0.5798}
+[base-mezo] it 5146 t   40.0s tok   5.270M eval 7.9325 up/step 0.000MB {'projGrad': -0.2651}
+[base-mezo] it 6380 t   50.0s tok   6.533M eval 7.8161 up/step 0.000MB {'projGrad': 1.1101}
+[base-mezo] it 7642 t   60.1s tok   7.825M eval 7.7424 up/step 0.000MB {'projGrad': -0.8154}
+[base-mezo] it 8907 t   70.1s tok   9.121M eval 7.6782 up/step 0.000MB {'projGrad': 0.2029}
+[base-mezo] it 10171 t   80.1s tok  10.415M eval 7.6355 up/step 0.000MB {'projGrad': -2.6586}
+[base-mezo] it 11431 t   90.1s tok  11.705M eval 7.5969 up/step 0.000MB {'projGrad': 2.5227}
+[base-mezo] it 12674 t  100.1s tok  12.978M eval 7.5664 up/step 0.000MB {'projGrad': 2.0661}
+[base-mezo] it 13916 t  110.1s tok  14.250M eval 7.5450 up/step 0.000MB {'projGrad': 2.533}
+[base-mezo] it 15157 t  120.0s tok  15.521M eval 7.5191 up/step 0.000MB {'projGrad': -0.8833}
+{"label": "base-mezo", "steps": 15157, "startLoss": 8.366497993469238, "finalLoss": 7.519088387489319, "bestLoss": 7.519088387489319, "diverged": false, "upBytesPerStep": 12.0, "tokens": 15520768}
++ echo done
+done

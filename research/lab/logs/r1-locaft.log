@@ -1,0 +1,25 @@
+[r1-locaft] start eval 5.5977
+[r1-locaft] it 1 t    0.2s tok   0.012M eval 5.5969 up/step 0.221MB {'selCE': 5.5759, 'bestSelCE': 5.5759, 'Bnorm': 0.0837}
+[r1-locaft] it 2 t    0.2s tok   0.020M eval 5.5965 up/step 0.221MB {'selCE': 5.5756, 'bestSelCE': 5.5756, 'Bnorm': 0.1262}
+[r1-locaft] it 6 t    0.4s tok   0.053M eval 5.5946 up/step 0.221MB {'selCE': 5.5732, 'bestSelCE': 5.5732, 'Bnorm': 0.2313}
+[r1-locaft] it 12 t    0.7s tok   0.102M eval 5.5937 up/step 0.221MB {'selCE': 5.5723, 'bestSelCE': 5.5721, 'Bnorm': 0.3294}
+[r1-locaft] it 24 t    1.2s tok   0.201M eval 5.5922 up/step 0.221MB {'selCE': 5.571, 'bestSelCE': 5.571, 'Bnorm': 0.4724}
+[r1-locaft] it 61 t    2.9s tok   0.504M eval 5.5903 up/step 0.221MB {'selCE': 5.5681, 'bestSelCE': 5.568, 'Bnorm': 0.7544}
+[r1-locaft] it 122 t    5.7s tok   1.004M eval 5.5902 up/step 0.221MB {'selCE': 5.5661, 'bestSelCE': 5.5657, 'Bnorm': 0.9118}
+[r1-locaft] it 220 t   10.2s tok   1.806M eval 5.5891 up/step 0.221MB {'selCE': 5.5642, 'bestSelCE': 5.5639, 'Bnorm': 1.0601}
+[r1-locaft] it 244 t   11.3s tok   2.003M eval 5.5892 up/step 0.221MB {'selCE': 5.5641, 'bestSelCE': 5.5638, 'Bnorm': 1.0751}
+[r1-locaft] it 440 t   20.2s tok   3.609M eval 5.5890 up/step 0.221MB {'selCE': 5.5632, 'bestSelCE': 5.5631, 'Bnorm': 1.1319}
+[r1-locaft] it 610 t   28.0s tok   5.001M eval 5.5890 up/step 0.221MB {'selCE': 5.5627, 'bestSelCE': 5.5627, 'Bnorm': 1.1724}
+[r1-locaft] it 659 t   30.3s tok   5.403M eval 5.5888 up/step 0.221MB {'selCE': 5.5628, 'bestSelCE': 5.5625, 'Bnorm': 1.1932}
+[r1-locaft] it 878 t   40.3s tok   7.197M eval 5.5888 up/step 0.221MB {'selCE': 5.5617, 'bestSelCE': 5.5617, 'Bnorm': 1.2337}
+[r1-locaft] it 1097 t   50.3s tok   8.991M eval 5.5887 up/step 0.221MB {'selCE': 5.5615, 'bestSelCE': 5.5614, 'Bnorm': 1.2752}
+[r1-locaft] it 1221 t   56.0s tok  10.007M eval 5.5888 up/step 0.221MB {'selCE': 5.5616, 'bestSelCE': 5.5612, 'Bnorm': 1.2925}
+[r1-locaft] it 1316 t   60.3s tok  10.785M eval 5.5887 up/step 0.221MB {'selCE': 5.5616, 'bestSelCE': 5.5612, 'Bnorm': 1.2999}
+[r1-locaft] it 1535 t   70.3s tok  12.579M eval 5.5885 up/step 0.221MB {'selCE': 5.5616, 'bestSelCE': 5.561, 'Bnorm': 1.3497}
+[r1-locaft] it 1754 t   80.3s tok  14.373M eval 5.5886 up/step 0.221MB {'selCE': 5.5613, 'bestSelCE': 5.5606, 'Bnorm': 1.3936}
+[r1-locaft] it 1972 t   90.3s tok  16.159M eval 5.5885 up/step 0.221MB {'selCE': 5.5608, 'bestSelCE': 5.5605, 'Bnorm': 1.4083}
+[r1-locaft] it 2191 t  100.3s tok  17.953M eval 5.5885 up/step 0.221MB {'selCE': 5.5606, 'bestSelCE': 5.5603, 'Bnorm': 1.4133}
+[r1-locaft] it 2410 t  110.4s tok  19.747M eval 5.5884 up/step 0.221MB {'selCE': 5.5607, 'bestSelCE': 5.5602, 'Bnorm': 1.4161}
+[r1-locaft] it 2441 t  111.8s tok  20.001M eval 5.5885 up/step 0.221MB {'selCE': 5.5606, 'bestSelCE': 5.56, 'Bnorm': 1.4217}
+[r1-locaft] it 2621 t  120.0s tok  21.475M eval 5.5885 up/step 0.221MB {'selCE': 5.5602, 'bestSelCE': 5.56, 'Bnorm': 1.4217}
+{"label": "r1-locaft", "steps": 2621, "startLoss": 5.597691893577576, "finalLoss": 5.588450312614441, "bestLoss": 5.588404059410095, "diverged": false, "upBytesPerStep": 221184.0, "tokens": 21475328}

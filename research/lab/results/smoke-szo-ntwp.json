@@ -1,0 +1,121 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-szo-ntwp",
+ "method": "szo",
+ "cfg": {
+  "kind": "ntwp",
+  "n": 4,
+  "adaclip": 5
+ },
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 10.0,
+ "steps": 18,
+ "totals": {
+  "tokens": 18432,
+  "fwd": 2304000.0,
+  "bwd": 0.0,
+  "up": 264360960.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 2304000.0
+ },
+ "startLoss": 8.366497993469238,
+ "finalLoss": 8.357902526855469,
+ "bestLoss": 8.357902526855469,
+ "diverged": false,
+ "upBytesPerStep": 14686720.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 8.366497993469238
+  },
+  {
+   "it": 1,
+   "seconds": 0.528,
+   "tokens": 1024,
+   "compute": 128000.0,
+   "up": 14686720.0,
+   "down": 0.0,
+   "evalLoss": 8.366717100143433,
+   "gradNorm": 74.6228,
+   "forwards": 125,
+   "loss": 8.35,
+   "adaClipped": 0
+  },
+  {
+   "it": 2,
+   "seconds": 1.046,
+   "tokens": 2048,
+   "compute": 256000.0,
+   "up": 29373440.0,
+   "down": 0.0,
+   "evalLoss": 8.367111682891846,
+   "gradNorm": 69.2843,
+   "forwards": 125,
+   "loss": 8.3581,
+   "adaClipped": 0
+  },
+  {
+   "it": 5,
+   "seconds": 2.642,
+   "tokens": 5120,
+   "compute": 640000.0,
+   "up": 73433600.0,
+   "down": 0.0,
+   "evalLoss": 8.367607355117798,
+   "gradNorm": 64.475,
+   "forwards": 125,
+   "loss": 8.3665,
+   "adaClipped": 0
+  },
+  {
+   "it": 10,
+   "seconds": 5.272,
+   "tokens": 10240,
+   "compute": 1280000.0,
+   "up": 146867200.0,
+   "down": 0.0,
+   "evalLoss": 8.366147994995117,
+   "gradNorm": 54.6387,
+   "forwards": 125,
+   "loss": 8.3752,
+   "adaClipped": 0
+  },
+  {
+   "it": 11,
+   "seconds": 5.821,
+   "tokens": 11264,
+   "compute": 1408000.0,
+   "up": 161553920.0,
+   "down": 0.0,
+   "evalLoss": 8.365351438522339,
+   "gradNorm": 64.1186,
+   "forwards": 125,
+   "loss": 8.3615,
+   "adaClipped": 0
+  },
+  {
+   "it": 18,
+   "seconds": 10.565,
+   "tokens": 18432,
+   "compute": 2304000.0,
+   "up": 264360960.0,
+   "down": 0.0,
+   "evalLoss": 8.357902526855469,
+   "gradNorm": 76.2913,
+   "forwards": 125,
+   "loss": 8.3489,
+   "adaClipped": 0
+  }
+ ]
+}

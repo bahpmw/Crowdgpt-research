@@ -1,0 +1,133 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-mobilespec-ft",
+ "method": "mobilespec",
+ "cfg": {
+  "alpha": 4,
+  "block": 16
+ },
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 12.0,
+ "steps": 58,
+ "totals": {
+  "tokens": 59392,
+  "fwd": 1841152.0,
+  "bwd": 0.0,
+  "up": 7424.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 1841152.0
+ },
+ "startLoss": 5.597691893577576,
+ "finalLoss": 5.610017538070679,
+ "bestLoss": 5.597691893577576,
+ "diverged": false,
+ "upBytesPerStep": 128.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 5.597691893577576
+  },
+  {
+   "it": 1,
+   "seconds": 0.335,
+   "tokens": 1024,
+   "compute": 31744.0,
+   "up": 128.0,
+   "down": 0.0,
+   "evalLoss": 5.599501848220825,
+   "loss": 5.5896,
+   "fitStd": 0.00343,
+   "beatCenter": 0.3,
+   "deltaRms": 0.02813
+  },
+  {
+   "it": 2,
+   "seconds": 0.51,
+   "tokens": 2048,
+   "compute": 63488.0,
+   "up": 256.0,
+   "down": 0.0,
+   "evalLoss": 5.598635673522949,
+   "loss": 5.5634,
+   "fitStd": 0.00258,
+   "beatCenter": 0.4,
+   "deltaRms": 0.03986
+  },
+  {
+   "it": 5,
+   "seconds": 1.062,
+   "tokens": 5120,
+   "compute": 158720.0,
+   "up": 640.0,
+   "down": 0.0,
+   "evalLoss": 5.6007243394851685,
+   "loss": 5.6552,
+   "fitStd": 0.00223,
+   "beatCenter": 0.1,
+   "deltaRms": 0.06226
+  },
+  {
+   "it": 10,
+   "seconds": 2.069,
+   "tokens": 10240,
+   "compute": 317440.0,
+   "up": 1280.0,
+   "down": 0.0,
+   "evalLoss": 5.602645754814148,
+   "loss": 5.4855,
+   "fitStd": 0.00241,
+   "beatCenter": 0.233,
+   "deltaRms": 0.08927
+  },
+  {
+   "it": 20,
+   "seconds": 4.182,
+   "tokens": 20480,
+   "compute": 634880.0,
+   "up": 2560.0,
+   "down": 0.0,
+   "evalLoss": 5.599220633506775,
+   "loss": 5.6433,
+   "fitStd": 0.00341,
+   "beatCenter": 0.533,
+   "deltaRms": 0.12461
+  },
+  {
+   "it": 49,
+   "seconds": 10.221,
+   "tokens": 50176,
+   "compute": 1555456.0,
+   "up": 6272.0,
+   "down": 0.0,
+   "evalLoss": 5.6086695194244385,
+   "loss": 5.483,
+   "fitStd": 0.00346,
+   "beatCenter": 0.8,
+   "deltaRms": 0.19403
+  },
+  {
+   "it": 58,
+   "seconds": 12.084,
+   "tokens": 59392,
+   "compute": 1841152.0,
+   "up": 7424.0,
+   "down": 0.0,
+   "evalLoss": 5.610017538070679,
+   "loss": 5.6207,
+   "fitStd": 0.00353,
+   "beatCenter": 0.6,
+   "deltaRms": 0.21178
+  }
+ ]
+}

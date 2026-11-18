@@ -1,0 +1,7 @@
+# scale check: 100m preset (116M params), 300 s per arm
+adam lr=0.001 --preset 100m --seconds 300 --label r2b-adam
+mosaic K=1 lr=0.001 --preset 100m --seconds 300 --label r2b-mosaic-k1
+mosaic K=2 lr=0.001 --preset 100m --seconds 300 --label r2b-mosaic-k2
+mosaic K=4 lr=0.001 --preset 100m --seconds 300 --label r2b-mosaic-k4
+dust pop=8 chunk=8 lr=0.05 --preset 100m --seconds 300 --label r2b-dust8
+solo K=2 lr=0.001 --preset 100m --seconds 300 --label r2b-solo-k2

@@ -1,0 +1,1731 @@
+SPICE: SPARSE PARAMETER GOSSIP FOR LLM PRETRAINING
+Pietro Cagnasso 1 2 Daniele Kopyshevskiy 3 Edouard Oyallon 3 4 Eugene Belilovsky 1 2
+ABSTRACT
+Pretraining language models across geographically distributed resources requires communication-efficient methods
+that operate under limited and variable internet bandwidth. Decentralized training replaces global collectives with
+peer exchanges, but full-model messages make larger peer neighborhoods costly. We introduce SPICE, which
+combines sparse parameter gossip with error feedback through corrected parameter values that remain directly
+interpretable as peer neighborhoods change. These sparse exchanges make broader neighborhoods affordable,
+achieving better training quality with less communication than the evaluated dense decentralized baselines. As the
+replica count grows, SPICE increases the number of peers contacted while keeping individual messages sparse,
+limiting the quality degradation observed with dense gossip. Under bandwidth constraints, SPICE achieves higher
+training throughput than DDP and dense gossip, while sustaining throughput during transient link slowdowns.
+1 INTRODUCTION
+Training large language models at scale relies on distributing
+computation across many model replicas, each potentially
+spanning several GPUs. In standard synchronous data par-
+allel training, these replicas average their gradients before
+each optimizer step (Li et al., 2020), typically through an
+All-Reduce collective (Patarasuk & Yuan, 2009). Each step
+therefore requires communication among all replicas and
+waits for the slowest participant, making training efficiency
+dependent on the connectivity between them.
+Even within tightly connected GPU clusters, communi-
+cation bandwidth can limit training efficiency, motivat-
+ing low-precision transfers to reduce communication vol-
+ume (DeepSeek-AI et al., 2025). These constraints become
+more severe when training extends over geographically dis-
+tributed data centers, where bandwidth can be limited and
+vary across participants. Recent large language model pre-
+training runs over the internet (Jaghouar et al., 2024; Lidin
+et al., 2026) demonstrate the opportunity to pool resources
+across sites, but exploiting these resources efficiently re-
+quires limiting the cost of communication (Nabli et al., 2024;
+Kopyshevskiy et al., 2026).
+Decentralized (gossip) training replaces the typical global
+All-Reduce operation with exchanges among selected
+peers (Koloskova et al., 2020). This has several potential
+advantages as it can avoid communication bottlenecks, sup-
+port heterogeneous bandwidth, and maintain robustness to
+failure of individual links. However, combining gossip meth-
+ods with adaptive optimizers has historically been difficult,
+1Concordia University 2Mila 3Sorbonne Universit´e 4CNRS.
+Technical report.
+limiting their applicability to demanding settings such as
+pretraining foundational models. Recent works by Wang
+et al. (2025) and Cagnasso et al. (2026) have shown that
+decentralized methods can indeed achieve strong perfor-
+mance, narrowing the training quality gap with synchronous
+baselines in LLM pretraining. In decentralized training,
+communication topology also affects convergence through
+its spectral properties (Nabli et al., 2023), while GASLoC
+empirically shows that communicating with more peers can
+improve training quality (Cagnasso et al., 2026). With full
+model exchanges, however, each additional peer increases
+communication volume, motivating smaller messages that
+allow broader peer coverage at a lower communication cost
+(Figure 2).
+One approach to reducing communication is compression,
+through sparsification or quantization. Sparsification trans-
+mits only a subset of gradient or pseudogradient coordi-
+nates, selected, for example, through chunked TOP-k selec-
+tion (Sarfi et al., 2026). The resulting information loss can
+be mitigated through error feedback, which retains omitted
+update components for later communication (Stich & Karim-
+ireddy, 2020). Applying these mechanisms to parameter
+gossip is challenging because replicas evolve from different
+models: a compressed update relative to the sender’s model
+cannot generally be applied directly to the receiver’s model.
+Methods such as CHOCO-SGD address this mismatch by
+reconstructing communicated states from accumulated com-
+pressed updates on a fixed communication graph (Koloskova
+et al., 2019), but changing peers requires making the relevant
+reconstruction state available to new receivers. After a local
+update, sparsification lets a sender transmit selected param-
+eter values directly, reducing message size while allowing
+any receiver to interpret them without a shared reference
+arXiv:2611.23053v1  [cs.DC]  17 Nov 2026
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+model. This motivates sparse parameter gossip that com-
+bines directly interpretable messages with the accumulated
+correction from error feedback.
+The framework of Cagnasso et al. (2026) provides a nat-
+ural way to realize this design: it expresses gossip as a
+local pseudo-gradient formed from differences between a
+node’s parameters and those received from its peers. This
+formulation allows us to apply a sparse update with error
+feedback locally, then communicate the resulting parameter
+values at the selected coordinates. We use this mechanism
+to introduce SPICE, a decentralized training algorithm that
+combines chunked TOP-k sparsification with error feedback
+while retaining the Nesterov outer optimizer for consensus
+acceleration. The transmitted parameter values incorpo-
+rate accumulated error corrections and can be interpreted
+directly by any receiving peer, without persistent reconstruc-
+tion caches.
+Our contributions are:
+1. We propose SPICE, a decentralized training algorithm
+that integrates sparsification and error memory into
+parameter gossip through corrected absolute model
+endpoints.
+2. We empirically show that SPICE achieves lower valida-
+tion loss than evaluated decentralized baselines, while
+transmitting less data (Figure 1).
+3. We show that SPICE reduces end-to-end training time
+to a fixed token budget across several bandwidth caps
+compared with dense GASLoC and DDP, and retains
+most of the training throughput under transient band-
+width reductions, including severe slowdowns.
+2 RELATED WORKS
+Decentralized language-model training. Decentralized
+training replaces global aggregation with exchanges among
+selected peers, making the communication graph and peer
+selection rule central to information propagation (Boyd et al.,
+2006; Nabli & Oyallon, 2025; 2023). D-PSGD combines
+neighbor averaging with stochastic optimization (Lian et al.,
+2017), while Stochastic Gradient Push and subsequent analy-
+ses extend decentralized training to directed or time-varying
+graphs and multiple local updates between exchanges (As-
+sran et al., 2019; Koloskova et al., 2020). For transformer
+training, DAdam studies local adaptive optimization with
+parameter mixing (Wang et al., 2025). GASLoC builds on
+this approach for language-model pretraining by combining
+local adaptive updates, peer neighborhoods defined by a
+shared random permutation at each round, and an outer op-
+timizer with momentum to accelerate consensus (Cagnasso
+et al., 2026). These parameter exchanges allow replicas
+3.12 12.5 50.0 200 800 3200
+Outbound volume / dense model size (%)
+3.2
+3.3
+3.4
+3.5
+Validation Loss
+AdamW DDP
+DAdam
+GASLoC
+SparseLoCo
+CHOCO
+SPICE
+Figure 1. Quality–communication tradeoff for decentralized
+LLM pretraining. Final validation loss for a 134M-parameter
+model trained on 2.70B tokens with 32 replicas. SPICE configu-
+rations vary peer count and sparsity. Outbound volume includes
+transmitted values and 12-bit packed indices and is normalized
+by the size of a dense model. Circled points and the dashed line
+indicate the empirical Pareto frontier among evaluated configura-
+tions. SPICE, achieving lower validation loss than all evaluated
+decentralized baselines, lies on the empirical Pareto frontier.
+with different models to aggregate their peers’ endpoints,
+but still transmit a full model to each peer. SPICE adopts
+the same neighborhood construction as GASLoC while re-
+ducing message size through sparse exchanges of corrected
+model endpoints.
+Local optimization and compressed updates. Federated
+averaging and Local SGD reduce the overall communica-
+tion volume by performing multiple local optimization steps
+between aggregation rounds (McMahan et al., 2017; Stich,
+2019). FedOpt generalizes model averaging by applying
+an outer optimizer to aggregated model differences used as
+pseudo-gradients (Reddi et al., 2021). DiLoCo applies this
+inner-outer optimization framework for language-model pre-
+training with local AdamW updates and an outer Nesterov
+optimizer (Douillard et al., 2024). GASLoC connects this
+framework to parameter gossip and recovers DiLoCo under
+exact global averaging (Cagnasso et al., 2026). Compres-
+sion complements local updates by reducing the size of each
+message rather than the frequency of communication. Error
+feedback compensates for omitted information by retain-
+ing it for subsequent communication rounds (Stich et al.,
+2018; Karimireddy et al., 2019). Beyond compensating for
+compression error, error feedback can be combined with
+explicit momentum: EF21-SGDM establishes improved
+convergence guarantees by adding Polyak momentum to
+EF21 (Fatkhullin et al., 2023), while DeMo uses error feed-
+back to compress communicated momentum in language-
+model training (Peng et al., 2026). QSparse-local-SGD
+combines local updates with sparsification, quantization,
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Ring All-Reduce
+global collective
+for every t
+V = 2(R−1)/R d = 1.875d
+GASLoC
+q = 2 · dense
+t t + 1
+V = 2d
+SPICE
+q = 2 · δ = 6.25%
+t t + 1
+V = qδd = 0.125d
+SPICE
+q = 4 · δ = 3.125%
+t t + 1
+V = qδd = 0.125d
+Figure 2. Communication patterns and outbound communication volume per worker for 16 replicas. GASLoC and SPICE support
+changing neighborhoods across communication rounds, illustrated at t and t + 1, whereas Ring All-Reduce implements a global collective
+over a fixed ring. The square marks a reference worker, whose peer connections are emphasized. For a model with d parameters, Ring
+All-Reduce transmits 1.875d values per worker, while dense two-peer GASLoC transmits 2d values. Instead, SPICE can send selected
+parameter values to two peers at 6.25% density or four peers at 3.125% density, both totaling qδd = 0.125d. SPICE combines dynamic
+neighborhoods with sparse messages, allowing a fixed value budget to be allocated between message density and peer count.
+and error compensation, but uses SGD without an outer
+momentum optimizer (Basu et al., 2019). SparseLoCo stud-
+ies this combination in language-model pretraining with
+local AdamW updates, using chunked TOP-k compression
+of pseudo-gradients and error feedback as a surrogate for the
+outer momentum (Sarfi et al., 2026). In SparseLoCo, repli-
+cas compute their pseudo-gradients from a shared round-
+start model, so averaging these displacements is equivalent
+to averaging their corresponding endpoints. In parameter
+gossip, replicas generally start from different models, so
+applying a peer’s displacement to the receiver’s model does
+not recover the intended peer’s endpoint. SPICE addresses
+this difference by transmitting selected absolute endpoint
+values that incorporate the accumulated error correction.
+Compressed gossip. WASH communicates selected
+weights among models through random peer-to-peer permu-
+tations, keeping the models compatible with final weight
+averaging (Fournier et al., 2024). Compressed gossip meth-
+ods instead combine neighboring models during training,
+with CHOCO-SGD reconstructing model estimates by ac-
+cumulating compressed differences (Koloskova et al., 2019;
+Koloskova* et al., 2020). Each message therefore depends
+on the receiver’s reconstruction history, so the standard for-
+mulation assumes a fixed communication graph to ensure
+that receivers retain the history needed. SPICE instead aver-
+ages selected absolute endpoint values that incorporate error
+memory and require no receiver reconstruction history.
+Communication topology. Beyond message compres-
+sion, topology design controls the communication cost of
+propagating information among replicas. MATCHA sam-
+ples graph matchings to balance communication cost and
+convergence (Wang et al., 2019), while one-peer exponen-
+tial graphs and EquiTopo provide sparse communication
+schemes with favorable mixing properties (Ying et al., 2021;
+Song et al., 2022). However, faster consensus alone does
+not establish better training quality, as the spectral gap can
+fail to predict decentralized learning performance under
+identically distributed data (Vogels et al., 2023).
+3 METHOD
+3.1 SPICE
+Sparse Parameter Gossip Challenges. Combining gos-
+sip with gradient compression and error feedback is chal-
+lenging because these methods operate on model differences.
+It thus requires specifying the reference model of each trans-
+mitted update. Consider R replicas with d parameters and
+identical initializations. At round t, replica i starts from
+x(t) i ∈ Rd, performs a local optimizer step to obtain y(t) i ,
+and computes its local displacement ∆(t) i = x(t) i − y(t) i . For
+example, a local-step-then-mix form of decentralized SGD
+is
+y(t) i = x(t) i − ηtg(t) i ,
+x(t+1) i =
+RX
+j=1
+w(t) ij y(t) j , (1)
+where g(t) i is a local stochastic gradient, ηt is the learn-
+ing rate, and the nonnegative mixing weights sum to one
+and are nonzero only for the replica itself and its current
+peers (Koloskova et al., 2020). This exchange averages
+model parameters. Replicas generally start a round from
+different models, so applying a sender’s displacement ∆(t) j
+to the receiver’s model x(t) i does not recover y(t) j . Compress-
+ing these displacements alone therefore does not directly
+reproduce parameter gossip.
+CHOCO-SGD addresses this mismatch by maintaining a
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+shared estimate ˆx(t) j of each sender’s model and compress-
+ing the difference from that estimate (Koloskova et al., 2019;
+Koloskova* et al., 2020). Using the local-step-then-gossip
+ordering, its updates can be written as
+m(t) i = C  y(t) i − ˆx(t) i  ,
+ˆx(t+1) i = ˆx(t) i + m(t) i ,
+x(t+1) i = y(t) i + γ
+RX
+j=1
+wij
+ 
+ˆx(t+1) j − ˆx(t+1) i  ,
+(2)
+where C is a compression operator, γ is the consensus step-
+size, and W = (wij ) is a fixed symmetric doubly stochastic
+mixing matrix. The sender and its neighbors apply the
+same transmitted increment m(t) i to maintain matching esti-
+mates. Information omitted by compression remains in the
+difference between the model and its estimate and can enter
+subsequent messages.
+Its memory-efficient formulation avoids storing each neigh-
+bor estimate by maintaining their weighted sum s(t) i =P
+j wij ˆx(t) j , requiring only three model-sized states. This
+formulation makes the dependence on a fixed graph explicit:
+the accumulated state si encodes a specific weighted neigh-
+borhood, and changing that neighborhood generally requires
+information that cannot be recovered from the stored sum
+alone.
+Sparse Parameters as Local Update Directions. Our
+proposed method SPICE, instead, transmits selected abso-
+lute parameter values, combining the endpoint exchange of
+GASLoC with sparsification and error feedback (Cagnasso
+et al., 2026; Sarfi et al., 2026). To see the basic mechanism,
+first omit error feedback. When replica j transmits coordi-
+nate y(t) j [c], receiver i uses its own round-start parameter as
+the reference and forms
+x(t) i [c] − y(t) j [c]
+= x(t) i [c] − x(t) j [c] | {z }
+model disagreement
++ ∆(t) j [c] | {z }
+local displacement
+. (3)
+This direction is relative to the receiver’s model and includes
+both the sender’s local displacement and the disagreement
+term needed for parameter gossip. As in GASLoC, averag-
+ing these differences over the available contributions gives a
+pseudo-gradient for an outer optimizer that provides consen-
+sus acceleration (Cagnasso et al., 2026). Absolute parameter
+values require neither a shared starting model nor a stored
+estimate of the sender’s previous model, allowing neighbor-
+hoods to change between rounds without transferring model
+estimates to new peers. As detailed below, this ability is
+central to combining a small communication budget with
+mixing across the replicas.
+To complete this construction, we must specify which coor-
+dinates are sent, how their values incorporate retained error,
+and how to average messages with different supports.
+Error-Feedback and Sparsification. We select coordi-
+nates using the local displacements and their retained history.
+Each replica maintains a residual buffer e(t) i , initialized with
+e(0) i = 0. At round t, it combines this buffer with the current
+local pseudo-gradient,
+˜e(t) i = βe(t) i + ∆(t) i , (4)
+where β ∈ [0, 1] controls the decay of retained history.
+We partition the flattened accumulator into contiguous
+chunks of b coordinates and select the k entries with largest
+absolute values within each chunk. This chunked TOP-k
+rule follows (Sarfi et al., 2026; Peng et al., 2026) and as-
+signs the same selection quota to each full chunk of a tensor,
+with density δ = k/b. Let M(t) i ∈ {0, 1}d denote the result-
+ing mask and I (t) i = {c : M(t) i [c] = 1} the set of selected
+coordinates. The residual retained for the next round is
+e(t+1) i = (1 − M(t) i ) ⊙ ˜e(t) i , (5)
+where ⊙ denotes elementwise multiplication.
+Unselected components remain in the buffer and enter sub-
+sequent accumulators, allowing repeated displacements to
+accumulate rather than being discarded after each round.
+The mask determines which coordinates are transmitted,
+while M(t) i ⊙ ˜e(t) i is the selected accumulated displacement
+used to construct the corrected endpoints below.
+Correcting Endpoints with Error Feedback. On se-
+lected coordinates, the accumulator contains the current
+local displacement and the retained historical correction.
+Sending only y(t) i [I (t) i ] would omit this correction. We
+therefore construct a corrected endpoint
+z(t) i = y(t) i − M(t) i ⊙ βe(t) i . (6)
+For a selected coordinate c ∈ I (t) i , this is equivalent to
+z(t) i [c] = x(t) i [c] − ˜e(t) i [c]. (7)
+Replica i sends (I (t) i , z(t) i [I (t) i ]) to its peers. On unselected
+coordinates, z(t) i [c] = y(t) i [c], so the self endpoint retains
+the current local update.
+The accumulated displacement is encoded as x(t) i [c]−z(t) i [c]
+and cleared from the residual on selected coordinates, while
+remaining in the buffer on unselected coordinates. Together,
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+these two cases give
+˜e(t) i = βe(t) i + ∆(t) i| {z }
+accumulated displacement
+= e(t+1) i| {z }
+retained in memory
++ M(t) i ⊙  x(t) i − z(t) i  | {z }
+encoded in transmitted endpoints
+.
+(8)
+Thus, any historical correction cleared from memory is
+incorporated into the transmitted endpoint values. We next
+combine the full self endpoint with the selected peer values
+through coordinate-wise averaging.
+Randomized Coordinate-Wise Gossip and Outer Opti-
+mization. In methods such as CHOCO-SGD, messages
+depend on accumulated reconstruction state, which must
+be available when introducing a new peer. The corrected
+absolute endpoints in SPICE can instead be interpreted by
+any receiver without previous exchanges. This allows peer
+neighborhoods to change between rounds. We use random-
+ized peer selection, motivated by analyses showing that ran-
+domized one- and two-peer exchanges can mix efficiently
+as the number of replicas grows (Cagnasso et al., 2026).
+At each round, a newly sampled shared permutation deter-
+mines the neighborhoods, and each replica sends its selected
+endpoint values to q peers.
+Each message contains a fraction δ of the model coordi-
+nates, giving qδd transmitted parameter values per round
+(Figure 2). CHOCO-SGD can match this payload using a
+fixed graph with the same peer count and density. How-
+ever, sparse fixed topologies such as rings can limit mixing
+and hinder training as the number of replicas grows (Nabli
+et al., 2023). The advantage of SPICE is that it combines
+sparse messages with changing communication partners
+without transferring reconstruction state. Relative to the
+complete-graph CHOCO-SGD baseline used in our experi-
+ments, contacting only q peers reduces outbound volume by
+a factor of (R − 1)/q at equal message density.
+Since peers can select different coordinates, the contributors
+to coordinate c are
+P (t) i,c = {i} ∪ {j ∈ N (t) i : c ∈ I (t) j }. (9)
+We average their endpoint values and form the outer resid-
+ual,
+G(t) i [c] = x(t) i [c] − 1 |P (t) i,c | X j∈P (t) i,c z(t) j [c]. (10)
+The self endpoint always contributes, including coordinates
+outside I (t) i . Peers that do not transmit a coordinate con-
+tribute neither a value nor a count to its average. If no peer
+transmits c, then G(t) i [c] = x(t) i [c] − z(t) i [c], and the outer
+residual retains the local displacement and any selected
+historical correction.
+To separate the effects of local optimization and model
+disagreement, one can define the displacement D(t) j =
+x(t) j − z(t) j = ∆(t) j + M(t) j ⊙ βe(t) j . The outer residual
+can then be written as
+G(t) i [c] = x(t) i [c] −
+P
+j∈P (t) i,c x(t) j [c]
+|P (t) i,c | | {z }
+consensus disagreement
++
+P
+j∈P (t) i,c D(t) j [c]
+|P (t) i,c | | {z }
+local displacements
+.
+(11)
+The first term corrects disagreement between the receiver’s
+starting model and the neighbors’ starting models. The
+second averages their local displacements and selected his-
+torical corrections. When the contributing replicas share a
+starting model, the disagreement term vanishes and gossip
+reduces to averaging these corrected displacements. Other-
+wise, coordinate selection affects both displacement aggre-
+gation and consensus.
+Following GASLoC (Cagnasso et al., 2026), we apply an
+outer Nesterov momentum optimizer to G(t) i , starting from
+x(t) i . This choice follows the connection between outer
+momentum and accelerated consensus developed for dense
+gossip by Cagnasso et al. (2026). Algorithm 1 summarizes
+this training procedure.
+With full support (TOP-k = b) and zero initial residual,
+the residual remains zero and z(t) i = y(t) i at every round,
+recovering dense GASLoC.
+3.2 Communication Cost
+Each worker saves its round-start parameters to compute
+the displacement used for support selection and the pseudo-
+gradient used by the outer optimizer. For selection, the
+trainable local parameter shards are viewed as one vec-
+tor and partitioned into chunks of b coordinates. Chunks
+can cross PyTorch’s parameter boundaries, so participating
+workers have to use a consistent parameter ordering and
+shard layout.
+The selected coordinates become a message containing two
+buffers: their indices and their parameter values. For b ≤
+4096, an index needs only 12 bits to identify a position
+within its chunk; thus, two indices can be packed into three
+bytes. Since each chunk contributes the TOP-k entries in
+order, the receiver infers the chunk from the entry’s position
+in the message.
+Given this message format, let dloc be the number of train-
+able parameters in a local shard and q the number of peers.
+Assuming complete chunks and packed index pairs, each
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Algorithm 1 SPICE
+1: Input: initialize x(0) 1 = · · · = x(0) R , initialize e(0) i = 0 ∀i,
+Optimizerin, Optimizerout, EF memory decay β, and q, k,
+b
+2: for t = 0, 1, . . . , T − 1 do
+3: Sample a shared permutation σ(t) of {1, . . . , R}
+4: for Worker i ∈ {1, . . . , R} in parallel do
+▷ Inner update
+5: y(t) i ← Optimizerin
+
+x(t) i , ∇f (x(t) i ) 
+6: ∆(t) i ← x(t) i − y(t) i
+▷ Error-feedback support selection
+7: ˜e(t) i ← βe(t) i + ∆(t) i
+8: M(t) i , I (t) i ← Top−k  ˜e(t) i 
+9: z(t) i ← y(t) i − M(t) i ⊙ βe(t) i
+10: e(t+1) i ← (1 − M(t) i ) ⊙ ˜e(t) i
+▷ Gossip step
+11: N (t) i ← SAMPLE PEERS  σ(t), i 
+12: exchange
+
+I (t) i , z(t) i [I (t) i ]  with all j ∈ N (t) i
+13: for c ∈ {1, . . . , d} do
+14: P (t) i,c ← {i} ∪ {j ∈ N (t) i : c ∈ I (t) j }
+15: G(t) i [c] ← x(t) i [c] − 1 |P (t) i,c | P j∈P (t) i,c z(t) j [c]
+16: end for
+▷ Outer update
+17: x(t+1) i ← Optimizerout
+
+x(t) i , G(t) i
+
+18: end for
+19: end for
+20: Output: ¯x(T ) = 1 R PR i=1 x(T ) i
+worker selects s = (k/b)dloc = δdloc coordinates and sends
+the same message to its q peers. If each value occupies v
+bytes and the indices add 1.5 bytes per selected coordinate,
+then
+Vsend = qδdloc (v + 1.5) . (12)
+Dense exchange with the same peers sends qvdloc bytes, so
+the payload ratio is δ(1 + 3/(2v)).
+4 EXPERIMENTAL RESULTS
+4.1 Experimental Setup
+We train two dense Llama-3-style decoder-only Trans-
+formers (Grattafiori et al., 2024) with 134M and 551M
+parameters, and the mixture-of-experts model OLMoE-
+1B-7B (Muennighoff et al., 2025), on FineWeb (Penedo
+et al., 2024). Their training budgets are 2.70B, 11.01B,
+and 26.05B tokens, respectively, corresponding to approxi-
+mately 20 tokens per parameter for the dense models (Hoff-
+mann et al., 2022) and per active parameter for OLMoE.
+The data are tokenized with the LLaMA-2 tokenizer (Tou-
+vron et al., 2023) and packed into sequences of 2048 tokens,
+with a global batch of 1024 sequences, or approximately 2M
+tokens, shared across replicas. All methods perform local
+Table 1. Comparison of communication and optimization ca-
+pabilities. Methods comparison: ✓ and ✗ indicate supported
+and unsupported features, respectively. SPICE brings together
+peer-to-peer communication, communication acceleration, sparse
+communication, and dynamic neighborhoods in a unified frame-
+work.
+P2P Acceleration Sparse Dynamic Method Neighborhoods
+AdamW DDP ✗ ✗ ✗ ✗
+DAdam ✓ ✗ ✗ ✓
+GASLoC ✓ ✓ ✗ ✓
+SparseLoCo ✗ ✗ ✓ ✗
+CHOCO-SGD ✓ ✗ ✓ ✗
+SPICE ✓ ✓ ✓ ✓
+updates with AdamW, with the peak learning rate tuned
+separately for each method and a schedule consisting of
+warmup followed by cosine decay. Its second-order mo-
+mentum β2 is scaled according to Belilovsky et al. (2026).
+Where applicable, we also tune the outer learning rate and
+Nesterov momentum.
+Baselines. We compare SPICE with AdamW DDP,
+SparseLoCo, DAdam, GASLoC, and CHOCO-SGD, with
+replicas communicating after every local optimizer up-
+date in all decentralized methods. AdamW DDP provides
+the reference for training with exact gradient aggregation
+at every update (Li et al., 2020). We choose DAdam
+as an adaptive decentralized baseline evaluated on trans-
+former training (Wang et al., 2025). We also compare with
+GASLoC using one or two peers per round, which provides
+the dense counterpart of SPICE and measures the quality
+and communication cost achievable through peer selection
+alone (Cagnasso et al., 2026). Finally, CHOCO-SGD pro-
+vides a baseline for compressed decentralized communi-
+cation (Koloskova* et al., 2020). We evaluate it on the
+complete graph because it relies on a static communication
+graph, a dependence explicit in its memory-efficient for-
+mulation. Fixed sparse graphs could match the peer count
+of our randomized selections (e.g., a ring for q = 2), but
+would impose a substantial mixing disadvantage, poten-
+tially slowing convergence (Nabli et al., 2023). We evaluate
+SparseLoCo at the same sparsity density as the other sparse
+baselines, without quantization or outer momentum, and
+with H = 1. Table 1 summarizes the key distinctions
+among these methods.
+Implementation. We evaluate training quality with a sim-
+ulator of local updates and message exchanges, allowing us
+to study up to 128 replicas without requiring 128 physical
+GPUs. We measure execution timings separately using a
+TorchTitan implementation (Liang et al., 2025). This im-
+plementation packs the selected indices within each chunk
+into 12 bits each, storing two indices in three bytes, and
+exchanges the packed indices and selected parameter values
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Table 2. Final validation loss. (a) Validation loss for the 134M model trained on 2.70B tokens with R replicas. (b) Validation loss for the
+551M model trained on 11.01B tokens across R replicas. DDP and SparseLoCo communicate through global collectives (gc), while
+the other methods use peer-to-peer communication. DAdam and CHOCO-SGD use a complete communication graph, while GASLoC
+and SPICE sample a time-varying graph. Methods with sparse communication use density δ = 3.125%, with k = 128 and block size
+b = 4096. We highlight in bold the best decentralized result for each replica count and underline the best result among sparse methods.
+In case of a tie, the method with the lowest communication volume is highlighted. SPICE ’s advantage over the evaluated decentralized
+baselines grows with the replica count, as its expanding neighborhood limits loss degradation.
+(a) 134M parameters, 2.70B tokens.
+Method Peers q R = 8 R = 16 R = 32 R = 64 R = 128
+AdamW DDP (ref.) gc 3.17 3.17 3.17 3.17 3.17
+DAdam R − 1 3.23 3.25 3.30 3.36 3.42
+GASLoC 1 3.20 3.23 3.28 3.35 3.44
+GASLoC 2 3.19 3.21 3.24 3.31 3.37
+SparseLoCo gc 3.27 3.28 3.32 3.38 3.42
+CHOCO-SGD R − 1 3.27 3.35 3.47 3.67 3.86
+SPICE (ours) R/2 3.19 3.19 3.20 3.21 3.23
+(b) 551M parameters, 11.01B tokens.
+Method Peers q R = 8 R = 16 R = 32
+AdamW DDP (ref.) gc 2.63 2.63 2.63
+DAdam R − 1 2.70 2.73 2.77
+GASLoC 1 2.67 2.71 2.75
+GASLoC 2 2.64 2.68 2.73
+SparseLoCo gc 2.71 2.74 2.78
+CHOCO-SGD R − 1 2.73 2.81 2.95
+SPICE (ours) R/2 2.65 2.68 2.70
+Table 3. 7B Mixture of Experts. Final validation loss and down-
+stream length-normalized accuracy for the 7B MoE trained on
+26B tokens across 8 replicas. SPICE uses TOP-k = 256 and block
+size b = 4096 for a density δ = 6.25%. Compared with dense
+two-peer GASLoC, SPICE achieves comparable model quality
+with 8× less communication volume.
+Method Comm. Vol. Loss HSwag PIQA
+AdamW DDP (ref.) 1.75d 2.362 52.71 ± 0.49 72.36 ± 1.04
+DAdam-complete 7d 2.421 48.87 ± 0.49 71.71 ± 1.05
+GASLoC (q = 1) d 2.370 51.93 ± 0.50 71.60 ± 1.04
+GASLoC (q = 2) 2d 2.367 52.56 ± 0.50 72.58 ± 1.05
+SPICE (ours) (q = 4) 0.25d 2.368 52.38 ± 0.50 72.42 ± 1.05
+through actual peer-to-peer communication. Values retain
+the parameter dtype and are exchanged in batches after
+the packed indices are sent. The receiver then unpacks the
+indices and accumulates the received values at the corre-
+sponding coordinates.
+4.2 Training Results
+For the 134M model, SPICE achieves the best validation
+loss among both the sparse and decentralized methods eval-
+uated in Table 2a. Increasing the replica count from 8 to
+128 raises validation loss by only 1.3% for SPICE, com-
+pared with 5.6% for dense two-peer GASLoC. This reduces
+a known difficulty of methods using inner and outer opti-
+mizers, whose performance can degrade as the replica count
+increases (Horoi et al., 2026; Belilovsky et al., 2026). Each
+message contains only 3.125% of the parameter coordinates,
+transmitting more than 30 times fewer parameter values than
+a dense decentralized exchange. This sparsity allows us to
+expand the neighborhood proportionally to the replica count,
+using q = R/2, at a fraction of the volume required for
+dense exchanges with the same peers. As the fixed global
+batch is divided among more replicas, the neighborhood
+grows by the same factor that the local batch size decreases,
+keeping the total number of tokens processed by the commu-
+nicating peers constant. For each coordinate, however, only
+peers that select it contribute to the outer gradient, so this
+does not imply constant token coverage at every coordinate.
+The token coverage maintained across the neighborhood
+provides a possible explanation for the reduced degradation,
+which results in a validation loss advantage of 0.14 over
+dense two-peer GASLoC at 128 replicas.
+Using the same density and neighborhood rule, SPICE re-
+tains the best validation loss among the evaluated sparse
+methods when the model size increases from 134M to 551M
+parameters, as shown in Table 2b. As with the 134M model,
+its performance is comparable to dense two-peer GASLoC
+at smaller replica counts, with an increasing advantage as
+the replica count grows. From 8 to 32 replicas, its validation
+loss increases by 1.9%, compared with 3.4% for the dense
+variant, extending the reduced degradation to a larger model
+and training budget.
+Table 3 extends the evaluation to OLMoE-1B-7B (Muen-
+nighoff et al., 2025), a mixture-of-experts model with 7B
+parameters. With 8 replicas, SPICE exchanges 6.25% of
+the parameter coordinates with four peers per round, using
+one-eighth the communication volume than dense two-peer
+GASLoC. It achieves a nearly identical validation loss and
+comparable accuracy in HellaSwag (Zellers et al., 2019) and
+PIQA (Bisk et al., 2019), with both accuracy differences
+falling within the reported error bars. These results show
+that the communication savings also extend to different
+and larger model architectures while preserving competitive
+training quality.
+4.3 Effect of Density and Peer Count
+Peer count q and density δ are the two main controls of com-
+munication volume in SPICE. Their product qδ determines
+the total number of parameter values sent per round rela-
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+0.39 0.78 1.56 3.12 6.25 12.5
+Density δ (%)
+3.2
+3.3
+3.4
+3.5
+3.6
+3.7
+Validation Loss
+2 peers
+4 peers
+8 peers
+16 peers
+GASLoC-1peer
+GASLoC-2peer
+AdamW DDP
+(a) Joint effect of density and peer count.
+8.59 17.19 34.38 68.75 137.50 275.00
+Outbound volume / dense model size (%)
+3.2
+3.3
+3.4
+Validation Loss
+2 peers
+4 peers
+8 peers
+16 peers
+GASLoC-1peer
+GASLoC-2peer
+AdamW DDP (b) Allocation of a fixed communication budget.
+Figure 3. Effect of density and peer count on validation loss. The 134M model is trained with 32 replicas for 2.70B tokens. (a) shows
+the joint effect of density and peer count, the two factors that determine the total communication volume. (b) compares validation loss at
+fixed outbound communication volume, showing the trade-off between more peers and more coordinates per peer under a fixed budget.
+Increasing density brings diminishing improvements when more peers are used, while configurations with fewer peers remain more
+sensitive to sparsification. At small communication budgets, sending sparse messages to more peers yields lower validation losses.
+tive to one dense model exchange, with the corresponding
+byte cost given in Section 3.2. The same communication
+volume can therefore be allocated to more peers or more
+coordinates per peer. Figure 3a compares how these choices
+affect validation loss.
+With fewer peers, increasing density reduces validation loss
+throughout the tested range. With more peers, loss instead
+levels off once density reaches a few percent, and the advan-
+tage of larger neighborhoods decreases as density increases.
+Larger neighborhoods are therefore most beneficial under
+aggressive sparsification. This is consistent with sparse
+messages from more peers partly compensating for the lim-
+ited number of coordinates in each message. The resulting
+exchanges may already provide enough information that
+transmitting additional coordinates brings little improve-
+ment, even while communication volume remains below
+that of a dense model exchange.
+Figure 3b compares these configurations at equal outbound
+communication volume, including the packed indices. At
+smaller communication budgets, allocating the same volume
+to more peers reduces validation loss. With sixteen peers,
+SPICE improves on both dense GASLoC baselines while
+sending less than half the bytes required for one dense model
+exchange per round.
+4.4 Training Under Limited Bandwidth
+Training over the internet often relies on connections
+with substantially less bandwidth than datacenter intercon-
+nects (Wang et al., 2023; Jaghouar et al., 2024; Lidin et al.,
+2026). In this setting, communication can limit training
+speed, while bandwidth stragglers and temporary link fail-
+ures can further delay synchronization. These constraints
+motivate measuring how reducing communication volume
+affects training time.
+4.4.1 End-to-End Training Time
+We benchmark the 134M and 551M models on eight
+NVIDIA RTX A6000 GPUs within a single machine, with
+one training replica per GPU, using our TorchTitan im-
+plementation (Liang et al., 2025) with actual peer-to-peer
+communication. For SPICE, each exchange transmits the
+selected parameter values and their 12-bit packed indices.
+The timings therefore include index packing, transmission
+of both indices and values, and unpacking and accumulation
+at the receiver. To control bandwidth, we place each replica
+in a separate Linux network namespace and connect the
+namespaces through a virtual Ethernet bridge. We use tc
+netem to cap outgoing traffic at the replica interface and
+incoming traffic at the corresponding interface on the host.
+The specified rate therefore limits each replica’s aggregate
+sending and receiving bandwidth separately, and is shared
+by all its peer exchanges. We apply the same rate to all eight
+replicas and evaluate caps of 1, 2, 5, and 10 Gbps. NCCL
+uses its socket transport over these interfaces, with direct
+GPU transfers, shared memory transport, and InfiniBand
+disabled to prevent communication from bypassing the caps.
+These runs impose bandwidth limits without injecting addi-
+tional latency or link failures. The uncapped setting instead
+uses NCCL without the namespace bandwidth controls.
+Figure 4 shows that SPICE achieves the highest training
+throughput for both model sizes at every tested bandwidth.
+Its throughput changes little as bandwidth decreases from
+10 to 1 Gbps, while all dense methods slow down over
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+10 5 2 1
+Bandwidth (Gbps)
+100
+200
+300
+400
+500Throughput (ktok/s)
+DDP
+GASLoC (q = 2)
+GASLoC (q = 1)
+SPICE
+(a) 134M parameters.
+10 5 2 1
+Bandwidth (Gbps)
+35
+70
+105
+140Throughput (ktok/s)
+DDP
+GASLoC (q = 2)
+GASLoC (q = 1)
+SPICE (b) 551M parameters.
+Figure 4. Training throughput under limited bandwidth. Aggregate throughput in thousands of tokens per second for the 134M and
+551M models on eight RTX A6000 GPUs, with the same bandwidth cap applied separately to each replica’s links. Higher is better. SPICE
+uses four peers, TOP-k = 128, and block size b = 4096, corresponding to density δ = 3.125%. SPICE achieves the highest throughput
+at every tested bandwidth and retains nearly constant throughput as the cap decreases from 10 to 1 Gbps, while DDP and both dense
+GASLoC variants lose throughput over this range.
+this range, increasing the advantage of sparsification un-
+der tighter bandwidth limits. This advantage holds even
+though SPICE communicates with four peers, compared
+with one or two for dense GASLoC. With TOP-k = 128 and
+b = 4096, each sparse message contains only 3.125% of
+the model coordinates, allowing SPICE to reach more peers
+while sending less data overall, including the coordinate
+indices. The resulting throughput shows that sparsification
+can support a larger peer count without incurring the com-
+munication cost of dense exchanges.
+To assess how this throughput advantage affects training
+quality, we use the time required by DDP to complete its
+training budget as the reference. At each bandwidth cap, we
+train SPICE for more steps to match this elapsed time, allow-
+ing it to process more tokens. Figure 5 shows that SPICE
+achieves lower validation loss on the 134M model under
+this comparison, with a reduction of 6% at 1 Gbps. The
+additional steps enabled by sparse communication therefore
+improve validation loss within a fixed time window.
+4.4.2 Communication Stragglers Between Islands
+Geographically distributed training resources can form com-
+munication islands, with fast connections within sites and
+slower internet connections between them (Jaghouar et al.,
+2024; Lidin et al., 2026). The connections between islands
+can also vary over time, with Internet measurements report-
+ing substantial throughput degradation over the course of a
+day (Mok et al., 2021). A possible disruption is a temporary
+bandwidth reduction on the paths connecting two islands,
+while connections within each island and paths involving
+other islands remain available. When several exchanges
+share the affected network infrastructure, the slowdown can
+affect multiple worker pairs, so changing peer neighbor-
+5 2 1
+Bandwidth (Gbps)
+-0.2
+-0.15
+-0.1
+-0.05
+0.0
+∆ Validation Loss
+Token matched
+Time matched
+Figure 5. Time-matched training under limited bandwidth. Val-
+idation loss differences relative to DDP for SPICE (q = 4,
+δ = 3.125%), training the 134M model on 8 A6000 GPUs with
+uniform bandwidth caps set using tc. At equal training time,
+SPICE outperforms DDP at all bandwidth caps shown with a re-
+duction of 6% in the slowest setting.
+hoods can repeatedly encounter the same bottleneck.
+In this setting, workers remain operational and can compute
+locally, but exchanges over affected paths take substantially
+longer, becoming communication stragglers. A link failure
+is an extreme case in which no message can traverse the
+affected link until connectivity is restored. Such a failure
+does not necessarily isolate an island, since information may
+still propagate through other islands when alternative paths
+remain available.
+We emulate this scenario on the same eight-GPU setup,
+assigning the replicas to three logical islands containing
+three, three, and two replicas (Figure 6a). Using the net-
+work namespaces described above, we reduce bandwidth in
+both directions between the two larger islands while leaving
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+1
+2 3
+4
+5
+67
+8
+Island A
+Island B
+Island C
+Slowed links
+(a) Island topology.
+0 5 10 15
+Elapsed time (min)
+0
+20
+40
+60
+80
+100Throughput (%)
+Healthy Slowed links Restored
+AdamW DDP
+SPICE (b) 500 Mbps.
+0 5 10 15
+Elapsed time (min)
+0
+20
+40
+60
+80
+100Throughput (%)
+Healthy Slowed links Restored
+AdamW DDP
+SPICE
+Windowed SPICE (c) 100 Mbps.
+Figure 6. Training throughput with slow links between communication islands. Eight replicas of the 134M model run on eight
+NVIDIA RTX A6000 GPUs, with one replica per GPU. (a) Replicas are grouped into islands A, B, and C containing three, three, and
+two replicas, respectively. Dashed edges mark the affected links between A and B. (b, c) Throughput when each directed worker pair
+between A and B is capped from minute 5 to minute 10 at 500 Mbps and 100 Mbps, respectively. All other paths remain unchanged, and
+the original bandwidth is restored at minute 10. Throughput is measured in 30 s bins and normalized by each method’s top throughput
+during the initial healthy phase. SPICE limits throughput loss at both bandwidth caps. Windowed SPICE is additionally evaluated at
+100 Mbps, where bounded waiting further improves throughput.
+all other paths unchanged. We test a cap of 500 Mbps and a
+more severe cap of 100 Mbps, applied separately to each di-
+rected worker pair between these islands rather than shared
+by the whole island. Each run includes an initial healthy
+phase, a period of reduced bandwidth, and a final phase with
+the original bandwidth restored. Workers and their control
+connections remain operational throughout, isolating the
+effect of degraded payload paths from worker failures.
+We compare SPICE against DDP managed by TorchFT,
+allowing the collective baseline to use its recovery mech-
+anisms. At 500 Mbps, smaller messages already limit the
+effect of slow links: SPICE retains most of its healthy
+throughput, while DDP loses more than two thirds of it
+(Figure 6b). Further reducing the bandwidth to 100 Mbps
+prevents DDP from committing most of the updates during
+the 5-minute slowdown, while SPICE retains approximately
+two thirds of its healthy throughput (Figure 6c). Sparsifica-
+tion alone allows exchanges to complete faster despite the
+reduced bandwidth, because each message sends less than a
+twentieth of the full payload.
+Improving throughput with bounded waiting. The re-
+sults above wait for all requested peer contributions, but
+peer-to-peer exchanges allow each replica to aggregate avail-
+able contributions without waiting for every requested peer.
+To exploit this flexibility under communication stragglers,
+one could use a windowed approach to gossip, which com-
+bines background reception with a bounded communication
+window. Each replica posts a receive operation in the back-
+ground so that peers can send updates before it reaches its
+own exchange stage. At the deadline, it aggregates only
+complete peer contributions and proceeds with its outer up-
+date, using only its own endpoint if none arrived in time, as
+it would do for coordinates that were not shared by any other
+peer. A global collective instead requires the prescribed par-
+ticipation to complete its result, even when communication
+overlaps with computation.
+Sparsification allows each replica to contact more peers
+under the same communication budget, increasing the op-
+portunities to receive contributions before the deadline. This
+benefit depends on reaching peers through unaffected paths,
+since peers sharing a bottleneck can be delayed together.
+We therefore evaluate SPICE with windowed gossip in the
+same island setup. During the initial healthy period, we
+measure the distribution of complete sparse exchange times.
+The communication window is fixed at 2× the measured
+99th percentile and kept unchanged during the period of
+reduced bandwidth to accommodate small differences in
+replica timing. Figure 6c shows that windowed gossip fur-
+ther improves throughput under the more severe slowdown
+by allowing updates to proceed with fewer contributions.
+With this window, committed updates used an average of
+2.48 ± 0.88 peer contributions out of four requested peers,
+while retaining approximately 86% of healthy throughput.
+5 CONCLUSION
+We introduced SPICE, a decentralized training method that
+combines sparse parameter exchanges with error feedback
+to make broader peer neighborhoods affordable. Under tight
+communication budgets, exchanging fewer coordinates with
+more peers improves training quality over denser exchanges
+with fewer peers. This design can outperform dense gos-
+sip while communicating less and limiting quality degrada-
+tion as the replica count grows. Our implementation turns
+these smaller exchanges into higher training throughput
+under bandwidth constraints and maintains much of this
+performance during transient link slowdowns. These re-
+sults support decentralized language model pretraining over
+bandwidth-constrained networks.
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+ACKNOWLEDGMENTS
+This work was supported by PEPR IA on grant SHARP
+ANR-23-PEIA-0008 and PEPR NUMPEX on grant
+DAIMOS ANR-25-EXNU-0002. Part of this work was
+granted access to the JeanZay HPC/AI resources of IDRIS
+under the allocation AD011015884R1, AD011017481,
+AD011016641, AD011017661 and AD011017766. E.B.
+and P.C. acknowledge funding from NSERC Discovery and
+FRQNT New Scholar.
+REFERENCES
+Assran, M., Loizou, N., Ballas, N., and Rabbat, M. Stochas-
+tic gradient push for distributed deep learning. In Inter-
+national Conference on Machine Learning, pp. 344–353.
+PMLR, 2019.
+Basu, D., Data, D., Karakus, C., and Diggavi, S. Qsparse-
+local-sgd: distributed sgd with quantization, sparsifica-
+tion, and local computations. In Proceedings of the 33rd
+International Conference on Neural Information Process-
+ing Systems, Red Hook, NY, USA, 2019. Curran Asso-
+ciates Inc.
+Belilovsky, E., Horoi, S., Oyallon, E., and Th´erien, B.
+How inner optimizers shape replica scaling, 2026. URL
+https://arxiv.org/abs/2610.19064.
+Bisk, Y., Zellers, R., Bras, R. L., Gao, J.-F., and Choi, Y.
+Piqa: Reasoning about physical commonsense in natural
+language. In AAAI Conference on Artificial Intelligence,
+2019. URL https://api.semanticscholar.
+org/CorpusID:208290939.
+Boyd, S., Ghosh, A., Prabhakar, B., and Shah, D. Random-
+ized gossip algorithms. IEEE transactions on information
+theory, 52(6):2508–2530, 2006.
+Cagnasso, P., Belilovsky, E., and Oyallon, E. Unifying
+local communications and local updates for llm pretrain-
+ing, 2026. URL https://arxiv.org/abs/2606.
+11081.
+DeepSeek-AI, Liu, A., Feng, B., Xue, B., Wang, B., Wu, B.,
+Lu, C., Zhao, C., Deng, C., Zhang, C., Ruan, C., Dai, D.,
+Guo, D., Yang, D., Chen, D., Ji, D., Li, E., Lin, F., Dai,
+F., Luo, F., Hao, G., Chen, G., Li, G., Zhang, H., Bao,
+H., Xu, H., Wang, H., Zhang, H., Ding, H., Xin, H., Gao,
+H., Li, H., Qu, H., Cai, J. L., Liang, J., Guo, J., Ni, J., Li,
+J., Wang, J., Chen, J., Chen, J., Yuan, J., Qiu, J., Li, J.,
+Song, J., Dong, K., Hu, K., Gao, K., Guan, K., Huang,
+K., Yu, K., Wang, L., Zhang, L., Xu, L., Xia, L., Zhao,
+L., Wang, L., Zhang, L., Li, M., Wang, M., Zhang, M.,
+Zhang, M., Tang, M., Li, M., Tian, N., Huang, P., Wang,
+P., Zhang, P., Wang, Q., Zhu, Q., Chen, Q., Du, Q., Chen,
+R. J., Jin, R. L., Ge, R., Zhang, R., Pan, R., Wang, R.,
+Xu, R., Zhang, R., Chen, R., Li, S. S., Lu, S., Zhou, S.,
+Chen, S., Wu, S., Ye, S., Ye, S., Ma, S., Wang, S., Zhou,
+S., Yu, S., Zhou, S., Pan, S., Wang, T., Yun, T., Pei, T.,
+Sun, T., Xiao, W. L., Zeng, W., Zhao, W., An, W., Liu,
+W., Liang, W., Gao, W., Yu, W., Zhang, W., Li, X. Q.,
+Jin, X., Wang, X., Bi, X., Liu, X., Wang, X., Shen, X.,
+Chen, X., Zhang, X., Chen, X., Nie, X., Sun, X., Wang,
+X., Cheng, X., Liu, X., Xie, X., Liu, X., Yu, X., Song,
+X., Shan, X., Zhou, X., Yang, X., Li, X., Su, X., Lin, X.,
+Li, Y. K., Wang, Y. Q., Wei, Y. X., Zhu, Y. X., Zhang,
+Y., Xu, Y., Xu, Y., Huang, Y., Li, Y., Zhao, Y., Sun, Y.,
+Li, Y., Wang, Y., Yu, Y., Zheng, Y., Zhang, Y., Shi, Y.,
+Xiong, Y., He, Y., Tang, Y., Piao, Y., Wang, Y., Tan, Y.,
+Ma, Y., Liu, Y., Guo, Y., Wu, Y., Ou, Y., Zhu, Y., Wang,
+Y., Gong, Y., Zou, Y., He, Y., Zha, Y., Xiong, Y., Ma, Y.,
+Yan, Y., Luo, Y., You, Y., Liu, Y., Zhou, Y., Wu, Z. F.,
+Ren, Z. Z., Ren, Z., Sha, Z., Fu, Z., Xu, Z., Huang, Z.,
+Zhang, Z., Xie, Z., Zhang, Z., Hao, Z., Gou, Z., Ma, Z.,
+Yan, Z., Shao, Z., Xu, Z., Wu, Z., Zhang, Z., Li, Z., Gu,
+Z., Zhu, Z., Liu, Z., Li, Z., Xie, Z., Song, Z., Gao, Z.,
+and Pan, Z. Deepseek-v3 technical report, 2025. URL
+https://arxiv.org/abs/2412.19437.
+Douillard, A., Feng, Q., Rusu, A. A., Chhaparia, R.,
+Donchev, Y., Kuncoro, A., Ranzato, M., Szlam, A., and
+Shen, J. Diloco: Distributed low-communication training
+of language models. In 2nd Workshop on Advancing Neu-
+ral Network Training: Computational Efficiency, Scala-
+bility, and Resource Optimization (WANT@ICML 2024),
+2024. URL https://openreview.net/forum?
+id=pICSfWkJIk.
+Fatkhullin, I., Tyurin, A., and Richt´arik, P. Momentum
+provably improves error feedback! In Advances in Neural
+Information Processing Systems, volume 36, 2023.
+Fournier, L., Nabli, A., Aminbeidokhti, M., Pedersoli, M.,
+Belilovsky, E., and Oyallon, E. WASH: Train your en-
+semble with communication-efficient weight shuffling,
+then average. In OPT 2024: Optimization for Machine
+Learning, 2024. URL https://openreview.net/
+forum?id=l3gJlQB8oc.
+Gladstone, A., Nanduru, G., Islam, M. M., Han, P., Ha, H.,
+Chadha, A., Du, Y., Ji, H., Li, J., and Iqbal, T. Energy-
+based transformers are scalable learners and thinkers. In
+The Fourteenth International Conference on Learning
+Representations, 2026. URL https://openreview.
+net/forum?id=ZBj3Qp1bYg.
+Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian,
+A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A.,
+Vaughan, A., Yang, A., Fan, A., Goyal, A., Hartshorn,
+A., Yang, A., Mitra, A., Sravankumar, A., Korenev,
+A., Hinsvark, A., Rao, A., Zhang, A., Rodriguez, A.,
+Gregerson, A., Spataru, A., Roziere, B., Biron, B., Tang,
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+B., Chern, B., Caucheteux, C., Nayak, C., Bi, C., Marra,
+C., McConnell, C., Keller, C., Touret, C., Wu, C., Wong,
+C., Ferrer, C. C., Nikolaidis, C., Allonsius, D., Song, D.,
+Pintz, D., Livshits, D., Wyatt, D., Esiobu, D., Choudhary,
+D., Mahajan, D., Garcia-Olano, D., Perino, D., Hupkes,
+D., Lakomkin, E., AlBadawy, E., Lobanova, E., Dinan,
+E., Smith, E. M., Radenovic, F., Guzm´an, F., Zhang, F.,
+Synnaeve, G., Lee, G., Anderson, G. L., Thattai, G., Nail,
+G., Mialon, G., Pang, G., Cucurell, G., Nguyen, H., Ko-
+revaar, H., Xu, H., Touvron, H., Zarov, I., Ibarra, I. A.,
+Kloumann, I., Misra, I., Evtimov, I., Zhang, J., Copet, J.,
+Lee, J., Geffert, J., Vranes, J., Park, J., Mahadeokar, J.,
+Shah, J., van der Linde, J., Billock, J., Hong, J., Lee, J.,
+Fu, J., Chi, J., Huang, J., Liu, J., Wang, J., Yu, J., Bitton,
+J., Spisak, J., Park, J., Rocca, J., Johnstun, J., Saxe, J., Jia,
+J., Alwala, K. V., Prasad, K., Upasani, K., Plawiak, K., Li,
+K., Heafield, K., Stone, K., El-Arini, K., Iyer, K., Malik,
+K., Chiu, K., Bhalla, K., Lakhotia, K., Rantala-Yeary,
+L., van der Maaten, L., Chen, L., Tan, L., Jenkins, L.,
+Martin, L., Madaan, L., Malo, L., Blecher, L., Landzaat,
+L., de Oliveira, L., Muzzi, M., Pasupuleti, M., Singh,
+M., Paluri, M., Kardas, M., Tsimpoukelli, M., Oldham,
+M., Rita, M., Pavlova, M., Kambadur, M., Lewis, M.,
+Si, M., Singh, M. K., Hassan, M., Goyal, N., Torabi, N.,
+Bashlykov, N., Bogoychev, N., Chatterji, N., Zhang, N.,
+Duchenne, O., C¸ elebi, O., Alrassy, P., Zhang, P., Li, P.,
+Vasic, P., Weng, P., Bhargava, P., Dubal, P., Krishnan,
+P., Koura, P. S., Xu, P., He, Q., Dong, Q., Srinivasan,
+R., Ganapathy, R., Calderer, R., Cabral, R. S., Stojnic,
+R., Raileanu, R., Maheswari, R., Girdhar, R., Patel, R.,
+Sauvestre, R., Polidoro, R., Sumbaly, R., Taylor, R., Silva,
+R., Hou, R., Wang, R., Hosseini, S., Chennabasappa, S.,
+Singh, S., Bell, S., Kim, S. S., Edunov, S., Nie, S., Narang,
+S., Raparthy, S., Shen, S., Wan, S., Bhosale, S., Zhang,
+S., Vandenhende, S., Batra, S., Whitman, S., Sootla, S.,
+Collot, S., Gururangan, S., Borodinsky, S., Herman, T.,
+Fowler, T., Sheasha, T., Georgiou, T., Scialom, T., Speck-
+bacher, T., Mihaylov, T., Xiao, T., Karn, U., Goswami, V.,
+Gupta, V., Ramanathan, V., Kerkez, V., Gonguet, V., Do,
+V., Vogeti, V., Albiero, V., Petrovic, V., Chu, W., Xiong,
+W., Fu, W., Meers, W., Martinet, X., Wang, X., Wang,
+X., Tan, X. E., Xia, X., Xie, X., Jia, X., Wang, X., Gold-
+schlag, Y., Gaur, Y., Babaei, Y., Wen, Y., Song, Y., Zhang,
+Y., Li, Y., Mao, Y., Coudert, Z. D., Yan, Z., Chen, Z.,
+Papakipos, Z., Singh, A., Srivastava, A., Jain, A., Kelsey,
+A., Shajnfeld, A., Gangidi, A., Victoria, A., Goldstand,
+A., Menon, A., Sharma, A., Boesenberg, A., Baevski, A.,
+Feinstein, A., Kallet, A., Sangani, A., Teo, A., Yunus, A.,
+Lupu, A., Alvarado, A., Caples, A., Gu, A., Ho, A., Poul-
+ton, A., Ryan, A., Ramchandani, A., Dong, A., Franco,
+A., Goyal, A., Saraf, A., Chowdhury, A., Gabriel, A.,
+Bharambe, A., Eisenman, A., Yazdan, A., James, B.,
+Maurer, B., Leonhardi, B., Huang, B., Loyd, B., Paola,
+B. D., Paranjape, B., Liu, B., Wu, B., Ni, B., Hancock,
+B., Wasti, B., Spence, B., Stojkovic, B., Gamido, B.,
+Montalvo, B., Parker, C., Burton, C., Mejia, C., Liu, C.,
+Wang, C., Kim, C., Zhou, C., Hu, C., Chu, C.-H., Cai, C.,
+Tindal, C., Feichtenhofer, C., Gao, C., Civin, D., Beaty,
+D., Kreymer, D., Li, D., Adkins, D., Xu, D., Testuggine,
+D., David, D., Parikh, D., Liskovich, D., Foss, D., Wang,
+D., Le, D., Holland, D., Dowling, E., Jamil, E., Mont-
+gomery, E., Presani, E., Hahn, E., Wood, E., Le, E.-T.,
+Brinkman, E., Arcaute, E., Dunbar, E., Smothers, E., Sun,
+F., Kreuk, F., Tian, F., Kokkinos, F., Ozgenel, F., Cag-
+gioni, F., Kanayet, F., Seide, F., Florez, G. M., Schwarz,
+G., Badeer, G., Swee, G., Halpern, G., Herman, G., Sizov,
+G., Guangyi, Zhang, Lakshminarayanan, G., Inan, H.,
+Shojanazeri, H., Zou, H., Wang, H., Zha, H., Habeeb, H.,
+Rudolph, H., Suk, H., Aspegren, H., Goldman, H., Zhan,
+H., Damlaj, I., Molybog, I., Tufanov, I., Leontiadis, I.,
+Veliche, I.-E., Gat, I., Weissman, J., Geboski, J., Kohli,
+J., Lam, J., Asher, J., Gaya, J.-B., Marcus, J., Tang, J.,
+Chan, J., Zhen, J., Reizenstein, J., Teboul, J., Zhong, J.,
+Jin, J., Yang, J., Cummings, J., Carvill, J., Shepard, J.,
+McPhie, J., Torres, J., Ginsburg, J., Wang, J., Wu, K., U,
+K. H., Saxena, K., Khandelwal, K., Zand, K., Matosich,
+K., Veeraraghavan, K., Michelena, K., Li, K., Jagadeesh,
+K., Huang, K., Chawla, K., Huang, K., Chen, L., Garg,
+L., A, L., Silva, L., Bell, L., Zhang, L., Guo, L., Yu, L.,
+Moshkovich, L., Wehrstedt, L., Khabsa, M., Avalani, M.,
+Bhatt, M., Mankus, M., Hasson, M., Lennie, M., Reso,
+M., Groshev, M., Naumov, M., Lathi, M., Keneally, M.,
+Liu, M., Seltzer, M. L., Valko, M., Restrepo, M., Patel,
+M., Vyatskov, M., Samvelyan, M., Clark, M., Macey,
+M., Wang, M., Hermoso, M. J., Metanat, M., Rastegari,
+M., Bansal, M., Santhanam, N., Parks, N., White, N.,
+Bawa, N., Singhal, N., Egebo, N., Usunier, N., Mehta,
+N., Laptev, N. P., Dong, N., Cheng, N., Chernoguz, O.,
+Hart, O., Salpekar, O., Kalinli, O., Kent, P., Parekh, P.,
+Saab, P., Balaji, P., Rittner, P., Bontrager, P., Roux, P.,
+Dollar, P., Zvyagina, P., Ratanchandani, P., Yuvraj, P.,
+Liang, Q., Alao, R., Rodriguez, R., Ayub, R., Murthy, R.,
+Nayani, R., Mitra, R., Parthasarathy, R., Li, R., Hogan,
+R., Battey, R., Wang, R., Howes, R., Rinott, R., Mehta,
+S., Siby, S., Bondu, S. J., Datta, S., Chugh, S., Hunt, S.,
+Dhillon, S., Sidorov, S., Pan, S., Mahajan, S., Verma,
+S., Yamamoto, S., Ramaswamy, S., Lindsay, S., Lindsay,
+S., Feng, S., Lin, S., Zha, S. C., Patil, S., Shankar, S.,
+Zhang, S., Zhang, S., Wang, S., Agarwal, S., Sajuyigbe,
+S., Chintala, S., Max, S., Chen, S., Kehoe, S., Satter-
+field, S., Govindaprasad, S., Gupta, S., Deng, S., Cho,
+S., Virk, S., Subramanian, S., Choudhury, S., Goldman,
+S., Remez, T., Glaser, T., Best, T., Koehler, T., Robinson,
+T., Li, T., Zhang, T., Matthews, T., Chou, T., Shaked,
+T., Vontimitta, V., Ajayi, V., Montanez, V., Mohan, V.,
+Kumar, V. S., Mangla, V., Ionescu, V., Poenaru, V., Mi-
+hailescu, V. T., Ivanov, V., Li, W., Wang, W., Jiang, W.,
+Bouaziz, W., Constable, W., Tang, X., Wu, X., Wang, X.,
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Wu, X., Gao, X., Kleinman, Y., Chen, Y., Hu, Y., Jia, Y.,
+Qi, Y., Li, Y., Zhang, Y., Zhang, Y., Adi, Y., Nam, Y., Yu,
+Wang, Zhao, Y., Hao, Y., Qian, Y., Li, Y., He, Y., Rait,
+Z., DeVito, Z., Rosnbrick, Z., Wen, Z., Yang, Z., Zhao,
+Z., and Ma, Z. The llama 3 herd of models, 2024. URL
+https://arxiv.org/abs/2407.21783.
+Hoffmann, J., Borgeaud, S., Mensch, A., Buchatskaya, E.,
+Cai, T., Rutherford, E., de Las Casas, D., Hendricks,
+L. A., Welbl, J., Clark, A., Hennigan, T., Noland, E.,
+Millican, K., van den Driessche, G., Damoc, B., Guy, A.,
+Osindero, S., Simonyan, K., Elsen, E., Vinyals, O., Rae,
+J., and Sifre, L. Training compute-optimal large language
+models. In Advances in Neural Information Processing
+Systems, volume 35, 2022.
+Horoi, S., Th´erien, B., Wolf, G., and Belilovsky, E. Can
+model merging improve aggregation in diloco?, 2026.
+URL https://arxiv.org/abs/2607.03011.
+Jaghouar, S., Ong, J. M., Basra, M., Obeid, F., Straube,
+J., Keiblinger, M., Bakouch, E., Atkins, L., Panahi, M.,
+Goddard, C., Ryabinin, M., and Hagemann, J. Intellect-1
+technical report, 2024. URL https://arxiv.org/
+abs/2412.01152.
+Janson, P., Oyallon, E., and Belilovsky, E. Stabilizing native
+low-rank LLM pretraining. In Forty-third International
+Conference on Machine Learning, 2026. URL https:
+//openreview.net/forum?id=kb5wjkqu8q.
+Karimireddy, S. P., Rebjock, Q., Stich, S., and Jaggi, M.
+Error feedback fixes SignSGD and other gradient com-
+pression schemes. In Chaudhuri, K. and Salakhutdinov,
+R. (eds.), Proceedings of the 36th International Confer-
+ence on Machine Learning, volume 97 of Proceedings of
+Machine Learning Research, pp. 3252–3261. PMLR, 09–
+15 Jun 2019. URL https://proceedings.mlr.
+press/v97/karimireddy19a.html.
+Kolehmainen, J., Blagoev, N., Kara, S., Donaghy, J., Nies,
+C., and Ersoy, O. Noloco: No-all-reduce low commu-
+nication training method for large models, 2026. URL
+https://arxiv.org/abs/2506.10911.
+Koloskova, A., Stich, S., and Jaggi, M. Decentralized
+stochastic optimization and gossip algorithms with com-
+pressed communication. In Chaudhuri, K. and Salakhutdi-
+nov, R. (eds.), Proceedings of the 36th International Con-
+ference on Machine Learning, volume 97 of Proceedings
+of Machine Learning Research, pp. 3478–3487. PMLR,
+09–15 Jun 2019. URL https://proceedings.
+mlr.press/v97/koloskova19a.html.
+Koloskova*, A., Lin*, T., Stich, S. U., and Jaggi, M. De-
+centralized deep learning with arbitrary communication
+compression. In International Conference on Learning
+Representations, 2020.
+Koloskova, A., Loizou, N., Boreiri, S., Jaggi, M., and Stich,
+S. A unified theory of decentralized SGD with changing
+topology and local updates. In III, H. D. and Singh, A.
+(eds.), Proceedings of the 37th International Conference
+on Machine Learning, volume 119 of Proceedings of
+Machine Learning Research, pp. 5381–5393. PMLR, 13–
+18 Jul 2020. URL https://proceedings.mlr.
+press/v119/koloskova20a.html.
+Kopyshevskiy, D., Th´erien, B., Pinto, N., and Oyal-
+lon, E. LACCO: Local accumulation with computa-
+tion–communication overlap, 2026. URL https://
+arxiv.org/abs/2611.17991.
+Li, S., Zhao, Y., Varma, R., Salpekar, O., Noordhuis, P.,
+Li, T., Paszke, A., Smith, J., Vaughan, B., Damania, P.,
+and Chintala, S. Pytorch distributed: experiences on
+accelerating data parallel training. Proc. VLDB Endow.,
+13(12), 2020.
+Lian, X., Zhang, C., Zhang, H., Hsieh, C.-J., Zhang, W.,
+and Liu, J. Can decentralized algorithms outperform
+centralized algorithms? a case study for decentralized
+parallel stochastic gradient descent. In Proceedings of
+the 31st International Conference on Neural Information
+Processing Systems, NIPS’17, pp. 5336–5346. Curran
+Associates Inc., 2017.
+Liang, W., Liu, T., Wright, L., Constable, W., Gu, A.,
+Huang, C.-C., Zhang, I., Feng, W., Huang, H., Wang,
+J., Purandare, S., Nadathur, G., and Idreos, S. Torchtitan:
+One-stop pytorch native solution for production ready
+LLM pretraining. In The Thirteenth International Confer-
+ence on Learning Representations, 2025. URL https:
+//openreview.net/forum?id=SFN6Wm7YBI.
+Lidin, J., Sarfi, A., Miahi, E., Anthony, Q., Chauhan, S.,
+Pappas, E., Th´erien, B., Belilovsky, E., and Dare, S.
+Covenant-72b: Pre-training a 72b llm with trustless peers
+over-the-internet, 2026. URL https://arxiv.org/
+abs/2603.08163.
+Loeschcke, S., Toftrup, M., Kastoryano, M. J., Belongie,
+S., and Snæbjarnarson, V. Loqt: low-rank adapters for
+quantized pretraining. In Proceedings of the 38th Inter-
+national Conference on Neural Information Processing
+Systems, 2024.
+McMahan, B., Moore, E., Ramage, D., Hampson, S.,
+and Arcas, B. A. y. Communication-Efficient Learn-
+ing of Deep Networks from Decentralized Data. In
+Singh, A. and Zhu, J. (eds.), Proceedings of the 20th
+International Conference on Artificial Intelligence and
+Statistics, volume 54 of Proceedings of Machine Learn-
+ing Research, pp. 1273–1282. PMLR, 20–22 Apr 2017.
+URL https://proceedings.mlr.press/v54/
+mcmahan17a.html.
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Mok, R. K. P., Zou, H., Yang, R., Koch, T., Katz-Bassett, E.,
+and Claffy, K. C. Measuring the network performance
+of Google Cloud Platform. In Proceedings of the 21st
+ACM Internet Measurement Conference, pp. 54–61, 2021.
+doi: 10.1145/3487552.3487862. URL https://doi.
+org/10.1145/3487552.3487862.
+Muennighoff, N., Soldaini, L., Groeneveld, D., Lo, K., Mor-
+rison, J., Min, S., Shi, W., Walsh, P., Tafjord, O., Lambert,
+N., Gu, Y., Arora, S., Bhagia, A., Schwenk, D., Wadden,
+D., Wettig, A., Hui, B., Dettmers, T., Kiela, D., Farhadi,
+A., Smith, N. A., Koh, P. W., Singh, A., and Hajishirzi, H.
+OLMoE: Open mixture-of-experts language models. In
+International Conference on Learning Representations,
+2025. URL https://openreview.net/forum?
+id=xXTkbTBmqq.
+Nabli, A. and Oyallon, E. Dadao: Decoupled acceler-
+ated decentralized asynchronous optimization. In Inter-
+national Conference on Machine Learning, pp. 25604–
+25626. PMLR, 2023.
+Nabli, A. and Oyallon, E. Decentralized asynchronous opti-
+mization with dadao allows decoupling and acceleration.
+Journal of Machine Learning Research, 26(207):1–48,
+2025.
+Nabli, A., Belilovsky, E., and Oyallon, E. A2CiD2: Ac-
+celerating asynchronous communication in decentral-
+ized deep learning. In Oh, A., Naumann, T., Glober-
+son, A., Saenko, K., Hardt, M., and Levine, S. (eds.),
+Advances in Neural Information Processing Systems,
+volume 36, pp. 47451–47474. Curran Associates, Inc.,
+2023. doi: 10.52202/075280-2054. URL https:
+//openreview.net/forum?id=YE04aRkeZb.
+Nabli, A., Fournier, L., ERBACHER, P., Serrano, L.,
+Belilovsky, E., and Oyallon, E. ACCO: Accumulate while
+you communicate, hiding communications in distributed
+LLM training. In OPT 2024: Optimization for Machine
+Learning, 2024. URL https://openreview.net/
+forum?id=VrKAGrUqGe.
+Patarasuk, P. and Yuan, X. Bandwidth optimal all-reduce
+algorithms for clusters of workstations. J. Parallel Distrib.
+Comput., 69(2):117–124, 2009.
+Penedo, G., Kydl´ıˇcek, H., allal, L. B., Lozhkov, A., Mitchell,
+M., Raffel, C., Werra, L. V., and Wolf, T. The fineweb
+datasets: Decanting the web for the finest text data at
+scale. In The Thirty-eighth Conference on Neural Infor-
+mation Processing Systems Datasets and Benchmarks
+Track, 2024. URL https://openreview.net/
+forum?id=n6SCkn2QaG.
+Peng, B., Chen, L., Su, B., Quesnelle, J., Kingma, D. P., and
+qiang liu. Demo: Decoupled momentum optimization.
+In The Fourteenth International Conference on Learning
+Representations, 2026. URL https://openreview.
+net/forum?id=U9oewpa7cn.
+Reddi, S. J., Charles, Z., Zaheer, M., Garrett, Z., Rush, K.,
+Koneˇcn´y, J., Kumar, S., and McMahan, H. B. Adap-
+tive federated optimization. In International Confer-
+ence on Learning Representations, 2021. URL https:
+//openreview.net/forum?id=LkFG3lB13U5.
+Sarfi, A., Th´erien, B., Lidin, J., and Belilovsky, E. Over-
+coming the communication-performance tradeoff in llm
+pretraining, 2026. URL https://arxiv.org/abs/
+2508.15706.
+Song, Z., Li, W., Jin, K., Shi, L., Yan, M., Yin, W., and
+Yuan, K. Communication-efficient topologies for de-
+centralized learning with $o(1)$ consensus rate. In Oh,
+A. H., Agarwal, A., Belgrave, D., and Cho, K. (eds.),
+Advances in Neural Information Processing Systems,
+2022. URL https://openreview.net/forum?
+id=AyiiHcRzTd.
+Stich, S. U. Local SGD converges fast and communicates
+little. In International Conference on Learning Represen-
+tations, 2019. URL https://openreview.net/
+forum?id=S1g2JnRcFX.
+Stich, S. U. and Karimireddy, S. P. The error-feedback
+framework: Sgd with delayed gradients. Journal
+of Machine Learning Research, 21(237):1–36, 2020.
+URL http://jmlr.org/papers/v21/19-748.
+html.
+Stich, S. U., Cordonnier, J.-B., and Jaggi, M. Sparsi-
+fied sgd with memory. In Bengio, S., Wallach, H.,
+Larochelle, H., Grauman, K., Cesa-Bianchi, N., and
+Garnett, R. (eds.), Advances in Neural Information
+Processing Systems, volume 31. Curran Associates, Inc.,
+2018. URL https://proceedings.neurips.
+cc/paper_files/paper/2018/file/
+b440509a0106086a67bc2ea9df0a1dab-Paper.
+pdf.
+Touvron, H., Martin, L., Stone, K., Albert, P., Almahairi,
+A., Babaei, Y., Bashlykov, N., Batra, S., Bhargava, P.,
+Bhosale, S., Bikel, D., Blecher, L., Ferrer, C. C., Chen,
+M., Cucurull, G., Esiobu, D., Fernandes, J., Fu, J., Fu, W.,
+Fuller, B., Gao, C., Goswami, V., Goyal, N., Hartshorn,
+A., Hosseini, S., Hou, R., Inan, H., Kardas, M., Kerkez,
+V., Khabsa, M., Kloumann, I., Korenev, A., Koura, P. S.,
+Lachaux, M.-A., Lavril, T., Lee, J., Liskovich, D., Lu, Y.,
+Mao, Y., Martinet, X., Mihaylov, T., Mishra, P., Molybog,
+I., Nie, Y., Poulton, A., Reizenstein, J., Rungta, R., Saladi,
+K., Schelten, A., Silva, R., Smith, E. M., Subramanian, R.,
+Tan, X. E., Tang, B., Taylor, R., Williams, A., Kuan, J. X.,
+Xu, P., Yan, Z., Zarov, I., Zhang, Y., Fan, A., Kambadur,
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+M., Narang, S., Rodriguez, A., Stojnic, R., Edunov, S.,
+and Scialom, T. Llama 2: Open foundation and fine-tuned
+chat models. arXiv preprint arXiv:2307.09288, 2023.
+Vogels, T., Hendrikx, H., and Jaggi, M. Beyond spectral gap:
+the role of the topology in decentralized learning. J. Mach.
+Learn. Res., 24(1), January 2023. ISSN 1532-4435.
+Wang, J., Sahu, A. K., Yang, Z., Joshi, G., and Kar, S.
+Matcha: Speeding up decentralized sgd via matching
+decomposition sampling. In 2019 Sixth Indian Control
+Conference (ICC), pp. 299–300, 2019.
+Wang, J., Lu, Y., Yuan, B., Chen, B., Liang, P., De Sa, C., Re,
+C., and Zhang, C. CocktailSGD: Fine-tuning foundation
+models over 500Mbps networks. In Krause, A., Brunskill,
+E., Cho, K., Engelhardt, B., Sabato, S., and Scarlett, J.
+(eds.), Proceedings of the 40th International Conference
+on Machine Learning, volume 202 of Proceedings of Ma-
+chine Learning Research, pp. 36058–36076. PMLR, 23–
+29 Jul 2023. URL https://proceedings.mlr.
+press/v202/wang23t.html.
+Wang, Z., Zhang, J., Wu, X., and Johansson, M. From
+promise to practice: Realizing high-performance decen-
+tralized training. In Yue, Y., Garg, A., Peng, N., Sha, F.,
+and Yu, R. (eds.), International Conference on Learning
+Representations, volume 2025, pp. 26204–26249, 2025.
+Ying, B., Yuan, K., Chen, Y., Hu, H., PAN, P., and
+Yin, W. Exponential graph is provably efficient for
+decentralized deep training. In Ranzato, M., Beygelzimer,
+A., Dauphin, Y., Liang, P., and Vaughan, J. W. (eds.),
+Advances in Neural Information Processing Systems,
+volume 34, pp. 13975–13987. Curran Associates, Inc.,
+2021. URL https://proceedings.neurips.
+cc/paper_files/paper/2021/file/
+74e1ed8b55ea44fd7dbb685c412568a4-Paper.
+pdf.
+Zellers, R., Holtzman, A., Bisk, Y., Farhadi, A., and Choi,
+Y. HellaSwag: Can a machine really finish your sen-
+tence? In Korhonen, A., Traum, D., and M`arquez,
+L. (eds.), Proceedings of the 57th Annual Meeting of
+the Association for Computational Linguistics, pp. 4791–
+4800, Florence, Italy, July 2019. Association for Compu-
+tational Linguistics. doi: 10.18653/v1/P19-1472. URL
+https://aclanthology.org/P19-1472/.
+AI USAGE DISCLOSURE
+Claude and ChatGPT assisted with manuscript editing to
+improve clarity and grammar. ChatGPT also assisted with
+the implementation of software functions and reviewed code
+for potential errors. These tools were not used to formulate
+the research questions, develop the proposed method, design
+the experiments, or interpret the empirical findings. The
+authors reviewed and verified all AI-assisted text and code
+and take responsibility for the final content.
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+8 16 32 64 128
+Total replicas R
+3.20
+3.25
+3.30
+3.35
+3.40
+3.45
+3.50
+3.55
+Validation Loss
+Peer batch size
+32
+64
+128
+256
+512
+Figure 7. Validation loss across replica counts at fixed peer
+batch size. The 134M model is trained on 2.70B tokens at den-
+sity δ = 3.125%. Each curve keeps the peer batch size qB/R
+constant, where q is the number of contacted peers and B = 1024
+sequences is the global batch. Peer batch size excludes the replica’s
+own batch. Expanding the neighborhood proportionally to replica
+count limits validation-loss degradation.
+A ADDITIONAL RESULTS
+Tables 4 and 5 extend Table 2 with validation losses for
+additional peer counts, providing the numerical results for
+the analysis of scaling across replicas. Table 6 supplements
+Figure 4 with absolute training times and additional combi-
+nations of peer count and message density.
+A.1 Expanding neighborhoods reduces degradation
+with replica count
+We examine how the number of contacted peers affects
+training quality as the replica count increases. Tables 4
+and 5 report validation losses across replica and peer counts
+at a fixed message density of 3.125%. For the 134M model,
+increasing the replica count from 8 to 128 while keeping
+four peers raises validation loss by 10.3%. Expanding the
+neighborhood according to q = R/2 instead limits this
+increase to 1.3%. At fixed message density, expanding the
+neighborhood therefore reduces the degradation observed
+when training is distributed across more replicas.
+Figure 7 groups configurations by their peer batch size,
+qB/R, where B = 1024 sequences is the fixed global batch.
+Along each curve, the peer count grows proportionally to the
+replica count, keeping the total batch processed by the con-
+tacted peers constant while each replica’s local batch shrinks.
+Validation loss remains approximately stable across these
+configurations, with larger peer batches consistently yield-
+ing lower loss. These results are consistent with expanding
+neighborhoods compensating for the shrinking local batch,
+although they do not isolate the mechanism responsible. In
+particular, peer batch size is not an effective optimization
+batch: peers update different local models, and only those
+transmitting a given coordinate contribute to its aggregation.
+At peer batch sizes of 32 and 64 sequences, validation loss
+decreases slightly as the neighborhood expands. This sug-
+gests that peer batch size alone does not fully determine
+quality. The trend is consistent with Figure 3, where allo-
+cating a fixed communication volume to more peers with
+sparser messages yields lower validation loss.
+The 551M results in Table 5 confirm at a larger model scale
+that expanding the neighborhood reduces validation-loss
+degradation as the replica count increases.
+B REPRODUCIBILITY
+B.1 Peer sampling
+The SAMPLE PEERS procedure in Algorithm 1 is imple-
+mented as follows. At each round t, every replica inde-
+pendently generates the same uniform permutation σ(t) of
+the R replicas using a shared seed and the round index t.
+This permutation arranges replicas on a cycle without com-
+munication to coordinate peer selection. For an even peer
+count q < R, each replica exchanges messages with the
+q/2 replicas preceding it and the q/2 replicas following it,
+with positions taken modulo R. For the one-peer GASLoC
+configuration, R must be even, and consecutive replicas
+in the permutation form disjoint pairs: the first exchanges
+with the second, the third with the fourth, and so on. Both
+constructions give each replica exactly q distinct peers and
+make every connection symmetric. Generating a fresh per-
+mutation at each round changes the communication partners
+while preserving the peer count, allowing information to
+propagate beyond a fixed neighborhood.
+B.2 Software and hardware setup
+The training simulator uses Python 3.12, PyTorch 2.10.0,
+and TorchTitan 0.2.1. The implementation used for timing
+measurements is based on TorchTitan 0.2.2 and the June
+23, 2026 nightly release of torchft. All models use
+the LLaMA-2 tokenizer with a vocabulary of 32K tokens,
+available from the Together AI repository.
+Training runs for the 134M and 551M models use compute
+nodes with four NVIDIA H100 GPUs per node, connected
+through NVLink within each node and InfiniBand across
+nodes. These runs simulate multiple logical replicas on
+each GPU. OLMoE training runs use a single node with
+eight NVIDIA H200 GPUs connected through NVLink.
+Training times and throughput are measured separately on
+a single node with eight NVIDIA RTX A6000 GPUs, with
+one physical training replica per GPU.
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Table 4. 134M model validation loss. Final validation loss after training on 2.70B tokens, varying the number of replicas and selected
+peers at fixed density δ = 3.125%, with TOP-k = 128 and block size b = 4096. For each replica count, bold marks the best decentralized
+result and underlining marks the best sparse result. For SPICE, the diagonals trace paths of low validation loss degradation as the replica
+count increases.
+Method Peers q Comm. Volume P2P Sparse R = 8 R = 16 R = 32 R = 64 R = 128
+AdamW DDP (ref.) gc 2(R−1)/R d ≈ 2d ✗ ✗ 3.17
+DAdam R − 1 (R − 1) d ✓ ✗ 3.23 3.25 3.30 3.36 3.42
+GASLoC 1 d ✓ ✗ 3.20 3.23 3.28 3.35 3.44
+GASLoC 2 2d ✓ ✗ 3.19 3.21 3.24 3.31 3.37
+SparseLoCo gc (R − 1)δ d ✗ ✓ 3.27 3.28 3.32 3.38 3.42
+CHOCO-SGD R − 1 (R − 1)δ d ✓ ✓ 3.27 3.35 3.47 3.67 3.86
+SPICE
+2 2δ d = 0.06d ✓ ✓ 3.23 3.30 3.40 3.54 3.73
+4 4δ d = 0.12d ✓ ✓ 3.19 3.23 3.31 3.39 3.52
+8 8δ d = 0.25d ✓ ✓ — 3.19 3.24 3.30 3.39
+16 16δ d = 0.5d ✓ ✓ — — 3.20 3.23 3.31
+32 32δ d = d ✓ ✓ — — — 3.21 3.25
+64 64δ d = 2d ✓ ✓ — — — — 3.23
+Table 5. 551M model validation loss. Final validation loss after training on 11.01B tokens, varying the number of replicas and selected
+peers at fixed density δ = 3.125%, with TOP-k = 128 and block size b = 4096. For each replica count, bold marks the best decentralized
+result and underlining marks the best sparse result. These results confirm at a larger model scale the diagonal trend observed for SPICE at
+134M.
+Method Peers q Comm. Volume P2P Sparse R = 8 R = 16 R = 32
+AdamW DDP (ref.) gc 2(R−1)/R d ≈ 2d ✗ ✗ 2.63
+DAdam R − 1 (R − 1) d ✓ ✗ 2.70 2.73 2.77
+GASLoC 1 d ✓ ✗ 2.67 2.71 2.75
+GASLoC 2 2d ✓ ✗ 2.64 2.68 2.73
+SparseLoCo gc (R − 1)δ d ✗ ✓ 2.71 2.74 2.78
+CHOCO-SGD R − 1 (R − 1)δ d ✓ ✓ 2.73 2.81 2.95
+SPICE
+2 2δ d = 0.06d ✓ ✓ 2.71 2.75 2.77
+4 4δ d = 0.12d ✓ ✓ 2.65 2.71 2.74
+8 8δ d = 0.25d ✓ ✓ — 2.68 2.71
+16 16δ d = 0.5d ✓ ✓ — — 2.70
+B.3 Communication bandwidth limits
+For the global bandwidth experiments, each of the eight
+GPU replicas runs in a separate Linux network namespace
+connected through a virtual Ethernet pair to a private bridge.
+Linux traffic control tc applies the same fixed bandwidth
+cap to every replica, independently limiting its aggregate
+outgoing and incoming traffic. The outgoing cap is installed
+on the namespace interface, and the incoming cap on the
+host end of its virtual Ethernet pair, using netem with a
+queue limit of 10,000 packets and packet offloads disabled.
+All peer connections of a replica share these caps. NCCL
+uses IPv4 sockets on the virtual interface, with any other
+GPU transport technology disabled to prevent communi-
+cation from bypassing the limits. Control and monitoring
+traffic also share the capped interfaces.
+For the selective bandwidth experiment, we compare DDP
+and SPICE using the same namespace isolation and assign
+replicas 1–3 to island A, 4–6 to island B, and 7–8 to island
+C (Figure 6a). After five minutes of unrestricted communi-
+cation, a host controller caps only traffic between islands A
+and B at 500 Mbit/s (or 100 Mbit/s) for five minutes, then
+removes the caps for five minutes of recovery. Each source
+interface applies a separate bandwidth cap to each affected
+peer based on its destination IP address. The cap applies
+independently in each direction, while all other worker pairs
+remain unrestricted. Transitions follow a common mono-
+tonic host clock independently of training progress. DDP
+uses TorchFT with NCCL sockets, while SPICE exchanges
+sparse payloads with four rotating peers through a TCP
+transport that stages tensors in CPU memory. A calibration
+during the initial healthy phase sets the exchange deadline
+of the windowed version of SPICE to twice the pooled 99th
+percentile of exchange duration. Only complete payloads
+with matching attempt and schema identities received before
+the deadline contribute to the update, allowing communi-
+cation with healthy peers to remain useful when capped
+transfers miss the deadline.
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Table 6. End-to-end training times for the 134M and 551M models. Times are reported as hours:minutes and rounded to the nearest
+minute. Each model group shows the uncapped NCCL setting and bandwidth caps. The lowest time per model size and bandwidth is
+highlighted in bold.
+134M 551M
+Method Peers q Density δ
+NCCL
+(no cap)
+10
+Gbps
+5
+Gbps
+2
+Gbps
+1
+Gbps
+NCCL
+(no cap)
+10
+Gbps
+5
+Gbps
+2
+Gbps
+1
+Gbps
+DDP — — 2:05 4:49 5:14 5:35 7:08 23:24 48:40 51:56 55:16 69:38
+GASLoC 1 — 1:38 2:24 2:27 2:32 4:03 21:49 34:28 34:54 35:54 57:04
+GASLoC 2 — 1:47 3:57 4:18 4:33 6:01 24:51 58:22 63:13 67:26 94:20
+SPICE
+2 3.125% 1:34 1:38 1:40 1:40 1:43 19:56 21:11 21:21 21:30 22:19
+4 3.125% 1:35 1:46 1:48 1:50 1:55 20:12 23:17 23:39 24:17 25:56
+2 6.25% 1:34 1:44 1:46 1:46 1:53 20:15 22:48 23:12 23:26 25:09
+4 6.25% 1:36 1:59 2:04 2:07 2:17 20:25 26:46 27:54 29:13 32:20
+B.4 Random seeds and reporting precision
+We evaluate each training configuration using a single ran-
+dom seed. Recent pretraining studies likewise report single-
+seed results at selected model scales, citing the computa-
+tional cost of repeated runs (Loeschcke et al., 2024; Glad-
+stone et al., 2026). Given this cost, we prioritize allocating
+our computational budget to hyperparameter tuning rather
+than repeated training across seeds. Related distributed pre-
+training studies also report their main comparisons without
+across-seed uncertainty estimates (Douillard et al., 2024;
+Kolehmainen et al., 2026; Janson et al., 2026).
+As a closely related reference, GASLoC evaluates 134M-
+parameter models with 16 replicas over four random
+seeds, reporting validation-loss standard deviations of at
+most 0.011 across the evaluated methods and configura-
+tions (Cagnasso et al., 2026). Following its main-result
+reporting convention, we report validation losses rounded
+to two decimal places, evaluated on a held-out set of 4M
+tokens for the 134M and 551M models.
+B.5 Hyperparameters
+We select hyperparameters by grid search using validation
+loss on a second separate evaluation set of 1M tokens. For
+the 134M model, we search the peak inner learning rate
+over {1.4, 2, 2.8, 4, 5, 6} × 10−3, the outer learning rate
+over {0.8, 0.9, 1.0}, and the outer Nesterov momentum over
+{0.1, 0.2, 0.3}. For the 551M model, the corresponding
+learning rate grids are {3, 4, 5, 6} × 10−3 and {0.8, 0.9},
+with the same outer momentum grid. The inner learning
+rate warms up from one thousandth of its peak over the first
+10% of training steps, followed by cosine decay to 10%
+of the peak. The inner optimizer is AdamW with β1 =
+0.9. Following Belilovsky et al. (2026), we set β2 to 0.95,
+0.975, 0.987, 0.994, and 0.997 for R = 8, 16, 32, 64, 128,
+respectively. For OLMoE, after short preliminary runs to
+assess initial training stability, we fix the peak inner learning
+rate to 2 × 10−3, with warmup over the first 5% of training
+steps and the same initial and final learning rate fractions.
+We use β1 = β2 = 0.9, an outer learning rate of 0.9, and
+outer Nesterov momentum of 0.2.
+Across all models, AdamW uses ϵ = 10−8 and weight decay
+of 0.1. Inner gradients are clipped to a norm of 1.0, while
+the outer optimizer uses no gradient clipping and a constant
+learning rate. Unless specified otherwise, the TOP-k block
+size is fixed to b = 4096, and the error feedback decay
+factor is fixed to 0.95 following Sarfi et al. (2026). Table 7
+reports the selected hyperparameters.
+SPICE: Sparse Parameter Gossip for LLM Pretraining
+Table 7. Selected hyperparameters for SPICE on the 134M and 551M models across replica counts.
+Model Peers q HP R = 8 R = 16 R = 32 R = 64 R = 128
+134M
+2
+ηin 2e-3 2e-3 2e-3 2e-3 2e-3
+ηout 0.9 0.9 0.9 0.8 0.9
+µout 0.2 0.3 0.3 0.3 0.3
+4
+ηin 4e-3 2.8e-3 2e-3 2e-3 2e-3
+ηout 0.9 0.9 0.9 0.9 0.9
+µout 0.2 0.3 0.3 0.3 0.3
+8
+ηin
+—
+2.8e-3 2e-3 2e-3 2e-3
+ηout 0.9 0.8 0.9 0.9
+µout 0.3 0.3 0.3 0.3
+16
+ηin
+— —
+2e-3 2.8e-3 2.8e-3
+ηout 0.9 0.9 0.9
+µout 0.3 0.3 0.2
+32
+ηin
+— — —
+4e-3 4e-3
+ηout 0.9 0.8
+µout 0.2 0.3
+64
+ηin
+— — — —
+5e-3
+ηout 0.9
+µout 0.2
+551M
+2
+ηin 4e-3 4e-3 3e-3
+— —ηout 0.9 0.9 0.9
+µout 0.3 0.3 0.3
+4
+ηin 5e-3 5e-3 4e-3
+— —ηout 0.9 0.9 0.9
+µout 0.1 0.2 0.2
+8
+ηin
+—
+6e-3 5e-3
+— —ηout 0.9 0.9
+µout 0.2 0.2
+16
+ηin
+— —
+5e-3
+— —ηout 0.9
+µout 0.1

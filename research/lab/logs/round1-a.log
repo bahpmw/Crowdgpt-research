@@ -1,0 +1,115 @@
+=== r1-adam 12:52:29
+[r1-adam] it 11966 t  120.0s tok  12.253M eval 5.0938 up/step 29.373MB {}
+{"label": "r1-adam", "steps": 11966, "startLoss": 8.366497993469238, "finalLoss": 5.093802213668823, "bestLoss": 5.093802213668823, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 12253184}
+=== r1-dust8 12:54:31
+[r1-dust8] it 81 t  121.1s tok   0.083M eval 7.4343 up/step 14.687MB {'gradNorm': 8.3693, 'forwards': 63}
+{"label": "r1-dust8", "steps": 81, "startLoss": 8.366497993469238, "finalLoss": 7.434339880943298, "bestLoss": 7.434339880943298, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 82944}
+=== r1-dust32 12:56:33
+[r1-dust32] it 21 t  125.1s tok   0.022M eval 8.1522 up/step 14.687MB {'gradNorm': 10.6943, 'forwards': 126}
+{"label": "r1-dust32", "steps": 21, "startLoss": 8.366497993469238, "finalLoss": 8.15223479270935, "bestLoss": 8.15223479270935, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 21504}
+=== r1-mezo 12:58:39
+[r1-mezo] it 15310 t  120.0s tok  15.677M eval 7.5181 up/step 0.000MB {'projGrad': -1.4493}
+{"label": "r1-mezo", "steps": 15310, "startLoss": 8.366497993469238, "finalLoss": 7.518051981925964, "bestLoss": 7.518051981925964, "diverged": false, "upBytesPerStep": 12.0, "tokens": 15677440}
+=== r1-mezo-k4 13:00:41
+[r1-mezo-k4] it 4043 t  120.0s tok   4.140M eval 7.9147 up/step 0.000MB {'projGrad': 0.8955}
+{"label": "r1-mezo-k4", "steps": 4043, "startLoss": 8.366497993469238, "finalLoss": 7.9146881103515625, "bestLoss": 7.9146881103515625, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4140032}
+=== r1-solo-bp 13:02:42
+[r1-solo-bp] it 11268 t  120.0s tok  11.538M eval 5.0634 up/step 0.000MB {'loss0': 5.1937}
+{"label": "r1-solo-bp", "steps": 11268, "startLoss": 8.366497993469238, "finalLoss": 5.063398718833923, "bestLoss": 5.063207030296326, "diverged": false, "upBytesPerStep": 0.0, "tokens": 11538432}
+=== r1-solo-k2 13:04:44
+[r1-solo-k2] it 8982 t  120.0s tok   9.198M eval 5.1122 up/step 0.524MB {'loss0': 5.039, 'loss1': 4.993, 'tau0': 0.782, 'cos0': 0.0571, 'cos1': 1.0, 'cosIt': 8900}
+{"label": "r1-solo-k2", "steps": 8982, "startLoss": 8.366497993469238, "finalLoss": 5.1122376918792725, "bestLoss": 5.1122376918792725, "diverged": false, "upBytesPerStep": 524288.0, "tokens": 9197568}
+=== r1-solo-k3 13:06:46
+[r1-solo-k3] it 7517 t  120.0s tok   7.697M eval 5.0835 up/step 1.049MB {'loss0': 5.3656, 'loss1': 5.3313, 'loss2': 5.3319, 'tau0': 0.756, 'tau1': 0.754, 'cos0': 0.166, 'cos1': 0.3315, 'cos2': 1.0, 'cosIt': 7500}
+{"label": "r1-solo-k3", "steps": 7517, "startLoss": 8.366497993469238, "finalLoss": 5.083539366722107, "bestLoss": 5.083539366722107, "diverged": false, "upBytesPerStep": 1048576.0, "tokens": 7697408}
+=== r1-solo-k2-priv 13:08:48
+[r1-solo-k2-priv] it 8824 t  120.0s tok   9.036M eval 5.0704 up/step 0.524MB {'loss0': 5.1613, 'loss1': 5.1499, 'tau0': 0.695, 'cos0': -0.1276, 'cos1': 1.0, 'cosIt': 8800}
+{"label": "r1-solo-k2-priv", "steps": 8824, "startLoss": 8.366497993469238, "finalLoss": 5.0704275369644165, "bestLoss": 5.066009879112244, "diverged": false, "upBytesPerStep": 524288.0, "tokens": 9035776}
+=== r1-solo-k2-stale4 13:10:50
+[r1-solo-k2-stale4] it 9108 t  120.0s tok   9.327M eval 5.3732 up/step 0.524MB {'loss0': 5.5641, 'loss1': 5.3646, 'tau0': 0.749}
+{"label": "r1-solo-k2-stale4", "steps": 9108, "startLoss": 8.366497993469238, "finalLoss": 5.37315046787262, "bestLoss": 5.3624327182769775, "diverged": false, "upBytesPerStep": 524288.0, "tokens": 9326592}
+=== r1-szo-np16 13:12:52
+[r1-szo-np16] it 89 t  120.6s tok   0.091M eval 7.8342 up/step 14.687MB {'gradNorm': 104.9879, 'forwards': 497, 'loss': 7.9414, 'adaClipped': 0}
+{"label": "r1-szo-np16", "steps": 89, "startLoss": 8.366497993469238, "finalLoss": 7.834150433540344, "bestLoss": 7.834150433540344, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 91136}
+=== r1-szo-szo1-16a 13:14:54
+[r1-szo-szo1-16a] it 80 t  121.1s tok   0.082M eval 7.6587 up/step 14.687MB {'gradNorm': 68.3434, 'forwards': 497, 'loss': 7.6361, 'adaClipped': 0}
+{"label": "r1-szo-szo1-16a", "steps": 80, "startLoss": 8.366497993469238, "finalLoss": 7.658742666244507, "bestLoss": 7.658742666244507, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 81920}
+=== r1-szo-szo1-4a 13:16:57
+[r1-szo-szo1-4a] it 288 t  120.3s tok   0.295M eval 7.4608 up/step 14.687MB {'gradNorm': 70.3422, 'forwards': 125, 'loss': 7.4301, 'adaClipped': 0}
+{"label": "r1-szo-szo1-4a", "steps": 288, "startLoss": 8.366497993469238, "finalLoss": 7.460835933685303, "bestLoss": 7.460835933685303, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 294912}
+=== r1-szo-ntwp16 13:18:58
+[r1-szo-ntwp16] it 85 t  120.6s tok   0.087M eval 7.6727 up/step 14.687MB {'gradNorm': 45.9973, 'forwards': 497, 'loss': 7.639, 'adaClipped': 0}
+{"label": "r1-szo-ntwp16", "steps": 85, "startLoss": 8.366497993469238, "finalLoss": 7.672675013542175, "bestLoss": 7.672675013542175, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 87040}
+=== r1-loca-c10 13:21:00
+[r1-loca-c10] it 8917 t  120.0s tok   9.131M eval 7.1563 up/step 3.244MB {'loss': 7.2001, 'calibIt': 8910, 'cosFit': 0.4907, 'cosPre': 0.0616, 'cosPre0': 0.0109, 'cosPre1': 0.0543, 'cosPre2': 0.0605, 'cosPre3': 0.0557, 'cosPre4': 0.0815, 'cosPre5': 0.1066}
+{"label": "r1-loca-c10", "steps": 8917, "startLoss": 8.366497993469238, "finalLoss": 7.15626847743988, "bestLoss": 6.857075929641724, "diverged": false, "upBytesPerStep": 3873389.267242346, "tokens": 9131008}
+=== r1-loca-c50-xl 13:23:02
+[r1-loca-c50-xl] it 11474 t  120.0s tok  11.749M eval 6.7458 up/step 3.244MB {'loss': 6.7849, 'calibIt': 11450, 'cosFit': 0.685, 'cosPre': 0.4636, 'cosPre0': 0.3679, 'cosPre1': 0.4903, 'cosPre2': 0.4917, 'cosPre3': 0.4693, 'cosPre4': 0.465, 'cosPre5': 0.4974}
+{"label": "r1-loca-c50-xl", "steps": 11474, "startLoss": 8.366497993469238, "finalLoss": 6.745789289474487, "bestLoss": 6.610868215560913, "diverged": false, "upBytesPerStep": 3370146.2478647376, "tokens": 11749376}
+=== r1-locaft 13:25:04
+[r1-locaft] it 2621 t  120.0s tok  21.475M eval 5.5885 up/step 0.221MB {'selCE': 5.5602, 'bestSelCE': 5.56, 'Bnorm': 1.4217}
+{"label": "r1-locaft", "steps": 2621, "startLoss": 5.597691893577576, "finalLoss": 5.588450312614441, "bestLoss": 5.588404059410095, "diverged": false, "upBytesPerStep": 221184.0, "tokens": 21475328}
+=== r1-locaft-lora 13:27:06
+[r1-locaft-lora] it 19114 t  120.0s tok  19.573M eval 5.5038 up/step 0.197MB {'loss': 5.4136}
+{"label": "r1-locaft-lora", "steps": 19114, "startLoss": 5.597691893577576, "finalLoss": 5.503785610198975, "bestLoss": 5.498272180557251, "diverged": false, "upBytesPerStep": 196608.0, "tokens": 19572736}
+=== r1-ft-adam 13:29:08
+[r1-ft-adam] it 12571 t  120.0s tok  12.873M eval 5.1004 up/step 29.373MB {}
+{"label": "r1-ft-adam", "steps": 12571, "startLoss": 5.597691893577576, "finalLoss": 5.100398898124695, "bestLoss": 5.095537185668945, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 12872704}
+=== r1-wis-r10 13:31:10
+[r1-wis-r10] it 3878 t  120.0s tok   4.131M eval 7.5933 up/step 0.000MB {'projGrad': -1.0641}
+{"label": "r1-wis-r10", "steps": 3878, "startLoss": 8.366497993469238, "finalLoss": 7.593290448188782, "bestLoss": 7.593290448188782, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4130816}
+=== r1-wisrand-r10 13:33:11
+[r1-wisrand-r10] it 3878 t  120.0s tok   4.131M eval 7.9129 up/step 0.000MB {'projGrad': 0.2539}
+{"label": "r1-wisrand-r10", "steps": 3878, "startLoss": 8.366497993469238, "finalLoss": 7.9128570556640625, "bestLoss": 7.9128570556640625, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4130816}
+=== r1-ft-mezo-k4 13:35:12
+[r1-ft-mezo-k4] it 4181 t  120.0s tok   4.281M eval 5.5952 up/step 0.000MB {'projGrad': -2.3868}
+{"label": "r1-ft-mezo-k4", "steps": 4181, "startLoss": 5.597691893577576, "finalLoss": 5.595189332962036, "bestLoss": 5.595082521438599, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4281344}
+=== r1-ft-wis-r05 13:37:14
+[r1-ft-wis-r05] it 3850 t  120.0s tok   4.102M eval 5.5978 up/step 0.000MB {'projGrad': 0.1881}
+{"label": "r1-ft-wis-r05", "steps": 3850, "startLoss": 5.597691893577576, "finalLoss": 5.597780227661133, "bestLoss": 5.596064805984497, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4102144}
+=== r1-loo-n32 13:39:15
+[r1-loo-n32] it 847 t  120.0s tok   0.867M eval 7.4856 up/step 0.000MB {'gradNorm': 485677.406, 'fitStd': 0.00147}
+{"label": "r1-loo-n32", "steps": 847, "startLoss": 8.366497993469238, "finalLoss": 7.48557448387146, "bestLoss": 7.48557448387146, "diverged": false, "upBytesPerStep": 136.0, "tokens": 867328}
+=== r1-mirror-n32 13:41:17
+[r1-mirror-n32] it 909 t  120.1s tok   0.931M eval 7.6482 up/step 0.000MB {'gradNorm': 659928.562, 'fitStd': 0.00156}
+{"label": "r1-mirror-n32", "steps": 909, "startLoss": 8.366497993469238, "finalLoss": 7.648193359375, "bestLoss": 7.647794008255005, "diverged": false, "upBytesPerStep": 136.0, "tokens": 930816}
+=== r1-mezo-k16 13:43:18
+[r1-mezo-k16] it 1073 t  120.1s tok   1.099M eval 8.2851 up/step 0.000MB {'projGrad': -3.2349}
+{"label": "r1-mezo-k16", "steps": 1073, "startLoss": 8.366497993469238, "finalLoss": 8.285108804702759, "bestLoss": 8.285108804702759, "diverged": false, "upBytesPerStep": 192.0, "tokens": 1098752}
+=== r1-zomuon-e03 13:45:19
+[r1-zomuon-e03] it 2413 t  120.0s tok   2.471M eval 7.6743 up/step 1.606MB {'loss': 7.6428, 'coreNorm': 239.203}
+{"label": "r1-zomuon-e03", "steps": 2413, "startLoss": 8.366497993469238, "finalLoss": 7.674295783042908, "bestLoss": 7.674295783042908, "diverged": false, "upBytesPerStep": 1605632.0, "tokens": 2470912}
+=== r1-subzo-e03 13:47:21
+[r1-subzo-e03] it 3040 t  120.0s tok   3.113M eval 7.5305 up/step 1.606MB {'loss': 7.5198, 'coreNorm': 32.413}
+{"label": "r1-subzo-e03", "steps": 3040, "startLoss": 8.366497993469238, "finalLoss": 7.530548453330994, "bestLoss": 7.530548453330994, "diverged": false, "upBytesPerStep": 1605632.0, "tokens": 3112960}
+=== r1-eos-c05-b0 13:49:22
+[r1-eos-c05-b0] it 3885 t  120.0s tok   3.978M eval 7.6846 up/step 0.000MB {'trH': 1680.37, 'trEma': 1544.25, 'lr': 0.000259, 'loss': 7.5859}
+{"label": "r1-eos-c05-b0", "steps": 3885, "startLoss": 8.366497993469238, "finalLoss": 7.684580326080322, "bestLoss": 7.684580326080322, "diverged": false, "upBytesPerStep": 44.0, "tokens": 3978240}
+=== r1-eos-c05-b9 13:51:24
+[r1-eos-c05-b9] it 3736 t  120.0s tok   3.826M eval 7.6707 up/step 0.000MB {'trH': 1543.88, 'trEma': 1606.34, 'lr': 2.49e-05, 'loss': 7.6992}
+{"label": "r1-eos-c05-b9", "steps": 3736, "startLoss": 8.366497993469238, "finalLoss": 7.670743346214294, "bestLoss": 7.670743346214294, "diverged": false, "upBytesPerStep": 44.0, "tokens": 3825664}
+=== r1-ms-scratch 13:53:25
+[r1-ms-scratch] it 1008 t  120.1s tok   1.032M eval 8.2173 up/step 0.000MB {'loss': 8.2181, 'fitStd': 0.00127, 'beatCenter': 0.367, 'deltaRms': 0.25378}
+{"label": "r1-ms-scratch", "steps": 1008, "startLoss": 8.366497993469238, "finalLoss": 8.217275381088257, "bestLoss": 8.217275381088257, "diverged": false, "upBytesPerStep": 128.0, "tokens": 1032192}
+=== r1-ms-ft 13:55:27
+[r1-ms-ft] it 991 t  120.0s tok   1.015M eval 5.5956 up/step 0.000MB {'loss': 5.5581, 'fitStd': 0.00382, 'beatCenter': 0.367, 'deltaRms': 0.21391}
+{"label": "r1-ms-ft", "steps": 991, "startLoss": 5.597691893577576, "finalLoss": 5.595562815666199, "bestLoss": 5.591759562492371, "diverged": false, "upBytesPerStep": 128.0, "tokens": 1014784}
+=== r1-ft-mezo-k15 13:57:28
+[r1-ft-mezo-k15] it 1076 t  120.1s tok   1.102M eval 5.5965 up/step 0.000MB {'projGrad': -0.3502}
+{"label": "r1-ft-mezo-k15", "steps": 1076, "startLoss": 5.597691893577576, "finalLoss": 5.5964637994766235, "bestLoss": 5.5964637994766235, "diverged": false, "upBytesPerStep": 180.0, "tokens": 1101824}
+=== r1-adam4 13:59:30
+[r1-adam4] it 3222 t  120.0s tok  13.197M eval 4.7482 up/step 117.494MB {}
+{"label": "r1-adam4", "steps": 3222, "startLoss": 8.366497993469238, "finalLoss": 4.748204708099365, "bestLoss": 4.748204708099365, "diverged": false, "upBytesPerStep": 117493760.0, "tokens": 13197312}
+=== r1-sl-diloco-sgd 14:01:32
+[r1-sl-diloco-sgd] it 98 t  120.7s tok  12.042M eval 4.8821 up/step 117.494MB {'simTime': 2940.0, 'innerLoss': 5.1763, 'kept': 4, 'msgNorm': 30.645, 'bitsPerParam': 32.0}
+{"label": "r1-sl-diloco-sgd", "steps": 98, "startLoss": 8.366497993469238, "finalLoss": 4.8821210861206055, "bestLoss": 4.8821210861206055, "diverged": false, "upBytesPerStep": 117493760.0, "tokens": 12042240}
+=== r1-sl-sparseloco 14:03:34
+[r1-sl-sparseloco] it 96 t  120.2s tok  11.796M eval 5.0677 up/step 0.858MB {'simTime': 2880.0, 'innerLoss': 5.366, 'kept': 4, 'msgNorm': 28.0912, 'bitsPerParam': 0.2337}
+{"label": "r1-sl-sparseloco", "steps": 96, "startLoss": 8.366497993469238, "finalLoss": 5.067738056182861, "bestLoss": 5.067738056182861, "diverged": false, "upBytesPerStep": 858112.0, "tokens": 11796480}
+=== r1-sl-noef 14:05:36
+[r1-sl-noef] it 96 t  120.2s tok  11.796M eval 5.6619 up/step 0.858MB {'simTime': 2880.0, 'innerLoss': 5.904, 'kept': 4, 'msgNorm': 10.148, 'bitsPerParam': 0.2337}
+{"label": "r1-sl-noef", "steps": 96, "startLoss": 8.366497993469238, "finalLoss": 5.661857962608337, "bestLoss": 5.661857962608337, "diverged": false, "upBytesPerStep": 858112.0, "tokens": 11796480}
+=== r1-sl-byz-mean 14:07:38
+[r1-sl-byz-mean] diverged
+{"label": "r1-sl-byz-mean", "steps": 5, "startLoss": 8.366497993469238, "finalLoss": 10.517323970794678, "bestLoss": 8.190682172775269, "diverged": true, "upBytesPerStep": 858112.0, "tokens": 614400}
+=== r1-sl-byz-gauntlet 14:07:46

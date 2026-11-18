@@ -1,0 +1,75 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-adam",
+ "method": "adam",
+ "cfg": {},
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 5.0,
+ "steps": 188,
+ "totals": {
+  "tokens": 192512,
+  "fwd": 192512.0,
+  "bwd": 192512.0,
+  "up": 5522206720.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 577536.0
+ },
+ "startLoss": 8.366497993469238,
+ "finalLoss": 6.391494154930115,
+ "bestLoss": 6.391494154930115,
+ "diverged": false,
+ "upBytesPerStep": 29373440.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 8.366497993469238
+  },
+  {
+   "it": 1,
+   "seconds": 0.396,
+   "tokens": 1024,
+   "compute": 3072.0,
+   "up": 29373440.0,
+   "down": 0.0,
+   "evalLoss": 8.190792798995972
+  },
+  {
+   "it": 81,
+   "seconds": 2.41,
+   "tokens": 82944,
+   "compute": 248832.0,
+   "up": 2379248640.0,
+   "down": 0.0,
+   "evalLoss": 6.829821825027466
+  },
+  {
+   "it": 165,
+   "seconds": 4.419,
+   "tokens": 168960,
+   "compute": 506880.0,
+   "up": 4846617600.0,
+   "down": 0.0,
+   "evalLoss": 6.453482508659363
+  },
+  {
+   "it": 188,
+   "seconds": 5.005,
+   "tokens": 192512,
+   "compute": 577536.0,
+   "up": 5522206720.0,
+   "down": 0.0,
+   "evalLoss": 6.391494154930115
+  }
+ ]
+}

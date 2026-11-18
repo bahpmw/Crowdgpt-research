@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crowd-v15"
+version = "1.5.0"
+description = "DUST (activation-perturbation) pretraining for the CrowdGPT client and coordinator"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.1",
+  "numpy>=1.24",
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "safetensors>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+crowd-v15-client = "crowd_v15.client:main"
+
+[tool.setuptools]
+packages = ["crowd_v15", "crowd_v15.server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::RuntimeWarning"]

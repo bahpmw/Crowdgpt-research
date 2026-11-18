@@ -1,0 +1,21 @@
+[r1-sl-sparseloco] start eval 8.3665
+[r1-sl-sparseloco] it 1 t    1.2s tok   0.123M eval 7.9425 up/step 0.858MB {'simTime': 30.0, 'innerLoss': 7.0972, 'kept': 4, 'msgNorm': 16.2055, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 2 t    2.3s tok   0.246M eval 7.4981 up/step 0.858MB {'simTime': 60.0, 'innerLoss': 7.0134, 'kept': 4, 'msgNorm': 20.7634, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 5 t    6.1s tok   0.614M eval 6.9092 up/step 0.858MB {'simTime': 150.0, 'innerLoss': 6.6185, 'kept': 4, 'msgNorm': 25.8756, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 9 t   11.0s tok   1.106M eval 6.3424 up/step 0.858MB {'simTime': 270.0, 'innerLoss': 6.4268, 'kept': 4, 'msgNorm': 28.003, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 10 t   12.3s tok   1.229M eval 6.2620 up/step 0.858MB {'simTime': 300.0, 'innerLoss': 6.4304, 'kept': 4, 'msgNorm': 28.3157, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 17 t   20.9s tok   2.089M eval 5.9854 up/step 0.858MB {'simTime': 510.0, 'innerLoss': 6.1571, 'kept': 4, 'msgNorm': 29.2785, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 19 t   23.4s tok   2.335M eval 5.9332 up/step 0.858MB {'simTime': 570.0, 'innerLoss': 6.0567, 'kept': 4, 'msgNorm': 29.2965, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 27 t   33.5s tok   3.318M eval 5.7738 up/step 0.858MB {'simTime': 810.0, 'innerLoss': 5.8878, 'kept': 4, 'msgNorm': 29.2937, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 35 t   43.6s tok   4.301M eval 5.6601 up/step 0.858MB {'simTime': 1050.0, 'innerLoss': 5.8144, 'kept': 4, 'msgNorm': 28.8158, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 41 t   51.1s tok   5.038M eval 5.5782 up/step 0.858MB {'simTime': 1230.0, 'innerLoss': 5.7717, 'kept': 4, 'msgNorm': 28.9536, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 43 t   53.6s tok   5.284M eval 5.5592 up/step 0.858MB {'simTime': 1290.0, 'innerLoss': 5.8567, 'kept': 4, 'msgNorm': 29.0476, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 52 t   64.7s tok   6.390M eval 5.4574 up/step 0.858MB {'simTime': 1560.0, 'innerLoss': 5.6019, 'kept': 4, 'msgNorm': 29.2701, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 60 t   75.0s tok   7.373M eval 5.3703 up/step 0.858MB {'simTime': 1800.0, 'innerLoss': 5.6728, 'kept': 4, 'msgNorm': 29.2195, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 68 t   85.1s tok   8.356M eval 5.2967 up/step 0.858MB {'simTime': 2040.0, 'innerLoss': 5.5386, 'kept': 4, 'msgNorm': 29.1607, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 76 t   95.1s tok   9.339M eval 5.2273 up/step 0.858MB {'simTime': 2280.0, 'innerLoss': 5.5062, 'kept': 4, 'msgNorm': 28.7374, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 82 t  102.6s tok  10.076M eval 5.1678 up/step 0.858MB {'simTime': 2460.0, 'innerLoss': 5.3573, 'kept': 4, 'msgNorm': 28.676, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 84 t  105.2s tok  10.322M eval 5.1526 up/step 0.858MB {'simTime': 2520.0, 'innerLoss': 5.4535, 'kept': 4, 'msgNorm': 28.4849, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 92 t  115.2s tok  11.305M eval 5.0918 up/step 0.858MB {'simTime': 2760.0, 'innerLoss': 5.3327, 'kept': 4, 'msgNorm': 28.1677, 'bitsPerParam': 0.2337}
+[r1-sl-sparseloco] it 96 t  120.2s tok  11.796M eval 5.0677 up/step 0.858MB {'simTime': 2880.0, 'innerLoss': 5.366, 'kept': 4, 'msgNorm': 28.0912, 'bitsPerParam': 0.2337}
+{"label": "r1-sl-sparseloco", "steps": 96, "startLoss": 8.366497993469238, "finalLoss": 5.067738056182861, "bestLoss": 5.067738056182861, "diverged": false, "upBytesPerStep": 858112.0, "tokens": 11796480}

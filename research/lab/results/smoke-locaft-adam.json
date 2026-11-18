@@ -1,0 +1,151 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-locaft-adam",
+ "method": "locaft",
+ "cfg": {
+  "solver": "adam"
+ },
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 10.0,
+ "steps": 864,
+ "totals": {
+  "tokens": 884736,
+  "fwd": 884736.0,
+  "bwd": 884736.0,
+  "up": 169869312.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 2654208.0
+ },
+ "startLoss": 5.597691893577576,
+ "finalLoss": 5.546664118766785,
+ "bestLoss": 5.545136570930481,
+ "diverged": false,
+ "upBytesPerStep": 196608.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 5.597691893577576
+  },
+  {
+   "it": 1,
+   "seconds": 0.064,
+   "tokens": 1024,
+   "compute": 3072.0,
+   "up": 196608.0,
+   "down": 0.0,
+   "evalLoss": 5.5981152057647705,
+   "loss": 5.7058
+  },
+  {
+   "it": 2,
+   "seconds": 0.076,
+   "tokens": 2048,
+   "compute": 6144.0,
+   "up": 393216.0,
+   "down": 0.0,
+   "evalLoss": 5.601129174232483,
+   "loss": 5.7353
+  },
+  {
+   "it": 5,
+   "seconds": 0.109,
+   "tokens": 5120,
+   "compute": 15360.0,
+   "up": 983040.0,
+   "down": 0.0,
+   "evalLoss": 5.605418682098389,
+   "loss": 5.7981
+  },
+  {
+   "it": 10,
+   "seconds": 0.174,
+   "tokens": 10240,
+   "compute": 30720.0,
+   "up": 1966080.0,
+   "down": 0.0,
+   "evalLoss": 5.610349416732788,
+   "loss": 5.5126
+  },
+  {
+   "it": 20,
+   "seconds": 0.292,
+   "tokens": 20480,
+   "compute": 61440.0,
+   "up": 3932160.0,
+   "down": 0.0,
+   "evalLoss": 5.596492409706116,
+   "loss": 5.798
+  },
+  {
+   "it": 49,
+   "seconds": 0.819,
+   "tokens": 50176,
+   "compute": 150528.0,
+   "up": 9633792.0,
+   "down": 0.0,
+   "evalLoss": 5.580591440200806,
+   "loss": 5.5844
+  },
+  {
+   "it": 98,
+   "seconds": 1.588,
+   "tokens": 100352,
+   "compute": 301056.0,
+   "up": 19267584.0,
+   "down": 0.0,
+   "evalLoss": 5.569536447525024,
+   "loss": 5.6267
+  },
+  {
+   "it": 196,
+   "seconds": 2.697,
+   "tokens": 200704,
+   "compute": 602112.0,
+   "up": 38535168.0,
+   "down": 0.0,
+   "evalLoss": 5.566091537475586,
+   "loss": 5.5958
+  },
+  {
+   "it": 415,
+   "seconds": 5.07,
+   "tokens": 424960,
+   "compute": 1274880.0,
+   "up": 81592320.0,
+   "down": 0.0,
+   "evalLoss": 5.548547744750977,
+   "loss": 5.6918
+  },
+  {
+   "it": 489,
+   "seconds": 5.875,
+   "tokens": 500736,
+   "compute": 1502208.0,
+   "up": 96141312.0,
+   "down": 0.0,
+   "evalLoss": 5.545136570930481,
+   "loss": 5.7915
+  },
+  {
+   "it": 864,
+   "seconds": 10.003,
+   "tokens": 884736,
+   "compute": 2654208.0,
+   "up": 169869312.0,
+   "down": 0.0,
+   "evalLoss": 5.546664118766785,
+   "loss": 5.6353
+  }
+ ]
+}

@@ -1,0 +1,1154 @@
+Multi-Token Prediction Done Right
+Jayden Teoh
+MIT
+Abstract
+Multi-Token Prediction (MTP) is now a common ingredient in language-model pre-training, as it improves downstream
+performance and enables faster inference through speculative decoding. We identify a flaw in standard MTP training, in which a
+residual component of the MTP gradient interferes with both next-token and multi-token learning, increasingly so with scale.
+Specifically, the MTP cross-entropy gradient can be decomposed exactly into a KL self-distillation term that pulls each MTP
+head toward the model’s own next-token prediction (NTP) distribution and improves speculative decoding, and a residual
+that has a low signal-to-noise ratio and buries the useful KL signal. We introduce the KL gradient–recovery trick: when
+two distributions share a linear output head, the gradient of their KL divergence can be recovered exactly by combining their
+cross-entropy gradients through straight-through gradient routing. Unlike minimizing the KL directly, this trick requires no
+vocabulary-sized logit matrices and is compatible with standard fused cross-entropy kernels. This enables Soft Multi-Token
+Prediction (Soft-MTP), a one-line code change to MTP that removes the noisy residual and backpropagates only the KL
+self-distillation signal by reusing the existing NTP and MTP cross-entropy computations. Soft-MTP supports both DeepSeek-
+and Meta-style MTP, adds no parameters, and incurs no measurable overhead. From 167M to 1.2B parameters, Soft-MTP
+improves over standard MTP with lower NTP perplexity, faster speculative decoding and higher zero-shot accuracy at every
+scale, lower MTP perplexity from 689M onward, and stronger math and code reasoning after fine-tuning at 1.2B. Soft-MTP
+also matches, if not exceeds, direct KL divergence minimization on most metrics. Soft-MTP is, in effect, a free lunch for MTP
+optimization. Our code can be found at https://github.com/JaydenTeoh/Soft-MTP.
+Soft-MTP illustration
+ One-line code change
+z = shared_trunk(x)
+h0 = ntp_head(z)
+for k in range(1, K+1):
+hk = mtp_head[k-1](z, x)
+loss_mtp += ce(lm_head, hk, y[k])
+# straight-through gradient routing
+# h0 is numerically unchanged
+h0[:, k:] += hk.detach() - hk
+# NTP loss and gradients are unchanged
+loss_ntp = ce(lm_head, h0, y[0])
+# -ve gradient from NTP loss enters hk
+# this recovers KL gradients
+(loss_ntp + loss_mtp).backward()
+Loss performance
+Figure 1: Soft-MTP’s illustration, pseudocode, and loss performance compared to MTP. Blue line is the one-line code change.
+We refer readers to Algorithm 1 for the full code implementation of Soft-MTP, including the MTP loss weighting.
+Correspondence to: jayden_t@mit.edu
+1
+arXiv:2610.38331v1  [cs.LG]  28 Oct 2026
+1 Introduction
+Next-token prediction (NTP) has become a general recipe for training large language models (LLMs), yielding models with
+remarkable capabilities across a wide range of tasks [Radford et al., 2019]. One might argue that the NTP objective is sufficient—
+any distribution over token sequences can, in theory, be factorized autoregressively and modeled by a sufficiently expressive
+next-token predictor [Sutskever, 2023].
+Yet, Multi-Token Prediction (MTP) [Stern et al., 2018, Qi et al., 2020, Gloeckle et al., 2024], which trains a model to predict
+multiple future tokens, has now been widely adopted in modern LLM training, including in DeepSeek-V3/4 [DeepSeek-AI, 2024,
+2026a], Nemotron 3 [NVIDIA, 2025], GLM-5 [GLM-5-Team, 2026], and Kimi K3 [Kimi Team, 2026], just to name a few. MTP
+offers two main advantages over NTP—better model performance and more efficient inference. As a learning objective, MTP
+has been shown to alleviate the myopic nature of the next-token supervision [Bachmann and Nagarajan, 2024, Gloeckle et al.,
+2024, Nagarajan et al., 2025, Huang et al., 2026], leading to stronger downstream performance on long-horizon domains such as
+mathematics and code. More importantly, MTP heads can also be used for speculative decoding [Leviathan et al., 2022, Chen
+et al., 2023] to accelerate model inference.
+Despite the wide adoption of MTP, we still understand little about how it interacts with next-token prediction and which objective
+is best for training the MTP heads. During speculative decoding, a token drafted by MTP is accepted only if it agrees with
+the model’s own next-token prediction. If the goal is to improve speculative decoding, shouldn’t we directly train the model’s
+MTP heads to match its own NTP distribution via self-distillation? Recent work does exactly this [Teoh et al., 2025, Zhao
+et al., 2026a], but naïvely minimizing an explicit KL divergence requires materializing vocabulary-sized logit tensors for both
+the teacher and the student, which is costly in memory and incompatible with the standard fused cross-entropy kernels used
+in modern pre-training [Hsu et al., 2025, Wijmans et al., 2025]. In practice, frontier models still train their MTP heads with
+standard cross-entropy against the data.
+In this paper, we show that the standard MTP cross-entropy gradient already contains this self-distillation signal. The MTP
+gradient decomposes exactly into a KL term gKL, which pulls the MTP head toward the model’s own next-token distribution, and
+a residual gres, which is the NTP cross-entropy gradient against the data (see Section 4). We provide evidence that this residual
+in the MTP loss gradient has a low signal-to-noise ratio (SNR) and interferes with both NTP and MTP learning, especially
+as scale increases. We then introduce the KL gradient–recovery trick: when two distributions share a linear output head, the
+gradient of their KL divergence can be recovered exactly from their cross-entropy gradients through straight-through gradient
+routing [Bengio et al., 2013, van den Oord et al., 2017], without explicitly computing the KL or materializing any logits. This
+trick enables Soft Multi-Token Prediction (Soft-MTP), which removes the residual and sends only the useful KL self-distillation
+gradient through the MTP heads and the shared model trunk, with a one-line code change (see Figure 1).
+From 167M to 1.2B parameters, Soft-MTP improves over standard MTP with lower NTP perplexity, faster self-speculative
+decoding in every domain we test, and higher zero-shot accuracy at every scale, as well as stronger code and math reasoning after
+fine-tuning. It also reaches lower MTP loss from 689M parameters onward. Soft-MTP matches or exceeds the costly explicit KL
+self-distillation on most metrics, at no extra cost over standard MTP. Soft-MTP supports both DeepSeek-style [DeepSeek-AI,
+2024] and Meta-style [Gloeckle et al., 2024] MTP architectures, adds no parameters, has negligible overhead, and remains
+compatible with fused cross-entropy kernels and the parallelism used in frontier pre-training. Soft-MTP is, in effect, a free lunch
+for MTP optimization.
+2 Related Work
+Multi-token prediction. Predicting several future tokens dates back to blockwise parallel decoding [Stern et al., 2018] and
+ProphetNet [Qi et al., 2020]. Gloeckle et al. [2024] showed that MTP with parallel output heads improves large language models,
+especially on code, and DeepSeek-V3 [DeepSeek-AI, 2024] brought MTP to frontier-scale pre-training and introduced the
+sequential MTP modules now used by many frontier models [DeepSeek-AI, 2024, Qwen Team, 2025, LongCat, 2025, GLM
+Team, 2025, Ling Team, 2025, NVIDIA, 2025, Xiaomi, 2026, GLM-5-Team, 2026, DeepSeek-AI, 2026a, MiniMax, 2026, Kimi
+Team, 2026]. A line of work argues that MTP helps to counter the myopia of next-token supervision [Bachmann and Nagarajan,
+2024, Gloeckle et al., 2024, Nagarajan et al., 2025, Huang et al., 2026]. Recent works also go beyond MTP with richer objectives
+[Hu et al., 2025, Ahn et al., 2025, Liu et al., 2025b, Teoh et al., 2025, Mahajan et al., 2026, Zuhri et al., 2026].
+MTP for speculative decoding. Speculative decoding drafts several tokens cheaply and verifies them in parallel using the more
+expensive target model [Leviathan et al., 2022, Chen et al., 2023]. MTP heads trained during pre-training can serve as drafters for
+2
+speculative decoding. This is especially useful for accelerating reinforcement learning post-training, where generating rollouts is
+often the main bottleneck [Xiaomi, 2026, Li et al., 2026a, Iso et al., 2026]. Recent work trains drafters to match the verifier more
+directly, by minimizing the TV distance [Samarin et al., 2026, Li et al., 2026a], and Nemotron 3 Ultra [NVIDIA, 2026] introduces
+an MTP Boosting post-training phase that aligns the MTP heads with the NTP distribution via a temperature-scaled forward KL
+objective. Soft-MTP pursues the same goal during pre-training, at no extra cost over the standard MTP objective.
+Self-distillation for MTP. Recent works train MTP heads to match the NTP distribution. They either compute the KL
+explicitly [Teoh et al., 2025], which requires materializing the teacher’s and the student’s distributions over the full vocabulary, or
+approximate it with top-k logits [Zhao et al., 2026a] or argmax predictions [Kirchenbauer et al., 2026]. Chang and gpt-5.5-xhigh
+[2026] shows a cool trick to reduce the cost of full-vocabulary distillation by caching the teacher’s contribution to the KL gradient.
+However, their method still requires materializing the teacher’s full-vocabulary distribution, and it requires the student’s output
+head to be frozen. We show that standard MTP already contains the self-distillation gradient, and that our KL gradient–recovery
+trick recovers it exactly from the existing cross-entropy gradients. Soft-MTP therefore incurs no measurable overhead beyond
+that of standard MTP and remains compatible with fused cross-entropy kernels [Hsu et al., 2025, Wijmans et al., 2025].
+3 Background
+Let x1:T denote a sequence of tokens, where each token is represented as a one-hot vector xt ∈ {0, 1}V over a vocabulary of
+size V . A model trunk with parameters θ maps each prefix sequence x1:t to a hidden state h(0) t ∈ Rd. A linear output head
+Wθ ∈ RV ×d (also commonly called the “LM head”) projects these hidden state representations to logits, followed by a softmax
+function, to obtain the next-token probability distribution:
+p(0) t = softmax   Wθ h(0) t   .
+The standard next-token cross-entropy loss is
+LNTP =
+T −1X
+t=1
+CE
+ 
+xt+1, p(0) t
+ 
+= −
+T −1X
+t=1
+log p(0) t (xt+1).
+3.1 Multi-Token Prediction
+Multi-Token Prediction (MTP) extends NTP with K token prediction heads to predict K additional tokens. The k-th MTP head
+produces a hidden state h(k) t at each position t, where k ∈ {1, . . . , K}. Following typical implementation, the linear output head
+Wθ is shared with the MTP heads to generate
+p(k) t = softmax   Wθ h(k) t   ,
+where p(k) t predicts the token distribution over xt+k+1. The k-th MTP loss is then given by
+L(k) MTP =
+T −k−1X
+t=1
+CE
+ 
+xt+k+1, p(k) t
+ 
+= −
+T −k−1X
+t=1
+log p(k) t (xt+k+1).
+The overall MTP objective is
+LMTP = LNTP + λMTP · 1 K
+KX
+k=1
+L(k) MTP,
+where λMTP > 0 is a scalar coefficient. For clarity of subsequent derivations, we write each loss as a sum over positions.
+Implementations typically average each loss over its own number of targets instead; we account for the resulting rescaling in
+Section B.5 and show the implementation in Algorithm 1.
+4 Decomposing the MTP Gradient
+3
+Figure 2: Illustration of position-aligned
+NTP distributions.
+Note that the analysis that follows is agnostic to the choice of MTP architecture,
+be it parallel [Gloeckle et al., 2024] or sequential [DeepSeek-AI, 2024]. Consider
+the k-th MTP prediction for position t:
+p(k) t = softmax   Wθ h(k) t   .
+This distribution predicts xt+k+1. The position-aligned NTP distribution that
+predicts the same token xt+k+1 is
+q(k) t := p(0) t+k = softmax   Wθ h(0) t+k   .
+Figure 2 provides a visualization of the position-aligned NTP distributions for
+an MTP model with K = 2.
+Definition 4.1 (Hard MTP gradient). We define the hard MTP gradient as the
+gradient of the standard MTP cross-entropy loss with respect to the k-th MTP
+hidden state:
+ghard := ∇h(k) t CE
+ 
+xt+k+1, p(k) t
+ 
+= W ⊺ θ
+ 
+p(k) t − xt+k+1
+ 
+. (1)
+The full derivation can be found in Appendix B. The hard MTP gradient can be further decomposed as such
+ghard = W ⊺ θ
+ 
+p(k) t − q(k) t + q(k) t − xt+k+1
+ 
+= W ⊺ θ
+ 
+p(k) t − q(k) t
+ 
+| {z }
+gKL
++ W ⊺ θ
+ 
+q(k) t − xt+k+1
+ 
+| {z }
+gres
+, (2)
+where gKL is a soft KL self-distillation component1 and gres is a residual component corresponding to the cross-entropy
+gradient with respect to the aligned NTP hidden state. We denote this residual term using gres to distinguish this MTP gradient
+decomposition component from gNTP, which we reserve for the actual NTP cross-entropy gradient propagated through the NTP
+head into the shared model backbone.
+4.1 The KL self-distillation component
+Now, we explain why gKL corresponds to the KL self-distillation gradient. Treating the aligned NTP distribution q(k) t as a
+stop-gradient teacher distribution, the forward KL divergence from the aligned NTP distribution to the k-th MTP distribution
+is
+DKL
+ 
+sg(q(k) t ) ∥ p(k) t
+ 
+,
+where sg(·) denotes the stop-gradient operator. The gradient of the KL objective with respect to the MTP hidden state is
+∇h(k) t DKL
+ 
+sg(q(k) t )∥p(k) t
+ 
+= W ⊺ θ
+ 
+p(k) t − q(k) t
+ 
+= gKL. (3)
+We defer the full derivation to Appendix B. Thus, because MTP is supervised by the same underlying data distribution (just with
+offset token positions) and a shared linear output head Wθ is used, part of the hard MTP gradient already implicitly performs
+self-distillation, i.e., it encourages the MTP head to match the aligned NTP distribution.
+5 Soft Multi-Token Prediction
+The earlier gradient decomposition leads to the question: how can we retain the self-distillation component gKL by removing the
+residual component gres from the hard MTP gradient propagated through the shared model trunk?
+1We use the term soft gradients by analogy to “soft targets” in the knowledge distillation literature.
+4
+A naïve implementation would explicitly construct the aligned NTP teacher distribution q(k) t and k-th MTP distribution p(k) t ,
+and minimize DKL
+ 
+sg(q(k) t ) ∥ p(k) t
+ 
+directly in the logit space. However, given that the vocabulary size V is large in modern
+language models, storing large T × V logit matrices during every MTP prediction is costly in memory usage. It is also
+incompatible with standard fused cross-entropy kernels, which are designed to avoid materializing the entire logit matrix in
+memory, and are commonly used in language model pre-training. A custom fused KL kernel could avoid materializing the logits,
+but it would have to recompute the teacher logits that the NTP loss already computes, unless the NTP cross-entropy and all K
+MTP KL terms were fused into a single custom kernel.
+We instead show that the same representation-space KL gradient can be recovered exactly from the cross-entropy gradients
+already computed during standard MTP training, with no measurable overhead. We term this novel procedure of recovering a KL
+gradient from the difference of two cross-entropy gradients under a shared linear output head as the KL gradient–recovery trick.
+We also show in Section 6.3 that recovering the KL gradient using this trick matches, if not exceeds, direct KL minimization on
+most metrics.
+5.1 KL gradient–recovery trick
+For clarity, we exclude the λMTP/K loss weighting from our derivations in this section. Note that our earlier gradient
+decomposition and the KL gradient–recovery trick are easily extendable to include the loss weighting, which we defer to
+Section B.5.
+From the decomposition derived in Equation 2, our intuition lies in injecting a −gres gradient term at the MTP hidden state, so
+that only gKL is propagated through the MTP heads and subsequently the shared model trunk. We start by augmenting the NTP
+hidden states
+˜ht = h(0) t +
+KX
+k=1
+t−k≥1
+h
+sg(h(k) t−k) − h(k) t−k
+i
+| {z }
+= 0
+. (4)
+This resembles the stop-gradient routing used in straight-through estimators [Bengio et al., 2013, van den Oord et al., 2017],
+except our intention is not to approximate an unavailable gradient, but rather, analytically derive another gradient quantity. Define
+the augmented NTP cross-entropy loss as
+˜LNTP =
+T −1X
+t=1
+CE
+ 
+xt+1, softmax
+ 
+Wθ ˜ht
+  
+. (5)
+Since ˜ht+k is numerically the same as h(0) t+k, we have softmax   Wθ ˜ht+k   = q(k) t , and the gradient of the augmented NTP loss
+with respect to the NTP hidden state remains the same. That is, the model’s optimization for the NTP loss remains unaltered.
+However, it now injects an extra gradient with respect to the MTP representation h(k) t
+∇h(k) t ˜LNTP = −∇˜ht+k CE
+ 
+xt+k+1, softmax
+ 
+Wθ ˜ht+k
+  
+= −W ⊺ θ
+ 
+q(k) t − xt+k+1
+ 
+= −gres, (6)
+which is precisely the quantity we needed. Therefore, summing the contributions of the hard MTP gradient from the ordinary
+MTP loss and the gradient of the augmented NTP loss with respect to the MTP hidden states, we get the self-distillation
+gradients
+∇h(k) t
+ 
+˜LNTP + L(k) MTP
+ 
+= ghard − gres = gKL (7)
+as derived in our decomposition in Equation 2. Figure 1 illustrates the straight-through gradient routing and the one-line code
+change needed to operationalize the KL gradient–recovery.
+5
+5.2 Soft-MTP
+Our method, Soft Multi-Token Prediction (Soft-MTP), uses the KL gradient–recovery trick to optimize the parameters of the
+MTP heads and the shared model trunk. There are two main distinctions of Soft-MTP compared to prior self-distillation MTP
+approaches.
+First, the KL gradient–recovery trick operates directly in the NTP hidden-state space (see Equation 4), and avoids the need to
+materialize any additional logit matrices or explicitly compute KL divergence. As a result, Soft-MTP introduces negligible
+computational and memory overhead over standard MTP.
+Second, Soft-MTP still sends cross-entropy gradients from the MTP loss into the shared linear output head Wθ , but the parameters
+of the upstream modules (i.e., MTP heads and shared model trunk) receive the self-distillation gradient gKL instead. We explain
+why this is better than direct KL minimization in Section 6.3. Table 1 presents the anatomy of the gradient routing across
+different MTP objectives.
+Method Output head Wθ MTP heads and shared trunk
+Standard MTP CE gradient CE gradient
+KL-MTP KL gradient KL gradient
+Soft-MTP CE gradient KL gradient
+Table 1: Gradient routing under different MTP objectives. We omit the standard NTP gradient which is unchanged across
+methods.
+Note: Please refer to Appendix A for the full PyTorch-style Soft-MTP code implementation using DeepSeek MTP, including
+the λMTP/K loss weighting and the rescaling that accounts for different numbers of targets across MTP heads.
+5.3 A bias–variance view of the residual
+Equation 2 can also be interpreted from a bias–variance decomposition perspective. Of its two components, only gres depends on
+the sampled target token xt+k+1; gKL is determined entirely by the model’s own NTP and MTP predictions. Let π(k) t denote the
+true distribution of the next token xt+k+1 given the prefix x≤t+k, which is exactly what the position-aligned NTP distribution
+q(k) t tries to predict. Since the one-hot target is a sample xt+k+1 ∼ π(k) t , the residual splits into two parts:
+gres = W ⊺ θ
+ 
+q(k) t − xt+k+1
+ 
+= W ⊺ θ
+ 
+q(k) t − π(k) t
+ 
+| {z }
+NTP error
++ W ⊺ θ
+ 
+π(k) t − xt+k+1
+ 
+| {z }
+one-hot sampling noise
+, (8)
+where the sampling noise has zero mean because E[xt+k+1] = π(k) t . The hard MTP gradient is unbiased but it includes the gres
+component and incurs the full one-hot sampling variance. By removing gres from the MTP updates, Soft-MTP removes this
+variance at the cost of a bias: without the NTP-error correction term, gKL is biased toward the NTP distribution and not the data
+distribution π(k) t . These two terms behave very differently as models scale. The bias term is the NTP teacher’s own prediction
+error, which keeps shrinking as the base model scales and/or trains longer. The variance term is the irreducible noise of sampling
+a one-hot target, which no amount of scale or training removes. Therefore, the trade that Soft-MTP makes becomes increasingly
+favorable at scale. We observe this empirically in Section 6.1, where the residual has a much lower signal-to-noise ratio than the
+KL component, and the gap widens with model scale. Furthermore, since MTP is largely used to accelerate inference, biasing
+the MTP heads towards matching the NTP distribution is actually desirable for improving speculative decoding acceptance2.
+Unlike KL-MTP, Soft-MTP still trains the shared output head Wθ with cross-entropy, so the head is fitted to the data rather than
+biased toward its own next-token predictions. We explain why this matters in Section 6.3.
+2Technically, the acceptance rate is determined by the TV distance and KL provides an indirect upper bound through Pinsker’s inequality (see Samarin et al.
+[2026] and Li et al. [2026a]). Nonetheless, KL is the more appropriate training loss here: it is smooth where TV is not, and it keeps a non-vanishing gradient on
+tokens the MTP heads underpredict.
+6
+6 Experiments
+We now turn to an empirical validation of Soft-MTP. Our study is organized around three main questions:
+1. How do the self-distillation component gKL and residual component gres of the MTP cross-entropy gradient affect
+next-token and multi-token learning?
+In Section 6.1, we find that gres has a substantially lower signal-to-noise ratio (SNR) than gKL, yet accounts for a large
+fraction of the MTP gradient norm. Moreover, this residual becomes increasingly noisy with model scale, obscuring the
+useful learning signal in the MTP cross-entropy gradient. We further find that the residual component is anti-aligned with
+the NTP update direction throughout training, suggesting that the residual not only adds noise to MTP learning but also
+interferes with NTP optimization. Soft-MTP reaches a lower NTP loss than standard MTP, and the gap widens with scale.
+From 689M parameters onward, it also reaches a lower MTP loss.
+2. Does isolating the self-distillation gradient in Soft-MTP improve over standard MTP?
+In Section 6.2, we empirically validate the analysis above by comparing Soft-MTP against standard MTP. Across model
+scales, Soft-MTP yields better perplexity, downstream accuracy, speculative-decoding acceptance rates, and math and code
+fine-tuning performance. These results support our analyses in Question 1—removing the noisy residual produces a cleaner
+and more compatible learning signal.
+3. How does Soft-MTP compare with directly optimizing a KL self-distillation objective?
+In Section 6.3, we find little benefit from explicitly computing the KL divergence or propagating its gradients through the
+LM head: retaining hard cross-entropy supervision at the LM head while propagating the recovered KL gradients only
+through the MTP heads and shared model backbone is sufficient to match or exceed the gains of direct self-distillation.
+Moreover, Soft-MTP avoids the computational overhead of computing KL divergence and preserves compatibility with
+fused linear cross-entropy kernels. Overall, this suggests that Soft-MTP is more efficient.
+Experimental setup. We pre-trained LLaMA-style models [Touvron et al., 2023] of base-model sizes ranging from 167M to
+1.2B parameters using NTP and MTP objectives. For MTP, we used the widely adopted DeepSeek-style sequential architecture
+[DeepSeek-AI, 2024] and added three MTP heads to predict K = 3 additional future tokens, following common practice
+[Gloeckle et al., 2024, Xiaomi, 2026, MiniMax, 2026, GLM-5-Team, 2026]. To study the effect of standard MTP and Soft-MTP
+consistently across model sizes, we kept each MTP head at a constant 3.2% of the trunk’s non-embedding parameters and fixed
+the MTP loss coefficient at λMTP = 1.0. We trained all models on the FineWeb-Edu dataset [Penedo et al., 2024] for 60,000
+steps with a batch size of 0.5M tokens and a sequence length of 2048, for a total of approximately 31.5B training tokens, which
+is ∼ 1.3× Chinchilla-optimal [Hoffmann et al., 2022] for our largest model size. To be of modern relevance, we trained our
+models using the Muon optimizer [Jordan et al., 2024b] under the update-RMS rescaling of Liu et al. [2025a]. Our training
+hyperparameters are detailed in Appendix D. For completeness, we also showed that Soft-MTP improves over standard MTP
+using Meta-style MTP heads in Appendix C.
+6.1 The residual interferes with learning
+(a) 167M–1.2B: Trunk + MTP gradient SNR.
+ (b) 1.2B: Trunk gradient SNR.
+ (c) 167M–1.2B: Gradient share in trunk.
+Figure 3: The residual has substantially lower SNR than the KL gradient but dominates the MTP gradient signal. (a-b)
+Signal-to-noise ratio (SNR) of each gradient component with respect to the shared trunk and MTP head parameters, across scales.
+(c) Share of the MTP gradient in the shared trunk carried by each component, averaged over training steps; the residual carries
+∼80% at every scale.
+7
+Gradient signal-to-noise. We first measure the signal-to-noise ratios (SNR) of the different gradient components w.r.t. the
+model parameters θ: gθ hard (hard MTP gradient), gθ KL (KL self-distillation gradient), gθ res (residual MTP gradient), and gθ NTP (NTP
+cross-entropy gradient). For a gradient component gθ c (ξ) computed on a data batch ξ, we define its signal as the squared norm of
+its expected direction, Sc = ∥Eξ [gθ c ]∥2, and its noise as the total variance around this direction, Nc = Eξ ∥gθ c ∥2 − Sc = tr(Σc).
+We report SNRc = Sc/Nc as the signal-to-noise ratio. This quantity is closely related to the inverse of the gradient noise scale of
+McCandlish et al. [2018]; with a fixed batch size, the two differ only by a constant factor. We estimate the SNR using M = 256
+independent batches, each containing 4 sequences of length 2048. The naïve signal estimate is biased upward by tr(Σ)/M , so
+we report the unbiased estimator following McCandlish et al. [2018, Appendix A.1].
+Figures 3a and 3b compare the SNR of the two gradient components w.r.t. the shared trunk and MTP head parameters across
+model scales. Throughout training, the residual carries roughly 4× lower SNR than the KL component. The residual
+becomes increasingly noisy, and the gap widens as the scale increases, from 4.1× at 167M to 4.6× at 1.2B (note the log-scale
+axis). This result corroborates the bias–variance tradeoff discussed in Section 5.3: the residual always contains irreducible
+noise from sampling the one-hot target, while its signal, i.e., the NTP error, shrinks with scale, so its SNR falls as models
+grow. Removing the residual substantially increases gradient SNR—the KL component has much higher SNR than the original
+hard-MTP gradient. Yet despite its low SNR, the residual accounts for ∼80% of the MTP gradient reaching the shared trunk
+(see Figure 3c). Thus, although the standard MTP contains the high SNR KL signal implicitly, the residual obscures it under
+high-variance updates, which is why the overall hard-MTP gradient has lower SNR (see Figure 3b). We detail how we measure
+the SNR and gradient share of the KL and residual components in Appendix E.
+(a) 167M–1.2B: Effect on NTP loss (proxy).
+ (b) 167M–1.2B: NTP loss.
+ (c) 167M–1.2B: MTP loss.
+Figure 4: The residual worsens NTP and MTP loss especially as scale increases. (a) Change in NTP loss ∆LNTP from a unit
+step of the trunk hidden state representation along each gradient component across model scales. (b-c) NTP and MTP loss of
+standard MTP and Soft-MTP throughout training across scales.
+Interaction with NTP and MTP losses. Earlier, we showed the residual has low SNR. Here, we aim to show that the residual
+is not only noisy, but also interferes with NTP and MTP learning. In Figure 4a, we take a unit step on the shared trunk’s hidden
+state along each component’s gradient (backpropagated from the MTP heads) and re-evaluate the NTP loss through the frozen
+output head. This is a proxy for what each component ‘asks’ the trunk output to become. A step along the KL component
+consistently decreases NTP loss, indicating that the self-distillation signal in MTP reinforces the NTP objective. In contrast,
+a step along the residual component in MTP consistently increases NTP loss. This behavior persists throughout training and
+is consistent across model scales. Note that this analysis serves only as a characterization of the components’ behavior at the
+trunk–MTP head interface; the realized update to the trunk’s hidden states during training also depends on the optimizer used.
+We empirically corroborate this residual interference in Figure 4b: removing the residual with Soft-MTP lowers the NTP loss,
+especially as scale increases. Furthermore, from 689M parameters onward, Soft-MTP also reaches a lower MTP loss than
+standard MTP (see Figure 4c).
+Summary: The residual is much noisier (lower SNR) than the KL component, yet accounts for roughly 80% of the MTP
+gradient. Removing the residual gradient improves NTP and MTP learning, especially as scale increases.
+6.2 Soft-MTP outperforms standard MTP
+Speculative decoding. We evaluated the speculative decoding performance of the standard MTP and Soft-MTP pre-trained
+models across FineWeb-Edu, Wikipedia, Books, Science, and Math. For each domain, we sample 256 prompts of length 512
+8
+Size Model Verifier match FineWeb-Edu Wikipedia Books Science Math
+KL ↓ TV ↓ Speedup Acc. Len. Speedup Acc. Len. Speedup Acc. Len. Speedup Acc. Len. Speedup Acc. Len.
+167M MTP 0.485 0.305 1.90 1.52 1.88 1.49 1.88 1.49 1.88 1.49 1.76 1.36 Soft-MTP 0.470 0.300 1.92 +1.1% 1.54 +1.3% 1.89 +0.5% 1.50 +0.7% 1.91 +1.6% 1.52 +2.0% 1.90 +1.1% 1.51 +1.3% 1.81 +2.8% 1.41 +3.7%
+332M MTP 0.448 0.288 1.96 1.57 1.94 1.54 1.94 1.55 1.94 1.54 1.87 1.47 Soft-MTP 0.430 0.282 1.98 +1.0% 1.60 +1.9% 1.95 +0.5% 1.55 +0.6% 1.97 +1.5% 1.58 +1.9% 1.97 +1.5% 1.58 +2.6% 1.93 +3.2% 1.53 +4.1%
+689M MTP 0.410 0.271 1.88 1.62 1.84 1.58 1.85 1.60 1.86 1.60 1.81 1.57 Soft-MTP 0.390 0.265 1.90 +1.1% 1.66 +2.5% 1.87 +1.6% 1.61 +1.9% 1.88 +1.6% 1.64 +2.5% 1.88 +1.1% 1.63 +1.9% 1.84 +1.7% 1.60 +1.9%
+1.2B MTP 0.384 0.260 1.74 1.67 1.72 1.63 1.71 1.62 1.72 1.65 1.70 1.60 Soft-MTP 0.364 0.253 1.76 +1.1% 1.70 +1.8% 1.74 +1.2% 1.66 +1.8% 1.74 +1.8% 1.67 +3.1% 1.75 +1.7% 1.68 +1.8% 1.73 +1.8% 1.64 +2.5%
+Table 2: Self-speculative decoding performance across domains. KL divergence / TV distance: teacher-forced divergence of
+the MTP distribution from the model’s own next-token verifier on FineWeb-Edu validation set (mean over the three MTP heads).
+Speedup: improvement in inference speed using self-speculative decoding (relative to autoregressive decoding). Acceptance
+Length (Acc. Len.): average accepted tokens per draft, excluding the next-token prediction which is always accepted. Green:
+relative improvement of Soft-MTP over MTP. We bold the better of MTP and Soft-MTP per column; Soft-MTP wins every
+metric at every scale.
+tokens and generate 512-token continuations using the speculative sampling algorithm of Leviathan et al. [2022], drafting with
+the K = 3 MTP heads and verifying using the model’s own next-token head. For each model, we report the acceptance length
+(average number of accepted tokens per verification step) and the inference speedup relative to standard autoregressive sampling
+from the base model. Table 2 shows that Soft-MTP produces better drafts and faster decoding than standard MTP at
+every scale and in every domain. Averaged over the five domains, it improves acceptance length by 1.8–2.2% and speedup by
+1.4–1.5% at each scale. Its MTP distributions are closer to the model’s own NTP verifier, with lower KL divergence and TV
+distance at every scale. These show that the bias discussed in Section 5.3 works in our favor: the self-distillation gradient pulls
+the MTP heads toward exactly the NTP distribution that verifies their drafts.
+SizeModel FW-Edu ppl ↓ Wiki. ppl ↓ LAMB. ppl ↓ LAMB. acc ↑ PIQA acc ↑ HellaS. acc_n ↑ Wino. acc ↑ ARC-e acc ↑ ARC-c acc_n ↑ OBQA acc ↑ SciQ acc_n ↑ Avg.
+167M
+NTP 15.230 27.311 42.157 34.66 66.87 40.63 52.01 58.46 28.33 23.80 74.60 47.42
+MTP 15.983 29.074 43.013 33.88 66.43 39.70 51.70 59.01 26.37 23.40 74.20 46.84
+Soft-MTP 15.952 28.318 43.790 34.12 66.10 39.55 53.20 58.84 27.65 22.20 73.60 46.91
+332M
+NTP 13.073 22.482 26.005 38.54 69.91 46.65 53.51 63.51 31.40 24.80 78.00 50.79
+MTP 13.602 23.856 26.997 38.77 69.59 45.92 54.06 63.01 31.23 22.20 78.30 50.38
+Soft-MTP 13.551 23.249 28.566 37.45 68.72 45.58 53.59 63.89 32.17 22.20 80.10 50.46
+689M
+NTP 11.442 19.157 18.079 43.51 71.55 52.61 56.12 69.19 34.98 27.00 83.40 54.79
+MTP 11.834 20.265 18.560 43.31 71.11 52.33 56.59 69.02 35.67 25.20 82.50 54.47
+Soft-MTP 11.724 19.316 17.977 43.30 70.62 52.28 56.67 68.77 36.35 26.20 85.90 55.01
+1.2B
+NTP 10.572 17.503 14.159 46.81 73.12 55.95 57.22 71.17 37.46 27.20 85.10 56.75
+MTP 10.891 18.156 14.996 45.86 71.55 55.91 57.46 70.75 37.97 29.60 85.30 56.80
+Soft-MTP 10.741 17.489 14.073 46.48 72.03 55.91 58.01 71.97 37.54 30.60 85.90 57.31
+Table 3: Downstream language modeling evaluation. We bold the stronger result between standard MTP and Soft-MTP for
+every model scale (NTP results are only for reference).
+Zero-shot downstream performance. Table 3 reports the perplexity (ppl) and zero-shot accuracy (acc, or length-normalized
+acc_n) across benchmarks measured using the LM Evaluation Harness [Gao et al., 2024]. For reference, we also include the
+results of an NTP baseline. Consistent with Gloeckle et al. [2024], standard MTP does not improve multiple-choice accuracy
+over NTP at small scales. Soft-MTP, in contrast, improves average accuracy over standard MTP at every scale, and the gain
+becomes larger at scale: around 0.1 points at 167M and 332M, and around 0.5 points at 689M and 1.2B, where Soft-MTP also
+surpasses NTP. At 1.2B, Soft-MTP achieves the best WikiText and LAMBADA perplexity and the highest average accuracy of
+all three models. This suggests that recovering the high SNR self-distillation gradient is important for the model to extract more
+learning signal from the multi-token prediction objective, enough to overtake NTP in zero-shot accuracy at 689M and 1.2B,
+and in WikiText and LAMBADA perplexity at 1.2B.
+9
+Model HumanEval MBPP GSM8K MATH-500
+pass@16 pass@32 pass@64 pass@16 pass@32 pass@64 acc acc
+NTP 28.89 (T=0.5) 33.77 (T=0.6) 39.02 (T=0.6) 47.83 (T=0.5) 53.65 (T=0.5) 58.80 (T=0.5) 47.69 24.80
+MTP 31.70 (T=0.5) 36.37 (T=0.5) 40.85 (T=0.7) 48.28 (T=0.5) 54.56 (T=0.5) 59.80 (T=0.6) 48.60 23.20
+Soft-MTP 31.99 (T=0.5) 37.26 (T=0.5) 43.90 (T=0.6) 47.88 (T=0.5) 54.59 (T=0.6) 61.00 (T=0.7) 49.66 25.00
+Table 4: Math and code fine-tuning results. Each 1.2B model is fine-tuned with the NTP loss only, on the Python subset
+of Stack-Edu for code and on OpenMathInstruct-2 for math. For code, we sample with top-p = 1.0 and no top-k, sweep the
+temperature over {0.1, 0.2, . . . , 1.0}, and report the best pass@k, with the chosen temperature indicated in gray. For math, we
+evaluate 0-shot with greedy decoding. We bold the best result between MTP and Soft-MTP (NTP is shown for reference).
+Math and code fine-tuning performance. We next test how the pre-training objective affects downstream transfer to math
+and code reasoning. We discarded the MTP heads and fine-tuned each 1.2B model using the NTP loss alone. For math, we
+fine-tuned on 4.2B tokens from OpenMathInstruct-2 [Toshniwal et al., 2025] and evaluated on the GSM8K [Cobbe et al., 2021]
+and MATH-500 [Hendrycks et al., 2021, Lightman et al., 2023] benchmarks. For code, we fine-tuned on 21.0B tokens from the
+Python subset of Stack-Edu [Allal et al., 2025] and evaluated on the HumanEval [Chen et al., 2021] and MBPP [Austin et al.,
+2021] benchmarks with the BigCode Evaluation Harness [Ben Allal et al., 2022]. More details of the training hyperparameters
+and evaluation are provided in Section D. As shown in Table 4, Soft-MTP leads standard MTP in seven of the eight cells, and
+is the only objective that never falls below the NTP baseline. On code, Soft-MTP’s margin over standard MTP grows with the
+sample budget k, reaching +3.1 percentage points on HumanEval and +1.2 on MBPP at pass@64. On math, Soft-MTP leads
+standard MTP by +1.1 points on GSM8K and +1.8 points on MATH-500.
+(a) LNTP vs. LMTP across λMTP.
+ (b) LNTP vs. DKL across λMTP.
+ (c) Horizon K vs LNTP.
+ (d) Horizon K vs LMTP.
+Figure 5: Effect of MTP weight and prediction horizon for 332M models trained on 7.3B tokens. Every axis is lower-better.
+(a-b) Varying MTP weight λMTP ∈ {0.25, 0.5, 0.75, 1.0} at fixed horizon K = 3. Soft-MTP dominates the Pareto frontier for
+both plots. (c-d) Varying horizon K ∈ {3, 4, 5, 6, 7, 8} at fixed λMTP = 1.0. Soft-MTP leads on both axes at every K shown.
+Effect of MTP weight and horizon on training metrics. To validate that Soft-MTP’s advantage over standard MTP is
+robust to these hyperparameters, we sweep the MTP weight λMTP and the horizon K at the 332M scale, training each model on
+7.3B FineWeb-Edu tokens. Lowering λMTP trades MTP loss for NTP performance, but Figure 5a shows that at every weight,
+Soft-MTP reaches lower NTP and MTP loss than standard MTP, so it Pareto-dominates standard MTP. The same holds
+for NTP loss against KL to the NTP verifier (see Figure 5b). Next, sweeping over MTP horizons while keeping λMTP fixed at
+1.0, Soft-MTP also achieves lower NTP and MTP loss than standard MTP at every horizon from K = 3 to K = 8 (see
+Figures 5c and 5d).
+Summary: Soft-MTP attains lower NTP and MTP loss than standard MTP across weights λMTP and horizons K. Its MTP
+heads sit closer to the NTP verifier in both KL and TV, thereby achieving faster speculative decoding. Soft-MTP also leads
+on zero-shot accuracy after pre-training and on both math and code reasoning after fine-tuning.
+10
+Matmul FLOPs Throughput MFU Peak memory (GB)
+Objective (GFLOP/token) (tok/s) naive CE fused CE
+NTP 8.16 62,851 51.9 % 98.3 95.5
+MTP 10.28 49,783 51.7 % 120.7 107.0
+KL-MTP 10.43 46,990 49.6 % 129.8 128.1
+Soft-MTP 10.28 49,748 51.7 % 121.0 107.0
+Table 5: Training cost by objective at the 1.2B model with K = 3 MTP heads, measured on a single NVIDIA H200 GPU.
+Throughput and MFU are measured at the largest micro-batch size each objective fits. Peak memory is reported at a matched
+micro-batch of 19. Soft-MTP’s KL recovery is free: identical FLOPs, MFU and fused-CE peak memory to standard MTP, with
+throughput within 0.07%. KL-MTP is worst on every axis—lowest throughput and MFU, and the highest peak memory—and
+is the only objective that does not benefit much from using fused cross-entropy kernels.
+6.3 Soft-MTP is more efficient than KL-MTP
+KL-MTP is inefficient in compute and memory. Table 5 compares the training cost of each objective at 1.2B. Because the
+KL gradient–recovery trick reuses the cross-entropy gradients that standard MTP already computes, Soft-MTP has the same
+matmul FLOPs, MFU and fused-CE peak memory as standard MTP, and its throughput is within 0.07%. KL-MTP is the most
+expensive on every axis. KL-MTP materializes both the teacher and student distributions over the vocabulary, which adds 1.5%
+FLOPs, lowers throughput by 5.6% relative to standard MTP, and raises peak memory by 21 GB. It also gains little benefit from
+standard fused cross-entropy kernels because the KL objective needs dense distributions to be materialized.
+Metric NTP MTP KL-MTP Soft-MTP
+LM
+FW-Edu ppl ↓ 10.57 10.89 10.74 10.74
+WikiText ppl ↓ 17.50 18.16 17.53 17.49
+LAMBADA ppl ↓ 14.16 15.00 14.30 14.07
+Avg. accuracy ↑ 56.75 56.80 57.22 57.31
+Spec. dec.
+KL ↓ – 0.384 0.363 0.364
+TV ↓ – 0.260 0.252 0.253
+Acc. Len. ↑ – 1.67 1.71 1.70
+Speedup ↑ – 1.74 1.76 1.76
+Math
+GSM8K ↑ 47.69 48.60 50.34 49.66
+MATH-500 ↑ 24.80 23.20 26.00 25.00
+Code
+HumanEval pass@16 ↑ 28.89 31.70 31.75 31.99
+HumanEval pass@32 ↑ 33.77 36.37 36.41 37.26
+HumanEval pass@64 ↑ 39.02 40.85 41.46 43.90
+MBPP pass@16 ↑ 47.83 48.28 47.64 47.88
+MBPP pass@32 ↑ 53.65 54.56 53.51 54.59
+MBPP pass@64 ↑ 58.80 59.80 59.60 61.00
+Table 6: Comparison against KL-MTP at 1.2B parameters. We bold the best of the three MTP objectives (NTP is shown for
+reference). Language modeling (LM): perplexity metrics and average zero-shot accuracy over LM-EVAL tasks. Speculative
+decoding (Spec. dec.): self-speculative decoding on FineWeb-Edu; acceptance length excludes the next-token prediction, which
+is always accepted. Fine-tuning (Math / Code): performance after NTP-only fine-tuning on math and code.
+Soft-MTP matches or exceeds KL-MTP in most metrics. Table 6 compares the three MTP objectives at 1.2B. Soft-MTP ties
+or wins on every perplexity metric, has higher average zero-shot accuracy, and beats KL-MTP on all six code fine-tuning metrics,
+while KL-MTP leads in math fine-tuning. In speculative decoding the two are neck and neck, with KL-MTP ahead by at most
+0.01 on FineWeb-Edu. This is expected because both objectives send the same KL gradient through the MTP heads and the
+shared trunk, so their MTP drafts should match the verifier about equally well. The two objectives differ only in the gradient
+used to update the output head, and we next explain why training it with cross-entropy, as Soft-MTP does, matters.
+11
+Why keep cross-entropy at the output head? Note that the output head Wθ is shared in MTP; the same matrix maps both
+the NTP and the MTP hidden states to logits. As such, any gradient from the MTP loss also shapes the NTP readout. Under
+Soft-MTP, this gradient is the MTP cross-entropy gradient which, like the NTP loss, fits the output head to the data distribution.
+Under KL-MTP, it is the self-distillation gradient, which fits the head to the model’s own NTP predictions, and those predictions
+are themselves also computed by Wθ . This creates a shortcut because the KL can be reduced not only by improving the MTP
+hidden states, but also by making the shared readout less sensitive to the directions in which the MTP and NTP hidden states differ.
+Figure 6: Effective rank of the logit map Wγ .
+Soft-MTP stays closest to the next-token readout.
+Cross-entropy has no such shortcut because its target does not depend on
+Wθ . Figure 6 shows the consequence for the readout’s geometry, measured
+by the effective rank [Roy and Vetterli, 2007] of the logit map Wγ , the
+unembedding combined with the final RMSNorm gain γ (we combine
+the two because the logits depend only on their product). Standard MTP
+collapses the readout to about a quarter of the NTP baseline (131 vs. 496)
+and KL-MTP to about two thirds (321), while Soft-MTP stays closest (437).
+The gradient routing differences between the objectives (see Table 1) allow
+us to pull the two effects apart. Soft-MTP and KL-MTP both send the KL
+gradient through the MTP heads and trunk and differ only at the output
+head, so the gap between them comes from keeping cross-entropy at the
+head. Soft-MTP and standard MTP both use cross-entropy at the head
+and differ only in the trunk, so the much larger gap comes from removing
+the residual. Soft-MTP combines the best of both worlds in terms of
+gradient routing, and it is also the objective with the strongest perplexity
+and downstream accuracy results.
+Summary: Soft-MTP recovers the KL self-distillation gradient at the same cost as standard MTP, whereas KL-MTP is less
+efficient in throughput and memory. Soft-MTP nonetheless matches or exceeds KL-MTP on most metrics.
+7 Discussion: Practical Relevance at Frontier Scale
+MTP has been widely adopted in modern LLM training. Frontier model pre-training leverages many parallelism schemes due to
+tight memory budgets. Here we discuss the compatibility and relevance of Soft-MTP in frontier model pre-training.
+Compatibility with parallelism. The KL gradient–recovery trick needs only two things where it is applied: the NTP hidden
+state h(0) t+k and the MTP hidden state h(k) t on the same device, and a backward path from LNTP to h(k) t . On its own, it adds
+no communication and no synchronization. Parallelism that shards parameters, optimizer state or experts therefore leaves it
+untouched, e.g., data parallelism and ZeRO [Rajbhandari et al., 2020], and expert parallelism [Lepikhin et al., 2021] as used by
+DeepSeek-V3 [DeepSeek-AI, 2024] and Kimi K3 [Kimi Team, 2026]. Pipeline parallelism [Huang et al., 2019] only requires the
+MTP modules to sit on the same stage as the output head, which DeepSeek-V3 already does by design so that its MTP module
+can share the output head. The only axis that needs extra communication is sequence sharding, because our trick reads hidden
+states k tokens ahead. This includes context parallelism, such as ring attention [Liu et al., 2024], and sequence parallelism
+[Korthikanti et al., 2022]. Even then, the cost is a backward-pass exchange of at most K hidden-state gradients at each shard
+boundary, independent of sequence length.
+KL gradient–recovery trick is more compatible than explicit self-distillation. An explicit KL needs the teacher’s and the
+student’s vocabulary-sized distributions at once, which standard fused cross-entropy kernels cannot compute without materializing
+the logits. This is especially costly for models trained without tensor parallelism, such as DeepSeek-V3 [DeepSeek-AI, 2024],
+which therefore cannot shard these tensors along the vocabulary. A custom fused KL kernel can avoid this materialization, but
+must recompute the teacher logits that the NTP loss already computes, unless the NTP cross-entropy and all MTP KL terms are
+fused into a single kernel. The KL gradient–recovery trick instead carries the KL gradient through the hidden state rather than
+the logits, so every head keeps its standard, kernel-fused cross-entropy [Hsu et al., 2025, Wijmans et al., 2025], and Soft-MTP
+adds no vocabulary-sized tensors beyond those standard MTP already uses. Soft-MTP also matches, if not exceeds, direct KL
+minimization on most metrics as shown in Section 6.3.
+12
+Future of MTP and extensions to the KL gradient–recovery trick. MTP has spread rapidly since DeepSeek-V3 adopted
+it in 2024 [DeepSeek-AI, 2024], but its longevity in pre-training is uncertain. DeepSeek-V4.1-Flash [DeepSeek-AI, 2026b]
+recently dropped MTP in favor of DSpark [Cheng et al., 2026], a speculative decoder trained after pre-training. Post-trained
+drafters such as Medusa [Cai et al., 2024], EAGLE [Li et al., 2024a,b, 2026b], DFlash [Chen et al., 2026] and DSpark [Cheng
+et al., 2026] are convenient, but it remains open how well they work when the base model was never trained to form predictive
+representations of future tokens, e.g., via MTP. Will MTP be retained for the superior downstream accuracy it provides over
+NTP-only pre-training [Gloeckle et al., 2024, DeepSeek-AI, 2024, MiniMax, 2026, NVIDIA, 2025], at the cost of minimal
+additional FLOPs? MTP has also proven useful in small-scale pre-training, e.g., in Modded-NanoGPT [Jordan et al., 2024a], and
+in data-constrained settings, where it improves sample efficiency, e.g., in NanoGPT Slowrun [Vegesna et al., 2026]. Whatever
+the future of MTP, the KL gradient–recovery trick applies more broadly—whenever a teacher and a student share a linear output
+head, the gradient of the forward KL can be recovered from their cross-entropy gradients. Many post-training methods compute
+such a KL, for example MTP Boosting [NVIDIA, 2026], on-policy self-distillation (OPSD; Zhao et al., 2026b), and score
+centering for off-policy RL [Marek and Ryabinin, 2026]. Such use cases are expensive due to the KL computation overhead,
+which may necessitate top-k logits approximation. Our KL gradient–recovery trick avoids that cost, with the caveat that only the
+MTP heads and shared trunk receive the exact KL gradient, whereas the shared output head Wθ is updated with cross-entropy.
+This is also suitable for methods that already freeze the output head under the KL loss, such as Next-Latent Prediction [Teoh
+et al., 2025], which only needs the KL gradient with respect to the hidden states.
+8 Conclusion
+The standard MTP cross-entropy gradient can be decomposed into a KL self-distillation term, which pulls the MTP heads
+toward the model’s own next-token distribution, and a residual, which is the next-token cross-entropy gradient against the data.
+The residual carries most of the MTP gradient, yet it has a low signal-to-noise ratio, works against next-token learning, and
+becomes noisier with scale. Our KL gradient–recovery trick removes this residual and recovers the KL term exactly from the
+cross-entropy gradients that standard MTP already computes. This yields Soft-MTP, a one-line change to standard MTP that
+adds no parameters, has negligible overhead, and remains compatible with fused cross-entropy kernels. Soft-MTP improves
+over standard MTP in NTP and MTP loss, self-speculative decoding, zero-shot accuracy, and in math and code reasoning after
+fine-tuning, all at no extra cost.
+Acknowledgements and Funding
+Experiments in this paper were mostly funded by Jayden, using 8× RTX PRO 6000 GPUs rented from Vast.ai. The inspiration
+for this paper originally came from Jayden’s attempt to amortize the computational cost of the KL objective in NextLat [Teoh
+et al., 2025].
+We thank Alexi Gladstone, Edward S. Hu, John Langford, Khai Loong Aw, Michael K. Chen, Sophie L. Wang, and Stephen K.
+Yang for their valuable discussions and support. Jayden thanks Sophie L. Wang for helpful input on the design of the figures.
+Jayden also sincerely thanks Stephen K. Yang for sharing his Claude Max 20× plan and for providing the support needed to
+push through this project.
+References
+Kwangjun Ahn, Alex Lamb, and John Langford. Efficient joint prediction of multiple future tokens, 2025. URL https:
+//arxiv.org/abs/2503.21801.
+Loubna Ben Allal, Anton Lozhkov, Elie Bakouch, Gabriel Martín Blázquez, Guilherme Penedo, Lewis Tunstall, Andrés Marafioti,
+Hynek Kydlíˇcek, Agustín Piqueres Lajarín, Vaibhav Srivastav, et al. Smollm2: When smol goes big–data-centric training of a
+small language model. arXiv preprint arXiv:2502.02737, 2025.
+Jacob Austin, Augustus Odena, Maxwell Nye, Maarten Bosma, Henryk Michalewski, David Dohan, Ellen Jiang, Carrie Cai,
+Michael Terry, Quoc Le, et al. Program synthesis with large language models. arXiv preprint arXiv:2108.07732, 2021.
+Gregor Bachmann and Vaishnavh Nagarajan. The pitfalls of next-token prediction. In Ruslan Salakhutdinov, Zico Kolter,
+Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp, editors, Proceedings of the 41st
+13
+International Conference on Machine Learning, volume 235 of Proceedings of Machine Learning Research, pages 2296–2318.
+PMLR, 21–27 Jul 2024. URL https://proceedings.mlr.press/v235/bachmann24a.html.
+Loubna Ben Allal, Niklas Muennighoff, Logesh Kumar Umapathi, Ben Lipkin, and Leandro von Werra. A framework for the
+evaluation of code generation models. https://github.com/bigcode-project/bigcode-evaluation-har
+ness, 2022.
+Yoshua Bengio, Nicholas Léonard, and Aaron Courville. Estimating or propagating gradients through stochastic neurons for
+conditional computation, 2013. URL https://arxiv.org/abs/1308.3432.
+Tianle Cai, Yuhong Li, Zhengyang Geng, Hongwu Peng, Jason D Lee, Deming Chen, and Tri Dao. Medusa: Simple llm
+inference acceleration framework with multiple decoding heads. arXiv preprint arXiv:2401.10774, 2024.
+Jonathan Chang and gpt-5.5-xhigh. Kl cache trick for full-vocab distillation, 2026. URL https://jonathanc.net/blog
+/kl-cache-trick.
+Charlie Chen, Sebastian Borgeaud, Geoffrey Irving, Jean-Baptiste Lespiau, Laurent Sifre, and John Jumper. Accelerating large
+language model decoding with speculative sampling, 2023. URL https://arxiv.org/abs/2302.01318.
+Jian Chen, Yesheng Liang, and Zhijian Liu. Dflash: Block diffusion for flash speculative decoding. arXiv preprint
+arXiv:2602.06036, 2026.
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared Kaplan, Harri Edwards,
+Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large language models trained on code. arXiv preprint
+arXiv:2107.03374, 2021.
+Xin Cheng, Xingkai Yu, Chenze Shao, Jiashi Li, Yunfan Xiong, Yi Qian, Jiaqi Zhu, Shirong Ma, Xiaokang Zhang, Ji-
+asheng Ye, et al. Dspark: Confidence-scheduled speculative decoding with semi-autoregressive generation. arXiv preprint
+arXiv:2607.05147, 2026.
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek,
+Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168, 2021.
+Tri Dao and Albert Gu. Transformers are SSMs: Generalized models and efficient algorithms through structured state space
+duality. In Forty-first International Conference on Machine Learning, 2024. URL https://openreview.net/forum
+?id=ztn8FCR1td.
+DeepSeek-AI. Deepseek-v3 technical report, 2024. URL https://arxiv.org/abs/2412.19437.
+DeepSeek-AI. Deepseek-v4: Towards highly efficient million-token context intelligence, 2026a. URL https://arxiv.or
+g/abs/2606.19348.
+DeepSeek-AI. Deepseek-v4.1-flash: Pushing the limits of kv cache compression, 2026b. URL https://arxiv.org/abs/
+2609.19969.
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony DiPofi, Charles Foster, Laurence Golding, Jeffrey
+Hsu, Alain Le Noac’h, Haonan Li, Kyle McDonell, Niklas Muennighoff, Chris Ociepa, Jason Phang, Laria Reynolds, Hailey
+Schoelkopf, Aviya Skowron, Lintang Sutawika, Eric Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou. The language
+model evaluation harness, 07 2024. URL https://zenodo.org/records/12608602.
+GLM-5-Team. Glm-5: from vibe coding to agentic engineering, 2026. URL https://arxiv.org/abs/2602.15763.
+GLM Team. Glm-4.5: Agentic, reasoning, and coding (arc) foundation models, 2025. URL https://arxiv.org/abs/25
+08.06471.
+Fabian Gloeckle, Badr Youbi Idrissi, Baptiste Rozière, David Lopez-Paz, and Gabriel Synnaeve. Better & faster large language
+models via multi-token prediction. In Proceedings of the 41st International Conference on Machine Learning, ICML’24.
+JMLR.org, 2024.
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song, and Jacob Steinhardt.
+Measuring mathematical problem solving with the MATH dataset. In Thirty-fifth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track (Round 2), 2021. URL https://openreview.net/forum?id=7Bywt2mQ
+sCe.
+14
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza Rutherford, Diego de Las Casas,
+Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, et al. Training compute-optimal large language models. arXiv preprint
+arXiv:2203.15556, 2022.
+Pin-Lun Hsu, Yun Dai, Vignesh Kothapalli, Qingquan Song, Shao Tang, Siyu Zhu, Steven Shimizu, Shivam Sahni, Haowen Ning,
+Yanning Chen, and Zhipeng Wang. Liger-kernel: Efficient triton kernels for LLM training. In Championing Open-source
+DEvelopment in ML Workshop @ ICML25, 2025. URL https://openreview.net/forum?id=36SjAIT42G.
+Edward S. Hu, Kwangjun Ahn, Qinghua Liu, Haoran Xu, Manan Tomar, Ada Langford, Jayden Teoh, Bryon Xu, David Yan,
+Dinesh Jayaraman, Alex Lamb, and John Langford. The belief state transformer, 2025. URL https://arxiv.org/ab
+s/2410.23506.
+Jianhao Huang, Zhanpeng Zhou, Renqiu Xia, Baharan Mirzasoleiman, Weijie J Su, and Wei Huang. How transformers learn to
+plan via multi-token prediction. In Third Conference on Language Modeling, 2026. URL https://openreview.net
+/forum?id=1uj8eRv3aJ.
+Yanping Huang, Youlong Cheng, Ankur Bapna, Orhan Firat, Dehao Chen, Mia Chen, HyoukJoong Lee, Jiquan Ngiam, Quoc V
+Le, Yonghui Wu, et al. Gpipe: Efficient training of giant neural networks using pipeline parallelism. Advances in neural
+information processing systems, 32, 2019.
+Hayate Iso, Tiyasa Mitra, Sudipta Mondal, Rasoul Shafipour, Venmugil Elango, Terry Kong, Yuki Huang, Seonjin Na, Izzy
+Putterman, Benjamin Chislett, Maor Ashkenazi, Joseph Guman, Gerald Shen, Tugrul Konuk, Ashwath Aithal, Ritika Borkar,
+Ran Zilberstein, and Bita Rouhani. Accelerating rl post-training rollouts via system-integrated speculative decoding, 2026.
+URL https://arxiv.org/abs/2604.26779.
+Keller Jordan, Jeremy Bernstein, Brendan Rappazzo, @fernbear.bsky.social, Boza Vlado, You Jiacheng, Franz Cesista, Braden
+Koszarsky, and @Grad62304977. modded-nanogpt: Speedrunning the NanoGPT baseline, 2024a. URL https://github
+.com/KellerJordan/modded-nanogpt. Multi-token prediction added in pull request #178.
+Keller Jordan, Yuchen Jin, Vlado Boza, You Jiacheng, Franz Cesista, Laker Newhouse, and Jeremy Bernstein. Muon: An
+optimizer for hidden layers in neural networks, 2024b. URL https://kellerjordan.github.io/posts/muon/.
+Kimi Team. Kimi k3: Open frontier intelligence, 2026. URL https://arxiv.org/abs/2607.24653.
+John Kirchenbauer, Abhimanyu Hans, Brian Bartoldson, Micah Goldblum, Ashwinee Panda, and Tom Goldstein. Multi-token
+prediction via self-distillation, 2026. URL https://arxiv.org/abs/2602.06019.
+Vijay Korthikanti, Jared Casper, Sangkug Lym, Lawrence McAfee, Michael Andersch, Mohammad Shoeybi, and Bryan
+Catanzaro. Reducing activation recomputation in large transformer models, 2022. URL https://arxiv.org/abs/22
+05.05198.
+Dmitry Lepikhin, HyoukJoong Lee, Yuanzhong Xu, Dehao Chen, Orhan Firat, Yanping Huang, Maxim Krikun, Noam Shazeer,
+and Zhifeng Chen. Gshard: Scaling giant models with conditional computation and automatic sharding. In International
+Conference on Learning Representations, 2021. URL https://openreview.net/forum?id=qrwe7XHTmYb.
+Yaniv Leviathan, Matan Kalman, and Yossi Matias. Fast inference from transformers via speculative decoding, 2023. URL
+https://arxiv. org/abs/2211.17192, 1(2), 2022.
+Yucheng Li, Huiqiang Jiang, Yang Xu, Jianxin Yang, Yi Zhang, Yizhong Cao, Yuhao Shen, Fan Zhou, Rui Men, Jianwei
+Zhang, An Yang, Bowen Yu, Bo Zheng, Fei Huang, Junyang Lin, Dayiheng Liu, and Jingren Zhou. Breaking entropy bounds:
+Accelerating rl training via mtp with rejection sampling, 2026a. URL https://arxiv.org/abs/2606.12370.
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle: Speculative sampling requires rethinking feature uncertainty.
+arXiv preprint arXiv:2401.15077, 2024a.
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle-2: Faster inference of language models with dynamic draft
+trees. In Proceedings of the 2024 conference on empirical methods in natural language processing, pages 7421–7432, 2024b.
+Yuhui Li, Fangyun Wei, Chao Zhang, and Hongyang Zhang. Eagle-3: Scaling up inference acceleration of large language models
+via training-time test. Advances in Neural Information Processing Systems, 38:136737–136756, 2026b.
+Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker, Teddy Lee, Jan Leike, John Schulman, Ilya
+Sutskever, and Karl Cobbe. Let’s verify step by step, 2023. URL https://arxiv.org/abs/2305.20050.
+15
+Ling Team. Every activation boosted: Scaling general reasoner to 1 trillion open language foundation, 2025. URL https:
+//arxiv.org/abs/2510.22115.
+Hao Liu, Matei Zaharia, and Pieter Abbeel. Ringattention with blockwise transformers for near-infinite context. In The Twelfth
+International Conference on Learning Representations, 2024. URL https://openreview.net/forum?id=WsRHpH
+H4s0.
+Jingyuan Liu, Jianlin Su, Xingcheng Yao, Zhejun Jiang, Guokun Lai, Yulun Du, Yidao Qin, Weixin Xu, Enzhe Lu, Junjie Yan,
+et al. Muon is scalable for llm training. arXiv preprint arXiv:2502.16982, 2025a.
+Xiaohao Liu, Xiaobo Xia, Weixiang Zhao, Manyi Zhang, Xianzhi Yu, Xiu Su, Shuo Yang, See-Kiong Ng, and Tat-Seng Chua. L-
+MTP: Leap multi-token prediction beyond adjacent context for large language models. In The Thirty-ninth Annual Conference
+on Neural Information Processing Systems, 2025b. URL https://openreview.net/forum?id=0VDmWjW456.
+Meituan LongCat. Longcat-flash technical report, 2025. URL https://arxiv.org/abs/2509.01322.
+Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization, 2019. URL https://arxiv.org/abs/1711
+.05101.
+Divyat Mahajan, Sachin Goyal, Badr Youbi Idrissi, Mohammad Pezeshki, Ioannis Mitliagkas, David Lopez-Paz, and Kartik
+Ahuja. Beyond multi-token prediction: Pretraining llms with future summaries. In C. Vondrick, B. Hariharan, C. Raffel,
+L. Pinto, D. Yang, and A. Faust, editors, International Conference on Learning Representations, volume 2026, pages 64342–
+64364, 2026. URL https://proceedings.iclr.cc/paper_files/paper/2026/file/693d7541bd31
+cca2dcb780abfd8d204c-Paper-Conference.pdf.
+Martin Marek and Max Ryabinin. Score centering stabilizes off-policy reinforcement learning. arXiv preprint arXiv:2609.20807,
+2026.
+Sam McCandlish, Jared Kaplan, Dario Amodei, and OpenAI Dota Team. An empirical model of large-batch training, 2018.
+URL https://arxiv.org/abs/1812.06162.
+MiniMax. The minimax-m2 series: Mini activations unleashing max real-world intelligence, 2026. URL https://arxiv.
+org/abs/2605.26494.
+Vaishnavh Nagarajan, Chen Henry Wu, Charles Ding, and Aditi Raghunathan. Roll the dice & look before you leap: Going
+beyond the creative limits of next-token prediction. arXiv preprint arXiv:2504.15266, 2025.
+NVIDIA. Nvidia nemotron 3: Efficient and open intelligence, 2025. URL https://arxiv.org/abs/2512.20856.
+NVIDIA. Nemotron 3 ultra: Open, efficient mixture-of-experts hybrid mamba-transformer model for agentic reasoning, 2026.
+URL https://arxiv.org/abs/2606.15007.
+Guilherme Penedo, Hynek Kydlíˇcek, Anton Lozhkov, Margaret Mitchell, Colin Raffel, Leandro Von Werra, Thomas Wolf, et al.
+The fineweb datasets: Decanting the web for the finest text data at scale. Advances in Neural Information Processing Systems,
+37:30811–30849, 2024.
+Weizhen Qi, Yu Yan, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, and Ming Zhou. Prophetnet:
+Predicting future n-gram for sequence-to-sequence pre-training. In Proceedings of the 2020 Conference on Empirical Methods
+in Natural Language Processing: Findings, pages 2401–2410, 2020.
+Qwen Team. Qwen3 technical report, 2025. URL https://arxiv.org/abs/2505.09388.
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language models are unsupervised
+multitask learners. OpenAI blog, 1(8):9, 2019.
+Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and Yuxiong He. Zero: memory optimizations toward training trillion
+parameter models. In Proceedings of the International Conference for High Performance Computing, Networking, Storage
+and Analysis, SC ’20. IEEE Press, 2020. ISBN 9781728199986.
+Olivier Roy and Martin Vetterli. The effective rank: A measure of effective dimensionality. In 2007 15th European signal
+processing conference, pages 606–610. IEEE, 2007.
+16
+Alexander Samarin, Sergei Krutikov, Anton Shevtsov, Sergei Skvortsov, Filipp Fisin, and Alexander Golubev. LK losses: Direct
+acceptance rate optimization for speculative decoding. In Forty-third International Conference on Machine Learning, 2026.
+URL https://openreview.net/forum?id=ZqnVidXtxV.
+Mitchell Stern, Noam Shazeer, and Jakob Uszkoreit. Blockwise parallel decoding for deep autoregressive models. Advances in
+Neural Information Processing Systems, 31, 2018.
+Ilya Sutskever. Why next-token prediction is enough for agi. YouTube video, December 2023. URL https://www.youtub
+e.com/watch?v=YEUclZdj_Sc. Published December 13, 2023.
+Jayden Teoh, Manan Tomar, Kwangjun Ahn, Edward S. Hu, Tim Pearce, Pratyusha Sharma, Akshay Krishnamurthy, Riashat
+Islam, Alex Lamb, and John Langford. Next-latent prediction transformers learn compact world models. arXiv preprint
+arXiv:2511.05963, 2025.
+Shubham Toshniwal, Wei Du, Ivan Moshkov, Branislav Kisacanin, Alexan Ayrapetyan, and Igor Gitman. Openmathinstruct-2:
+Accelerating ai for math with massive open-source instruction data. In International Conference on Learning Representations,
+volume 2025, pages 19243–19275, 2025.
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière,
+Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and efficient foundation language models. arXiv preprint
+arXiv:2302.13971, 2023.
+Aaron van den Oord, Oriol Vinyals, and Koray Kavukcuoglu. Neural discrete representation learning. In Proceedings of the 31st
+International Conference on Neural Information Processing Systems, NIPS’17, page 6309–6318, Red Hook, NY, USA, 2017.
+Curran Associates Inc. ISBN 9781510860964.
+Akshay Vegesna, Samip Dahal, Chinmay Karkar, Bishwas Mandal, Shmuel Berman, and Zhiwei Xu. Slowrun: Language
+modeling with infinite compute, fixed data, 2026. URL https://github.com/qlabs-eng/slowrun.
+Erik Wijmans, Brody Huval, Alexander Hertzberg, Vladlen Koltun, and Philipp Kraehenbuehl. Cut your losses in large-
+vocabulary language models. In The Thirteenth International Conference on Learning Representations, 2025. URL
+https://openreview.net/forum?id=E4Fk3YuG56.
+LLM-Core Xiaomi. Mimo-v2-flash technical report, 2026. URL https://arxiv.org/abs/2601.02780.
+Guoliang Zhao, Ruobing Xie, An Wang, Shuaipeng Li, Huaibing Xie, and Xingwu Sun. Self-distillation for multi-token
+prediction, 2026a. URL https://arxiv.org/abs/2603.23911.
+Siyan Zhao, Zhihui Xie, Mengchen Liu, Jing Huang, Guan Pang, Feiyu Chen, and Aditya Grover. Self-distilled reasoner:
+On-policy self-distillation for large language models. arXiv preprint arXiv:2601.18734, 2026b.
+Zayd Muhammad Kawakibi Zuhri, Erland Hilman Fuadi, and Alham Fikri Aji. Predicting the order of upcoming tokens improves
+language modeling. In Forty-third International Conference on Machine Learning, 2026. URL https://openreview.n
+et/forum?id=wmROqgop27.
+17
+A Full Soft-MTP PyTorch Implementation
+Algorithm 1 Full Soft-MTP implementation in PyTorch syntax, for DeepSeek-style sequential MTP. The scale sk rescales each
+routed gradient to match the corresponding head’s own cross-entropy gradient (Section B.5); the highlighted lines are the only
+changes from standard MTP.
+# x, y : [B, T] input tokens and pre-shifted labels; y[:, t] is the
+# target of position t.
+# K : number of MTP heads.
+# lambda_mtp : auxiliary MTP weight.
+# ce : cross-entropy, mean-reduced over the targets it is given.
+#
+# MTP head k at position t and the NTP head at position t+k predict the
+# SAME token y[:, t+k]; that shared label is what cancels the label term
+# and leaves the KL gradient. Each MTP head has one fewer target than the
+# head before it: head k has T-k targets, y[:, k:].
+h_prev = shared_trunk(x)
+h0 = norm[0](h_prev) # NTP hidden states are directly from trunk, [B, T, d]
+T = y.size(1)
+loss_mtp = 0
+for k in range(1, K+1):
+yk = y[:, k:] # [B, T-k] k-th MTP head targets
+h_prev = mtp_head[k-1](h_prev[:, :T-k], x[:, k:]) # DeepSeek's sequential MTP
+hk = norm[k](h_prev)
+# hard CE: hk gets lambda_mtp/(K(T-k)) * CE gradient
+loss_mtp += ce(lm_head, hk, yk)
+# straight-through gradient routing
+# s_k undoes the NTP CE's 1/T mean and re-applies k-th MTP head's own
+# 1/(T-k) mean and the 1/K head average, so the routed gradient
+# lands at exactly the scale the MTP head's own CE gradient uses.
+s_k = lambda_mtp * T / (K * (T - k))
+# h0 is numerically unchanged; only its backward changes
+h0[:, k:] = h0[:, k:] + s_k * (hk.detach() - hk)
+# NTP loss and the gradients reaching the trunk through h0 are unchanged
+loss_ntp = ce(lm_head, h0, y)
+# backward: hk[t] gets -s_k * (NTP CE grad at h0[t+k]); its one-hot part
+# cancels the one in hk's own CE grad, leaving the KL gradient
+# lambda_mtp / (K(T-k)) * W^T (p_k[t] - p_0[t+k])
+(loss_ntp + lambda_mtp/K * loss_mtp).backward()
+B Extra Derivations for MTP Gradients
+Throughout, Wθ ∈ RV ×d is the shared linear output head, h ∈ Rd denotes the hidden state fed into it (after any final
+normalization), z = Wθ h are the logits, and p = softmax(z). Targets y ∈ RV may be one-hot vectors or full distributions, withP
+v yv = 1.
+B.1 Hard MTP gradient
+We derive Equation 1,
+ghard := ∇h(k) t CE
+ 
+xt+k+1, p(k) t
+ 
+= W ⊺ θ
+ 
+p(k) t − xt+k+1
+ 
+. (1)
+18
+First, the cross-entropy gradient with respect to the logits. Since log pv = zv − log P u ezu and P v yv = 1,
+CE(y, p) = −
+X
+v
+yv log pv = −y⊺z + log X
+u
+ezu ,
+and differentiating gives ∂ CE/∂zv = −yv + ezv / P u ezu = pv − yv , i.e.
+∇z CE (y, softmax(z)) = p − y. (9)
+The k-th MTP logits are z(k) t = Wθ h(k) t , so ∂z(k) t /∂h(k) t = Wθ . By the chain rule and Equation 9 with y = xt+k+1,
+∇h(k) t CE
+ 
+xt+k+1, p(k) t
+ 
+=
+ 
+∂z(k) t
+∂h(k) t
+!⊺
+∇z(k) t CE = W ⊺ θ
+ 
+p(k) t − xt+k+1
+ 
+.
+B.2 KL self-distillation gradient
+We derive Equation 3,
+∇h(k) t DKL
+ 
+sg(q(k) t )∥p(k) t
+ 
+= W ⊺ θ
+ 
+p(k) t − q(k) t
+ 
+= gKL. (3)
+With a stop-gradient teacher, the forward KL divergence splits into a cross-entropy and the teacher’s entropy:
+DKL
+ 
+sg(q(k) t ) ∥ p(k) t
+ 
+=
+X
+v
+q(k) t,v log q(k) t,v − X
+v
+q(k) t,v log p(k) t,v = −H   q(k) t   + CE   q(k) t , p(k) t   .
+The entropy term does not depend on h(k) t , because the teacher is held fixed. Applying Equation 9 with y = q(k) t and the same
+chain rule as above,
+∇h(k) t DKL
+ 
+sg(q(k) t ) ∥ p(k) t
+ 
+= ∇h(k) t CE
+ 
+q(k) t , p(k) t
+ 
+= W ⊺ θ
+ 
+p(k) t − q(k) t
+ 
+= gKL.
+B.3 From hidden states to parameters
+The decomposition in Equation 2,
+ghard = W ⊺ θ
+ 
+p(k) t − q(k) t + q(k) t − xt+k+1
+ 
+= W ⊺ θ
+ 
+p(k) t − q(k) t
+ 
+| {z }
+gKL
++ W ⊺ θ
+ 
+q(k) t − xt+k+1
+ 
+| {z }
+gres
+, (2)
+follows from Equation 1 by adding and subtracting q(k) t , and holds at the MTP hidden state. It carries over exactly to every
+parameter ϕ upstream of h(k) t , i.e. in the MTP heads and the shared trunk: for a fixed forward pass, backpropagation is linear in
+the gradient arriving at h(k) t ,
+∇ϕ =
+ 
+∂h(k) t
+∂ϕ
+!⊺
+(gKL + gres) =
+ 
+∂h(k) t
+∂ϕ
+!⊺
+gKL +
+ 
+∂h(k) t
+∂ϕ
+!⊺
+gres.
+This holds for both parallel and sequential MTP heads; in the sequential case, h(k) t also depends on h(k−1) t , which only changes
+the Jacobian, not the linearity.
+B.4 KL gradient–recovery trick
+We derive Equations 6 and 7. Recall the augmented NTP hidden states
+˜ht = h(0) t +
+KX
+k=1
+t−k≥1
+h
+sg(h(k) t−k) − h(k) t−k
+i
+| {z }
+= 0
+, (4)
+and the augmented NTP loss
+˜LNTP =
+T −1X
+t=1
+CE
+ 
+xt+1, softmax
+ 
+Wθ ˜ht
+  
+. (5)
+19
+Forward pass. Each bracketed term in Equation 4 is exactly zero, so ˜ht = h(0) t numerically, and ˜LNTP takes the same value as
+LNTP.
+Backward pass. Let Gt := ∇˜ht CE
+ 
+xt+1, softmax(Wθ ˜ht)
+ 
+. Since ˜ht = h(0) t numerically, Equation 9 gives
+Gt = W ⊺ θ
+ 
+p(0) t − xt+1
+ 
+.
+The stop-gradient term has zero Jacobian, so ∂ ˜ht/∂h(0) t = I and ∂ ˜ht/∂h(k) t−k = −I. The NTP hidden states therefore
+receive exactly the standard NTP gradient, ∇h(0) t ˜LNTP = Gt. The MTP hidden state h(k) t appears only in ˜ht+k, so, using
+q(k) t = p(0) t+k,
+∇h(k) t ˜LNTP = −Gt+k = −W ⊺ θ
+ 
+p(0) t+k − xt+k+1
+ 
+= −W ⊺ θ
+ 
+q(k) t − xt+k+1
+ 
+= −gres,
+which is Equation 6. The NTP target at position t + k exists exactly when the k-th MTP target at position t does (t ≤ T − k − 1),
+so the two losses cover the same positions. Adding the hard MTP gradient and using Equation 2,
+∇h(k) t
+ 
+˜LNTP + L(k) MTP
+ 
+= ghard − gres = gKL (7)
+since ghard − gres = (gKL + gres) − gres = gKL.
+Output head. The augmentation leaves the output head’s gradient unchanged. For the NTP loss,
+∇Wθ CE
+ 
+xt+1, softmax(Wθ ˜ht)
+ 
+=
+ 
+p(0) t − xt+1
+ 
+˜h⊺ t =   p(0) t − xt+1   h(0)⊺ t ,
+and the MTP loss still contributes its cross-entropy gradient
+ 
+p(k) t − xt+k+1
+ 
+h(k)⊺ t . Hence Wθ is trained with cross-entropy,
+while the MTP heads and the shared trunk receive the KL gradient (Table 1).
+B.5 Loss weighting and per-head normalization
+In practice, the MTP losses are weighted by λMTP/K and each loss is averaged over its own targets. Let N0 be the number of
+NTP targets and Nk the number of targets of the k-th MTP head, so that
+L = 1 N0 X t CE   xt+1, p(0) t   + λMTP K KX k=1 1 Nk X t CE   xt+k+1, p(k) t   .
+The MTP loss then contributes λMTP KNk ghard at h(k) t , while routing the NTP gradient as above contributes only − 1 N0 gres, since the NTP loss is averaged over N0 targets. Scaling each straight-through term by
+sk = λMTP N0 K Nk , ˜ht = h(0) t + X k sk h sg(h(k) t−k) − h(k) t−k i ,
+leaves the forward pass unchanged and makes the routed gradient − sk N0 gres = − λMTP KNk gres, so that
+∇h(k) t LSoft-MTP = λMTP KNk (ghard − gres) = λMTP KNk gKL,
+which is exactly the gradient of the correspondingly weighted KL objective λMTP K P k 1 Nk P t DKL   sg(q(k) t ) ∥ p(k) t   . With sum
+rather than mean reduction, N0 = Nk = 1 and sk = λMTP/K. In the implementation of Algorithm 1, the labels are pre-shifted
+so that N0 = T and Nk = T − k, giving sk = λMTP T / (K(T − k)).
+20
+C Meta-style MTP results
+We pre-train standard MTP and Soft-MTP at the 332M scale using the Meta-style MTP architecture. Both runs use K = 3 and
+λMTP = 1 and train for 7.3B FineWeb-Edu tokens. Figure 7 shows that Soft-MTP attains lower NTP and MTP loss than standard
+MTP at the end of training.
+(a) NTP loss.
+ (b) MTP loss.
+Figure 7: Validation NTP and MTP losses of standard MTP and Soft-MTP with Meta-style MTP heads at 332M.
+D Experiment Setup and Hyperparameters
+Architecture. We use a LLaMA-style [Touvron et al., 2023] pre-norm Transformer with RMSNorm, RoPE, and SwiGLU
+activations. For experiments in the main body, MTP uses the DeepSeek MTP architecture [DeepSeek-AI, 2024]. Following the
+implementation of DeepSeek MTP, and confirmed across other architectures with MTP such as Nemotron 3 [NVIDIA, 2025],
+the NTP and each MTP head have their own final RMSNorm layers.
+Model sizes. We fix the depth at L = 36 layers and vary only the width, so that each one-layer MTP head is roughly a constant
+fraction of the model parameters at every scale.
+167M 332M 689M 1.2B
+Total parameters 178.4M 356.9M 745.0M 1273.0M
+Next-token-prediction path 167.2M 332.1M 689.3M 1173.9M
+MTP heads 11.2M 24.8M 55.8M 99.1M
+Optimizer and schedule. We use Muon [Jordan et al., 2024b] on the 2D hidden matrices with Newton–Schulz orthogonalization
+and the update-RMS rescaling of Liu et al. [2025a]. The embeddings, the output head and all norms use AdamW [Loshchilov
+and Hutter, 2019]. Following the improved recipe of Dao and Gu [2024], we set the peak learning rate to 5× the GPT-3 value for
+the corresponding model size, with linear warmup and cosine decay to 10−5.
+Code and math fine-tuning. We follow the continued-training setup of Zuhri et al. [2026]: 4.2B tokens of OpenMathInstruct-2
+[Toshniwal et al., 2025] for math, and 21.0B tokens of the Python subset of Stack-Edu [Allal et al., 2025] for code. The learning
+rate decays with a cosine schedule to 10% of its peak, gradients are clipped at 1.0, and code is evaluated with pass@16, pass@32
+and pass@64 on HumanEval and MBPP. We deviate from their setup by fine-tuning with the NTP loss alone, i.e., MTP heads are
+discarded, and by using the Muon optimizer.
+E Section 6.1 Analyses
+All three diagnostics below decompose the MTP gradient at the MTP hidden state into its two components using the exact identity
+of Equation 2, ghard = gKL + gres, and then ask what each component does. They are measured offline on frozen checkpoints.
+21
+FineWeb-Edu pre-training Section 6.2 K/λMTP sweeps Math fine-tuning Code fine-tuning
+Data
+Corpus FineWeb-Edu FineWeb-Edu OpenMathInstruct-2 Stack-Edu (Python)
+Sequence length 2048 2048 2048 2048
+Steps 60 000 14 000 8 000 40 000
+Tokens 31.5B 7.34B 4.19B 21.0B
+Training parameters
+Batch size (sequences) 256 = 524 288 tokens / step
+Peak learning rate 2e-3 / 1.5e-3 / 1.25e-3 / 1e-3 1.5e-3 4e-5 5e-5
+LR schedule cosine cosine cosine cosine
+LR floor 10−5 10−5 0.1× peak lr 0.1× peak lr
+Warmup steps 2 000 2 000 800 2 000
+Weight decay 0.1 0.1 0.1 0.1
+Clip gradient norm 1.0 1.0 1.0 1.0
+Optimizer Muon [Jordan et al., 2024b], momentum 0.95, Nesterov, 5 Newton–Schulz steps, update-RMS scaling [Liu et al., 2025a]
+AdamW (β1 = 0.9, β2 = 0.95) for embeddings, output head and norms
+Model parameters
+Layers L 36 36 36 36
+Hidden dimension d 512 / 768 / 1152 / 1536 768 1536 1536
+Attention heads 8 / 12 / 18 / 24 12 24 24
+Head dimension 64
+Vocabulary 50 304 (GPT-2 BPE, padded), untied embeddings
+MTP parameters
+Architecture DeepSeek DeepSeek and Meta parallel — (heads discarded)
+Horizon K 3 3–8 (3 for the weight sweep) —
+λMTP 1.0 0.25–1.0 (1.0 for the horizon sweep) —
+Head layers / depth 1 1 —
+Table 7: Training, model and MTP hyperparameters. The global batch is identical everywhere (256 × 2048 tokens). Both
+fine-tunes are trained with next-token prediction only.
+22
+Unless stated otherwise, the estimator uses M = 256 independent minibatches of 4 sequences each.
+E.1 Gradient signal-to-noise ratio
+Let {gi}M i=1 be the per-minibatch mean gradients of one component, with mean µ and covariance Σ. Writing ¯g = 1 M P i gi,
+signal = ∥¯g∥2, total = 1 M X
+i
+∥gi∥2, noise = total − signal,
+and SNR = signal/noise. Its reciprocal is the gradient noise scale of McCandlish et al. [2018], measured in units of minibatches.
+The raw ratio is biased: the measured signal carries a tr Σ/M sampling floor and the measured noise is low by a factor
+(M − 1)/M. We report the debiased value throughout.
+E.2 Share of the MTP gradient
+Because ghard = gKL + gres holds exactly and per batch, each component’s contribution to the applied gradient is its projection
+onto it:
+sharec = ⟨ghard, gc⟩ ∥ghard∥2 , shareKL + shareres = 1 exactly.
+Expanding ∥ghard∥2 = ∥gKL∥2 + ∥gres∥2 + 2⟨gKL, gres⟩ expresses both shares in terms of three scalars, ∥gKL∥2, ∥gres∥2
+and ⟨gKL, gres⟩, which we pool over batches before taking the ratio. Because the shares sum to one by construction, they
+decompose ghard rather than merely comparing magnitudes. A share can be negative when the two components point in opposite
+directions.
+E.3 Proxy effect of each component on the NTP loss
+To ask what a unit step along one gradient component would do to the next-token loss, we take that step in hidden space and
+re-evaluate. With H the (detached) trunk hidden state, gc the component’s gradient backpropagated from the MTP hidden state
+through the MTP head to H, and LNTP the NTP cross-entropy,
+∆L(c) NTP = LNTP(RMSNormNTP(H − gc)) − LNTP(RMSNormNTP(H)) , positive = harm,
+evaluated separately for c ∈ {KL, residual}; positive values mean the step increases the NTP loss. Note that this proxy only
+probes what one component’s direction would do to the NTP loss at this state, not what training actually does to the final
+model.
+23

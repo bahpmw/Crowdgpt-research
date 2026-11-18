@@ -1,0 +1,25 @@
+[r1-eos-c05-b0] start eval 8.3665
+[r1-eos-c05-b0] it 1 t    0.0s tok   0.001M eval 8.3676 up/step 0.000MB {'trH': 536.2, 'trEma': 536.2, 'lr': 0.000746, 'loss': 8.35}
+[r1-eos-c05-b0] it 2 t    0.1s tok   0.002M eval 8.3656 up/step 0.000MB {'trH': 530.96, 'trEma': 533.57, 'lr': 0.00075, 'loss': 8.361}
+[r1-eos-c05-b0] it 5 t    0.2s tok   0.005M eval 8.3656 up/step 0.000MB {'trH': 236.27, 'trEma': 522.34, 'lr': 0.000766, 'loss': 8.3645}
+[r1-eos-c05-b0] it 10 t    0.3s tok   0.010M eval 8.3661 up/step 0.000MB {'trH': -83.92, 'trEma': 596.13, 'lr': 0.000671, 'loss': 8.3826}
+[r1-eos-c05-b0] it 20 t    0.6s tok   0.020M eval 8.3635 up/step 0.000MB {'trH': 970.13, 'trEma': 470.91, 'lr': 0.000849, 'loss': 8.3597}
+[r1-eos-c05-b0] it 49 t    1.5s tok   0.050M eval 8.3621 up/step 0.000MB {'trH': 322.1, 'trEma': 461.03, 'lr': 0.000868, 'loss': 8.3657}
+[r1-eos-c05-b0] it 98 t    3.0s tok   0.100M eval 8.3551 up/step 0.000MB {'trH': 624.66, 'trEma': 606.42, 'lr': 0.00066, 'loss': 8.3839}
+[r1-eos-c05-b0] it 196 t    6.0s tok   0.201M eval 8.3501 up/step 0.000MB {'trH': 844.24, 'trEma': 677.2, 'lr': 0.000591, 'loss': 8.3244}
+[r1-eos-c05-b0] it 330 t   10.1s tok   0.338M eval 8.3271 up/step 0.000MB {'trH': 228.88, 'trEma': 1026.41, 'lr': 0.00039, 'loss': 8.3674}
+[r1-eos-c05-b0] it 489 t   14.9s tok   0.501M eval 8.3063 up/step 0.000MB {'trH': 2001.52, 'trEma': 1296.89, 'lr': 0.000308, 'loss': 8.3001}
+[r1-eos-c05-b0] it 658 t   20.1s tok   0.674M eval 8.2699 up/step 0.000MB {'trH': 750.3, 'trEma': 1719.43, 'lr': 0.000233, 'loss': 8.2823}
+[r1-eos-c05-b0] it 977 t   29.8s tok   1.000M eval 8.1915 up/step 0.000MB {'trH': 2266.17, 'trEma': 2265.22, 'lr': 0.000177, 'loss': 8.1599}
+[r1-eos-c05-b0] it 986 t   30.1s tok   1.010M eval 8.1888 up/step 0.000MB {'trH': 2015.11, 'trEma': 2268.17, 'lr': 0.000176, 'loss': 8.2264}
+[r1-eos-c05-b0] it 1313 t   40.1s tok   1.345M eval 8.1144 up/step 0.000MB {'trH': 1644.61, 'trEma': 2469.52, 'lr': 0.000162, 'loss': 8.1746}
+[r1-eos-c05-b0] it 1640 t   50.1s tok   1.679M eval 8.0503 up/step 0.000MB {'trH': 3199.34, 'trEma': 2533.51, 'lr': 0.000158, 'loss': 8.0012}
+[r1-eos-c05-b0] it 1954 t   59.8s tok   2.001M eval 7.9891 up/step 0.000MB {'trH': 2135.28, 'trEma': 2444.06, 'lr': 0.000164, 'loss': 8.0909}
+[r1-eos-c05-b0] it 1967 t   60.2s tok   2.014M eval 7.9838 up/step 0.000MB {'trH': 2114.65, 'trEma': 2456.52, 'lr': 0.000163, 'loss': 7.9745}
+[r1-eos-c05-b0] it 2293 t   70.2s tok   2.348M eval 7.9184 up/step 0.000MB {'trH': 1927.14, 'trEma': 2268.06, 'lr': 0.000176, 'loss': 7.9192}
+[r1-eos-c05-b0] it 2617 t   80.2s tok   2.680M eval 7.8734 up/step 0.000MB {'trH': 1533.87, 'trEma': 2165.12, 'lr': 0.000185, 'loss': 7.9788}
+[r1-eos-c05-b0] it 2939 t   90.2s tok   3.010M eval 7.8209 up/step 0.000MB {'trH': 2288.46, 'trEma': 1995.62, 'lr': 0.0002, 'loss': 7.898}
+[r1-eos-c05-b0] it 3260 t  100.2s tok   3.338M eval 7.7772 up/step 0.000MB {'trH': 1528.02, 'trEma': 1861.19, 'lr': 0.000215, 'loss': 7.7402}
+[r1-eos-c05-b0] it 3579 t  110.2s tok   3.665M eval 7.7242 up/step 0.000MB {'trH': 1566.77, 'trEma': 1649.15, 'lr': 0.000243, 'loss': 7.7066}
+[r1-eos-c05-b0] it 3885 t  120.0s tok   3.978M eval 7.6846 up/step 0.000MB {'trH': 1680.37, 'trEma': 1544.25, 'lr': 0.000259, 'loss': 7.5859}
+{"label": "r1-eos-c05-b0", "steps": 3885, "startLoss": 8.366497993469238, "finalLoss": 7.684580326080322, "bestLoss": 7.684580326080322, "diverged": false, "upBytesPerStep": 44.0, "tokens": 3978240}

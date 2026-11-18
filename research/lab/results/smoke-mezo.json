@@ -1,0 +1,69 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-mezo",
+ "method": "mezo",
+ "cfg": {},
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 8.0,
+ "steps": 273,
+ "totals": {
+  "tokens": 279552,
+  "fwd": 2236416.0,
+  "bwd": 0.0,
+  "up": 13104.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 2236416.0
+ },
+ "startLoss": 8.366497993469238,
+ "finalLoss": 8.352349519729614,
+ "bestLoss": 8.352349519729614,
+ "diverged": false,
+ "upBytesPerStep": 48.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 8.366497993469238
+  },
+  {
+   "it": 1,
+   "seconds": 0.049,
+   "tokens": 1024,
+   "compute": 8192.0,
+   "up": 48.0,
+   "down": 0.0,
+   "evalLoss": 8.366639375686646,
+   "projGrad": 1.2274
+  },
+  {
+   "it": 140,
+   "seconds": 4.068,
+   "tokens": 143360,
+   "compute": 1146880.0,
+   "up": 6720.0,
+   "down": 0.0,
+   "evalLoss": 8.358024597167969,
+   "projGrad": -3.0751
+  },
+  {
+   "it": 273,
+   "seconds": 8.0,
+   "tokens": 279552,
+   "compute": 2236416.0,
+   "up": 13104.0,
+   "down": 0.0,
+   "evalLoss": 8.352349519729614,
+   "projGrad": -0.7825
+  }
+ ]
+}

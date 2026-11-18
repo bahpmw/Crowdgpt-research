@@ -1,0 +1,1034 @@
+ECO: Quantized Training without Full-Precision
+Master Weights
+Mahdi Nikdan1,2, Amir Zandieh1, Dan Alistarh2 and Vahab Mirrokni1
+1Google Research, 2ISTA
+Quantization has significantly improved the compute and memory efficiency of Large Language Model
+(LLM) training. However, existing approaches still rely on accumulating their updates in high-precision:
+concretely, gradient updates must be applied to a high-precision weight buffer, known as master weights.
+This buffer introduces substantial memory overhead, particularly for Sparse Mixture of Experts (SMoE)
+models, where model parameters and optimizer states dominate memory usage. To address this, we
+introduce the Error-Compensating Optimizer (ECO), which eliminates master weights by applying
+updates directly to quantized parameters. ECO quantizes weights after each step and carefully injects
+the resulting quantization error into the optimizer momentum, forming an error-feedback loop with
+no additional memory. We prove that, under standard assumptions and a decaying learning rate, ECO
+converges to a constant-radius neighborhood of the optimum, while naive master-weight removal can
+incuranerrorthatisinverselyproportionaltothelearningrate. Weshowempiricalresultsforpretraining
+small Transformers (30–800M), a Gemma-3 1B model, and a 2.1B parameter Sparse MoE model with
+FP8 quantization, and fine-tuning DeepSeek-MoE-16B in INT4 precision. Throughout, ECO matches
+baselines with master weights up to near-lossless accuracy, significantly shifting the static memory vs
+validation loss Pareto frontier.
+1. Introduction
+360 600 1200 2400 5160 9600
+Static Memory in MB (log scale)
+2.6
+2.8
+3.0
+3.2
+3.4Validation Loss
+ 25% Memory
+Reduction
+BF16 w/ MW
+FP8 w/ MW
+FP8 w/o MW + SR
+FP8 w/o MW ECO + SR
+Figure 1 | Static Memory Used vs Validation Loss
+comparing the standard BF16, FP8 with Master
+weights (FP8 w/ MW) baselines with standard
+stochastic rounding (FP8 w/o MW + SR) and ECO.
+ECO with stochastic rounding (SR) provides a sig-
+nificantly better Pareto frontier. Gradient accumu-
+lation is disabled in all cases.
+Scaling Large Language Model (LLM) training
+comeswithsubstantialcomputationalandmem-
+orycosts. Asmodelshavegrownfrombillionsto
+trillions of parameters, training memory has be-
+come a central bottleneck. Low-precision train-
+ing has therefore emerged as a practical direc-
+tion: recent FP8 (Liu et al., 2024a; Peng et al.,
+2023),andevenlowerprecision(Panferovetal.)
+training methods can reduce activation mem-
+ory and accelerate training while maintaining
+stable optimization.
+Despite this progress, a key overhead in
+quantizedtrainingremainsuntouched: thepres-
+ence of master weights. Most quantized and
+quantization-aware training pipelines still pre-
+serve a high-precision copy of the parameters
+(typicallyFP32)toaccumulategradientupdates.
+Thisislargelybecausemanyupdatesaresmaller
+than the discretization gap of low-precision formats: applying them directly to quantized weights can
+make updates vanish or incur large quantization noise. As a result, the model weight memory footprint
+often stays similar to the high-precision baseline, even when the forward and backward passes are
+heavily quantized. Even carefully engineered FP8 training systems explicitly retain high-precision
+Corresponding author: Mahdi Nikdan (nikdanmahdi@gmail.com)
+© 2026 Google Research.
+arXiv:2601.22101v1  [cs.CL]  29 Jan 2026
+ECO: Quantized Training without Full-Precision Master Weights
+accumulators for stability (Liu et al., 2024a; Peng et al., 2023). The issue is especially pronounced
+for Sparse Mixture of Experts (SMoE) models, where only a subset of parameters is active per token,
+yet all master weights must reside in memory.
+More broadly, attempts to avoid high-precision accumulation either do not scale to LLM training
+(Lin et al., 2022) or have only been effective in narrow settings (Zhang et al., 2025). This leaves a clear
+gap: a general method that removes master weights without sacrificing convergence or introducing
+additional memory overhead. Eliminating master weights can yield memory savings comparable to
+quantizing optimizer states (e.g., momentum buffers), an approach that has been widely explored
+and is very popular (Dettmers et al., 2021).
+In this work, we introduce the Error-Compensating Optimizer (ECO), which enables accurate
+quantized training without full-precision master weights, and thus zero extra memory overhead. The
+key idea is the following: after updating each layer’s parameters, we quantize the updated weights
+and inject the resulting quantization error into the optimizer’s momentum buffer. This creates an
+error-feedback loop that carries forward the lost updates and compensates for them in subsequent
+steps, allowing updates to be applied directly to quantized parameters.
+The resulting ECO iteration is simple to implement and requires no extra hyperparameter tuning.
+It further comes with theoretical guarantees. We study the convergence behavior of ECO applied to the
+SGD with momentum optimizer with momentum factor 𝛽. Under standard non-convex assumptions
+and a decaying learning rate, we prove that ECO converges to a constant-radius neighborhood of
+the true optimum. Moreover, this radius is only a 1 1−𝛽2 factor worse than the best achievable bound
+when using master weights, where a nonzero error is unavoidable because the solution must lie on
+the quantization grid. We further construct a quadratic example showing that this bound is tight
+up a constant factor. In the same example, we show that naively removing master weights (without
+momentum error injection) yields a stationary error that scales inversely with the learning rate, and
+therefore diverges as the learning rate decays to zero.
+We evaluate ECO with FP8 quantization across scaling law studies on small transformers (30M–
+800M parameters) (Castro et al., 2025; Panferov et al.), pre-training a Gemma-3 1B (Gemma et al.,
+2025) and an SMoE 2.1B model, and fine-tuning a DeepSeek-MoE-16B model (Dai et al., 2024).
+Across settings, ECO nearly matches the validation loss of baselines that rely on master weights while
+significantly outperforming naive master weight removal. Furthermore ECO can reduce static memory
+usage by up to 25%, shifting the Pareto frontier between memory consumption and validation loss, as
+illustrated in Figure 1.
+2. Related Work
+Quantized/Quantization-Aware Training. Quantization-aware training (QAT) aims to enable
+low-precision inference by simulating quantization effects on weights and optionally activations during
+training (Chen et al., 2025; Choi et al., 2018; Esser et al., 2019; Jung et al., 2019; Liu et al., 2024b;
+Panferov et al.; Wang et al., 2023b; Zhou et al., 2016). Quantized training methods go further by
+quantizing the backward pass computation to accelerate training (Ashkboos et al., 2025; Castro et al.,
+2025; Chmiel et al., 2025; Liu et al., 2024a; Tseng et al., 2025). Post-training quantization (PTQ)
+methods such as Ashkboos et al. (2024); Frantar et al. (2022); Lin et al. (2024); Liu et al. (2024c);
+Sun et al. (2024) are computationally cheaper, but they typically incur larger accuracy degradation
+than QAT, especially at very low precision. Despite these advances, most QAT frameworks still rely
+on high-precision master weights to accumulate updates. Even recent QAT training systems such
+as FP8-LM (Peng et al., 2023), DeepSeek-V3 (Liu et al., 2024a), and Kimi-K2 (Team et al., 2025),
+who have rigorously tuned their quantization scheme, explicitly keep high-precision accumulators to
+2
+ECO: Quantized Training without Full-Precision Master Weights
+maintain stability. In this context, ECO is complementary to existing QAT and quantized training
+methods: it targets the remaining dependence on master weights.
+EffortsTowardsLow-PrecisionAccumulation. Avoidingmasterweightshasprovendifficultoutside
+restricted settings. FP8-LM reports that FP8 accumulation fails at large LLM scales (Peng et al., 2023).
+Lin et al. (2022) show that with careful gradient rescaling, INT8 accumulators can be stable for small
+convolutional networks that fit within 256KB of memory. APT (Huang et al., 2022) varies accumulator
+bit-width across layers for edge-device training. Collage (Yu et al., 2024) replaces FP32 with two
+BF16 accumulators due to a hardware constraint. Ozkara et al. (2025) argue that stochastic rounding
+is important for BF16 accumulation, and ELMO (Zhang et al., 2025) applies stochastic rounding to
+reduce the accumulator precision of the LLM head layer to BF16/FP8. Overall, there exists no general
+approach that enables sub-16-bit accumulation for large-scale LLM training, leaving an important
+gap that ECO addresses.
+Optimizer State Quantization. A related line of work quantizes optimizer states (e.g., first and
+second moments) rather than model weights. In practice, the first moment is often more tolerant
+to quantization than the second. FP8-LM (Peng et al., 2023) reports that the first moment can be
+quantized to FP8 without difficulty. Other approaches quantize both moments to 8-bit (Dettmers
+et al., 2021; Fishman et al., 2024; Xi et al., 2024a), and Li et al. (2023) pushes this to 4-bit for both
+buffers. ECO targets a different bottleneck: the master-weight copy. This provides memory savings
+comparable to optimizer-state quantization, while remaining largely unexplored.
+Error Feedback. Error feedback (EF) methods were developed to mitigate bias from compressed or
+quantized gradients, particularly in distributed optimization. They accumulate quantization residuals
+locally and add them back in later steps, preserving the sum of updates over time (Richtárik et al.,
+2021; Seide et al., 2014; Tang et al., 2021; Wang et al., 2023a). Richtárik et al. (2021) provides
+a principled EF formulation and shows that it can match full-precision SGD convergence under
+appropriate assumptions. Directly applying EF to the master weight quantization requires storing an
+error buffer, which conflicts with memory reduction goals when training at scale. ECO instead reuses
+the optimizer momentum buffer to store quantization error, achieving error feedback without any
+extra memory.
+3. Method
+In this section, we start by introducing the notation and covering relevant background. We then de-
+scribeourmainmethodECO.Finally, wepresentourtheoretical resultswhichanalyze theconvergence
+of ECO.
+3.1. Notation and Background
+Notation. Throughout this section, we denote the model parameters by 𝜽 and their corresponding
+gradients by g. The optimizer’s first and second momentum buffers are represented by m and v,
+respectively, with their corresponding coefficients denoted by 𝛽1 and 𝛽2 (or just 𝛽 in case of SGD). We
+denote the quantization as q(·), and e represents the quantization error (e.g., e𝜽 = 𝜽−q(𝜽)), and 𝜂 is
+the learning rate.
+3
+ECO: Quantized Training without Full-Precision Master Weights
+Quantization. Quantization is the process of mapping continuous or high-precision values to a
+low-precision representation, primarily to reduce memory usage and enhance arithmetic throughput.
+This process typically involves an affine transformation (scaling by 𝑠 and shifting by 𝑧) to project the
+original values into the target range, followed by a rounding function that maps each value to the
+nearest grid point.
+More formally, a high-precision vector x is quantized to a low-precision vector y using the formula
+y = round( x−𝑧 𝑠 ). The original values can then be approximated using ˆx =𝑠y + 𝑧. Thus, the fully
+reconstructed vector ˆx𝑧,𝑠 is calculated as:
+ˆx𝑧,𝑠 =𝑠· round( x−𝑧 𝑠 )+𝑧· (1)
+Assuming the largest quantized value representable by the quantization format is 𝜌, then a standard
+choice for the scaling factor is 𝑠 = max|x|/𝜌, which prevents overflow. It is also common to fix the
+zero-point 𝑧 = 0, particularly for tensors in LLM training that are often near zero-mean. Therefore,
+for simplicity, when 𝑧 and 𝑠 are not explicitly mentioned, we assume this symmetric scheme, i.e.,
+ˆx =𝑞(x) = max|x| 𝜌 · round( 𝜌x max|x|).
+Quantization schemes can be categorized in several ways. One key distinction is their granularity,
+which defines which parts of an input tensor share the same quantization parameters (i.e., zero-point 𝑧
+and scale 𝑠). For example, in row-wise quantization, an independent 𝑧 and 𝑠 are computed and applied
+to each row of an input matrix. Other methods exists, such as 1D or 2D group-wise quantization,
+where blocks or groups of elements within the tensor share quantization parameters (Liu et al., 2024a;
+Rouhani et al., 2023; Xi et al., 2024b).
+Another categorization stems from the rounding function. A standard choice is round-to-nearest,
+which deterministically maps each value to its closest grid point. Alternatively, stochastic rounding
+maps a value to one of the two nearest grid points, where the probability of selecting either point is
+proportional to the distance to the other point. Round-to-nearest minimizes the magnitude of the
+error, while stochastic rounding results in an unbiased estimator.
+Quantization-Aware Training with Master Weights. Most quantized LLM training pipelines keep
+high-precision master weights (typically FP32) as the update accumulator. At each step, the master
+weights are quantized to obtain low-precision weights used for the forward/backward pass, while
+gradients and optimizer updates are accumulated in the high-precision copy. This stabilizes training
+by preserving small updates, but it substantially limits the weight-memory savings of quantization:
+the full master-weight buffer must remain on memory throughout training.
+3.2. ECO
+The high-level idea of ECO is to inject the quantization error from the current step into the optimizer’s
+momentum buffer. This mechanism ensures that the error from the current step is carried over and
+incorporated into the parameter update of the subsequent step, effectively creating an error feedback
+loop. Algorithm 1 provides a general overview, while Algorithm 2 and Algorithm 3 detail the error
+injection process for the SGD with Momentum (SGDM) and Adam optimizers, respectively.
+SGDM. ECO applies SGDM updates directly to the quantized weights. Concretely, at step 𝑡 with
+low-precision parameters ˆ𝜽𝑡, it forms a temporary iterate ˜𝜽𝑡+1 = ˆ𝜽𝑡 + u𝑡 (where u𝑡 is the SGDM update,
+dominated by momentum), quantizes it to obtain ˆ𝜽𝑡+1 = q(˜𝜽𝑡+1), and defines the quantization error
+4
+ECO: Quantized Training without Full-Precision Master Weights
+e𝑡+1 := ˜𝜽𝑡+1 − ˆ𝜽𝑡+1. ECO then injects this error into the momentum buffer so that the update lost due
+to quantization is carried forward and recovered in later steps.
+We prove in Appendix A that, if the errors are injected into momentum as
+m← m+ 1 𝜂 e𝑡 − 1 𝜂𝛽 e𝑡+1,
+then the resulting optimization trajectory is identical to SGDM with master weights. The difficulty
+is that this exact rule is not memory-efficient: while e𝑡+1 is available on-the-fly from the current
+quantization, the previous-step residual e𝑡 must be stored, which reintroduces a persistent buffer.
+We tackle this issue by a heuristic observation: e𝑡+1 and e𝑡 are typically close. Intuitively, assuming
+afixedscaleparameter, ˆ𝜽𝑡 isalreadyon-grid, somovingtothenextiterateonlyquantizestheincrement
+u𝑡, i.e., q(ˆ𝜽𝑡 + u𝑡) = ˆ𝜽𝑡 + q(u𝑡). Since u𝑡 is dominated by momentum, it changes slowly from one step
+to the next, which in turn makes the induced quantization errors e𝑡+1 and e𝑡 close. We also validate
+this empirically in Section 4.2. We therefore substitute e𝑡 ≈ e𝑡+1, yielding the memory-free injection
+rule
+m← m+ 1 𝜂  1− 1 𝛽  e𝑡+1,
+which removes the need for either master weights or a stored error buffer. See Algorithm 2 for more
+details. Notably, we use this heuristic only to motivate the injection rule; later in this section, we
+provide a rigorous theoretical analysis of the resulting memory-efficient form.
+Adam. WetreatAdaminthesamewayasSGDM,exceptthatAdamappliesanadaptive, element-wise
+learning rate. Adam’s parameter update can be written in the form
+𝜽𝑡+1 = 𝜽𝑡 −𝜂
+m𝑡+1
+1−𝛽𝑡 1
+√︃ v𝑡+1
+1−𝛽𝑡 2 +𝜖
+,
+where m𝑡+1 and v𝑡+1 are the first and second momentum buffers after incorporating the gradient at
+step 𝑡, and 𝜖 prevents division by zero. We identify the element-wise adaptive step size as
+𝜼𝑡 ≔ 𝜂
+(1− 𝛽𝑡 1)( √︃ v𝑡+1 1−𝛽𝑡 2 +𝜖) .
+With this formulation, ECO’s injection differs from the SGDM case only by replacing the scalar learning
+rate with Adam’s element-wise effective step size. See Algorithm 3.
+Algorithm 1 Quantized Training Step 𝑡 with ECO
+Require: Quantized parameters ˆ𝜽𝑡
+Require: Optimizer state ˆs𝑡, hyperparameters 𝐻
+Require: Optimizer step function: OPTIM_STEP
+Require: ECO quantization function: ECO_QUANTIZE
+1: ˜𝜽𝑡+1, ˜s𝑡+1 ← OPTIM_STEP(ˆ𝜽𝑡, ˆs𝑡,𝐻) ⊲ optimization step on quantized parameters
+2: ˆ𝜽𝑡+1, ˆs𝑡+1 ← ECO_QUANTIZE(˜𝜽𝑡+1, ˜s𝑡+1,𝐻) ⊲ quantization + momentum injection
+3: return ˆ𝜽𝑡+1, ˆs𝑡+1
+5
+ECO: Quantized Training without Full-Precision Master Weights
+Algorithm 2 ECO_QUANTIZE for SGD with Momentum
+Require: High-precision parameters ˜𝜽𝑡+1
+Require: Optimizer state ˜s𝑡+1, hyperparameter 𝐻
+1: ˆ𝜽𝑡+1 ← q(˜𝜽𝑡+1) ⊲ quantize the weights
+2: e𝑡+1 ← ˜𝜽𝑡+1 − ˆ𝜽𝑡+1 ⊲ compute the quantization error
+3: { ˜m𝑡+1}← ˜s𝑡+1 ⊲ read momentum buffer from the optimizer state
+4: {𝜂,𝛽}← 𝐻 ⊲ read SGDM hyperparameters
+5: ˆm𝑡+1 ← ˜m𝑡+1 + 1 𝜂(1− 1 𝛽)e𝑡+1 ⊲ inject the quantization error into momentum
+6: return ˆ𝜽𝑡+1,{ ˆm𝑡+1}
+Algorithm 3 ECO_QUANTIZE for Adam
+Require: High-precision parameters ˜𝜽𝑡+1
+Require: Optimizer state ˜s𝑡+1, hyperparameter 𝐻
+1: ˆ𝜽𝑡+1 ← q(˜𝜽𝑡+1) ⊲ quantize the weights
+2: e𝑡+1 ← ˜𝜽𝑡+1 − ˆ𝜽𝑡+1 ⊲ compute the quantization error
+3: { ˜m𝑡+1, v𝑡+1}← ˜s𝑡+1 ⊲ read momentum buffers from the optimizer state
+4: {𝜂,𝛽1,𝛽2,𝜖}← 𝐻 ⊲ read Adam hyperparameters
+5: ˆm𝑡+1 ← ˜m𝑡+1 +
+1−𝛽𝑡 1
+𝜂 (1− 1 𝛽1 )( √︃ v𝑡+1 1−𝛽𝑡 2 +𝜖)⊙ e𝑡+1 ⊲ inject the quantization error into momentum
+6: return ˆ𝜽𝑡+1,{ ˆm𝑡+1, v𝑡+1}
+3.3. Convergence Analysis
+This section presents the convergence analysis for the SGDM variant of the ECO optimizer. By
+constructing a virtual sequence, we prove that the algorithm converges to a near stationary point. All
+proofs are given in Appendix B.
+3.3.1. Setup and Algorithm
+We consider the optimization problem min𝜽∈ℝ𝑑 𝑓(𝜽), where 𝑓 is 𝐿-smooth and bounded below by 𝑓∗.
+The ECO Optimizer updates are expanded as follows:
+˜m𝑡+1 = 𝛽 ˆm𝑡 +(1− 𝛽)∇𝑓(ˆ𝜽𝑡) (2)
+˜𝜽𝑡+1 = ˆ𝜽𝑡 −𝜂 ˜m𝑡+1 (3)
+ˆ𝜽𝑡+1 =𝑞(˜𝜽𝑡+1) (4)
+e𝑡+1 = ˜𝜽𝑡+1 − ˆ𝜽𝑡+1 (5)
+ˆm𝑡+1 = ˜m𝑡+1 +𝛼e𝑡+1 (6)
+where 𝜂 is the learning rate, 𝛽∈[0, 1) is the momentum parameter, and the error injection strength
+is set to:
+𝛼 = 1 𝜂  1− 1 𝛽  . (7)
+3.3.2. Assumptions
+We rely on the following standard assumptions for non-convex optimization analysis.
+Assumption 3.1 (L-Smoothness). The function 𝑓 is 𝐿-smooth, i.e., ∥∇𝑓(𝑥)−∇𝑓(𝑦)∥≤ 𝐿∥𝑥− 𝑦∥ for
+all 𝑥,𝑦.
+6
+ECO: Quantized Training without Full-Precision Master Weights
+Assumption 3.2 (Unbiased Quantization with Bounded Error Variance). The quantization error is
+zero-mean with bounded variance 𝜎2: 𝔼[e𝑡] = 0 and 𝔼[∥e𝑡∥2]≤ 𝜎2.
+Assumption 3.3 (Bounded Gradient). There exists𝐺 > 0 such that∥∇𝑓(𝜽)∥≤𝐺 for all 𝜽.
+3.3.3. Virtual Sequence Analysis
+Following the methodology of Richtárik et al. (2021), we construct a “virtual sequence” 𝜽𝑡.
+Definition 3.4 (Virtual Sequence). Define the virtual sequence 𝜽𝑡 as:
+𝜽𝑡 := ˆ𝜽𝑡 − 𝜂𝛽 1− 𝛽 ˆm𝑡. (8)
+Lemma 3.5 (Virtual Sequence Dynamics). The virtual sequence 𝜽𝑡 evolves as:
+𝜽𝑡+1 = 𝜽𝑡 −𝜂∇𝑓(ˆ𝜽𝑡), (9)
+This lemma demonstrates that by tracking this specific combination of weights and momentum,
+we can analyze the ECO trajectory as a standard gradient descent process on the loss surface.
+3.3.4. Descent and Momentum Bounds
+We derive a descent inequality for the virtual sequence and bound the momentum term which
+accumulates the quantization error.
+Lemma 3.6 (Descent Lemma). Let𝐶 = 𝜂𝛽 1−𝛽. For 𝜂≤ 1 2𝐿, the virtual sequence satisfies:
+𝑓(𝜽𝑡+1)≤ 𝑓(𝜽𝑡)− 𝜂 4 ∇𝑓(ˆ𝜽𝑡)  2 2 + 𝜂𝐿2𝐶2 2 ∥ ˆm𝑡∥2 2 (10)
+This allows us to control the dynamics of the optimization trajectory.
+Lemma 3.7 (Bounded Momentum). Under the assumptions, the squared norm of the momentum ˆm𝑡 is
+bounded in expectation by a constant 𝑀2. Specifically, for all 𝑡:
+𝔼[∥ ˆm𝑡∥2]≤ 𝑀2 := 2𝐺2 + 2𝛼2𝜎2 1− 𝛽2 . (11)
+This ensures that the quantization error injected into the momentum buffer does not explode,
+keeping the optimization stable.
+3.3.5. Convergence Theorem
+Theorem 3.8 (Convergence Rate). For 𝜂≤ 1 2𝐿, the ECO optimizer converges to a neighborhood:
+min
+𝑡∈{0,...,𝑇−1}
+𝔼
+
+∥∇𝑓(ˆ𝜽𝑡)∥2 ≤ 4(𝑓(𝜽0)− 𝑓∗) 𝜂𝑇 +𝜎2 quant, (12)
+where the quantization noise floor 𝜎2 quant is given by:
+𝜎2 quant = 4𝜂2 𝛽2 𝐿2𝐺2 (1− 𝛽)2 + 4𝐿2𝜎2 1− 𝛽2 (13)
+7
+ECO: Quantized Training without Full-Precision Master Weights
+Discussion on Decaying Learning Rate: As 𝜂→ 0, the noise floor 𝜎2 quant becomes:
+lim
+𝜂→0
+𝜎2 quant = 4𝐿2𝜎2 1− 𝛽2 (14)
+While the noise floor persists even as the learning rate vanishes, we show in the next subsection that
+this noise floor is tight up to the constant 4. Additionally, we note that even with master weights,
+since the final solution must lie on the quantization grid, a noise floor of 𝐿2𝜎2 is unavoidable.
+3.3.6. Deterministic Rounding
+We now provide a similar study where deterministic round-to-nearest is used instead of stochastic
+rounding. In this case, the zero-mean error assumption (Assumption 3.2) is violated. We instead
+assume a bounded deterministic error∥e𝑡∥≤ 𝛿 for all 𝑡.
+Lemma 3.9 (Deterministic Momentum Bound). Under the deterministic error assumption ∥e𝑡∥≤ 𝛿
+and bounded gradients ∥∇𝑓(𝜽)∥≤ 𝐺, the norm of the injected momentum buffer in ECO is uniformly
+bounded for all 𝑡:
+∥ ˆm𝑡∥≤ 𝑀det :=𝐺+ |𝛼|𝛿 1− 𝛽. (15)
+Theorem3.10 (Deterministic Convergence). For𝜂≤ 1 2𝐿, the ECO optimizer with deterministic rounding
+converges to a neighborhood of the optimum:
+min
+𝑡<𝑇
+∥∇𝑓(ˆ𝜽𝑡)∥2 ≤ 4(𝑓(𝜽0)− 𝑓∗) 𝜂𝑇 + Γ2 quant (16)
+where the deterministic noise floor is defined as:
+Γ2 quant = 2𝐿2𝐶2 𝑀2 det = 2𝐿2𝜂2 𝛽2 (1− 𝛽)2  𝐺+ |𝛼|𝛿 1− 𝛽  2 . (17)
+Comparison of Noise Floors. It is instructive to compare the noise floor of the stochastic case
+(𝜎2 quant) and the deterministic case (Γ2 quant) as the learning rate 𝜂→ 0. In the stochastic case, the noise
+floor remains constant at O(𝐿2𝜎2/(1 − 𝛽2)). In the deterministic case, substituting |𝛼| =(1 − 𝛽)/𝜂𝛽
+results in a floor of O(𝐿2𝛿2/(1 − 𝛽)2). Assuming 𝜎≈ 𝛿, the deterministic bound is significantly larger
+due to the (1 − 𝛽)−2 dependence, reflecting the fact that systematic biases in quantization are harder
+for the momentum buffer to “average out” than zero-mean noise.
+3.4. Lower-Bound on Worst-Case Behavior
+We analyze the optimization dynamics on a one-dimensional quadratic objective 𝑓(𝑥) = 𝐿 2 𝑥2 with
+𝐿 > 0. The gradient is ∇𝑓(𝑥) = 𝐿𝑥. We assume a stochastic quantization model where the quantized
+value ˆ𝑥 = 𝑞(𝑥) satisfies ˆ𝑥 = 𝑥+𝜉, with 𝜉 being zero-mean noise independent of 𝑥 and 𝔼[𝜉2] = 𝜎2.
+We examine the expected squared gradient norm of the stationary quantized parameters, defined as
+L = lim𝑡→∞ 𝔼[(∇𝑓(ˆ𝑥𝑡))2], in the limit as the learning rate 𝜂→ 0. The results are summarized below,
+while the formal derivations are deferred to Appendix C.
+SGDM with Master Weights. In this standard setting, the master weights evolve in high precision,
+but the gradient is computed using the quantized weights. Master weights allow the underlying
+8
+ECO: Quantized Training without Full-Precision Master Weights
+Table 1 | Validation loss comparison across model sizes 30-800M, with “dvg” denoting divergence.
+∗“N/A”: one entry is unavailable due to data loss.
+Model Size 30M 50M 100M 200M 430M 800M
+BF16 w/ MW 3.3238 3.1616 2.9811 2.8157 2.6464 2.5306
+FP8 w/ MW + RTN 3.3248 3.1668 2.9846 2.8194 2.6490 2.5343
+FP8 w/ MW + SR 3.3309 3.1719 2.9884 2.8231 2.6500 N/A∗
+FP8 w/o MW + RTN dvg dvg dvg dvg dvg dvg
+FP8 w/o MW + SR 3.4008 3.2563 3.1006 2.9684 2.8378 2.9471
+FP8 w/o MW ECO + RTN 3.3640 3.1862 3.0025 2.8776 2.7237 2.6046
+FP8 w/o MW ECO + SR 3.3317 3.1695 2.9888 2.8241 2.6544 2.5399
+parameter to converge to the true optimum. However, the quantized weights are 𝜉 away from the
+master weights. Consequently, the error is dominated by the quantization resolution:
+lim
+𝜂→0
+LMW = 𝐿2𝜎2. (18)
+Naive Master Weight Removal. When master weights are removed, the update is applied directly to
+the quantized parameter: ˆ𝑥𝑡+1 =𝑞(ˆ𝑥𝑡 −𝜂𝑚𝑡+1). This process reaches a stationary distribution, however,
+the variance is inversely proportional to the learning rate:
+LNaive ∝ 1 𝜂 𝜂→0 −−−→∞. (19)
+This confirms that without error compensation, one cannot achieve high accuracy by annealing the
+learning rate.
+ECO. ECO stabilizes the master-weight-free training by injecting quantization noise into the mo-
+mentum buffer. In the limit of small learning rates, the process converges to a stationary distribution
+determined by the noise accumulation in the momentum term:
+lim
+𝜂→0
+LECO = 𝐿2𝜎2 1− 𝛽2 . (20)
+This shows that ECO prevents the 1/𝜂 explosion seen in the naive case. Additionally, this verifies that
+the noise floor in in Equation (14) is tight up to a factor of 4.
+4. Experiments
+4.1. Baselines
+We evaluate the following baselines that use high-precision accumulation.
+• FP32 accumulation with BF16 computation (BF16 w/ MW): This configuration serves as the
+reference baseline. Training is performed using FP32 master weights, while operands are cast
+to BF16 prior to each matrix multiplication to improve efficiency. This setup follows standard
+automatic mixed-precision training (Micikevicius et al., 2017) and provides an upper bound on
+achievable performance.
+9
+ECO: Quantized Training without Full-Precision Master Weights
+• FP32 accumulation with FP8 round-to-nearest forward pass (FP8 w/ MW + RTN): This
+quantization-aware training (QAT) baseline quantizes both weights and activations to the FP8
+E4M3 format during the forward pass using round-to-nearest. Row-wise scaling is applied, with
+each scale set to the maximum absolute value in the corresponding row. Prior work has shown
+that this approach is largely lossless (Liu et al., 2024a; Peng et al., 2023).
+• FP32 accumulation with FP8 stochastic rounding forward pass (FP8 w/ MW + SR): This
+baseline is identical to the previous one, except that weights are quantized using stochastic
+rounding. Activations remain quantized with round-to-nearest.
+The baselines above maintain FP32 master weights and therefore establish upper bounds for the
+following methods, which eliminate master weight storage.
+• FP8 accumulation and forward pass with round-to-nearest (FP8 w/o MW + RTN): This
+baseline provides a direct comparison to ECO. No high-precision master weights are stored.
+After each parameter update, weights are quantized to FP8 using round-to-nearest. Activations
+are also quantized to FP8.
+• FP8 accumulation and forward pass with stochastic rounding (FP8 w/o MW + SR): This
+method mirrors the previous baseline, but applies stochastic rounding to the weights. Activations
+arestillquantizedusinground-to-nearest. ThiscorrespondstotheapproachsuggestedbyOzkara
+et al. (2025).
+• FP8 accumulation and forward pass with round-to-nearest and ECO (FP8 w/o MW ECO +
+RTN): In addition to removing master weights and applying round-to-nearest quantization to
+both weights and activations, this method incorporates our momentum injection mechanism to
+mitigate quantization error.
+• FP8 accumulation and forward pass with stochastic rounding and ECO (FP8 w/o MW ECO
++ SR): This variant is identical to the previous method, but uses stochastic rounding for weight
+quantization.
+4.2. Scaling Law Experiments
+Setting. We evaluate ECO using a pre-training scaling study, following Panferov et al.. We train
+models with sizes of 30M, 50M, 100M, 200M, 430M, and 800M parameters. For a model with
+𝑁 parameters, training is performed on 100𝑁 tokens from the C4 dataset (Raffel et al., 2020),
+corresponding to 5× the Chinchilla-optimal token count (Hoffmann et al., 2022). We use the T5
+tokenizer (Kudo and Richardson, 2018; Raffel et al., 2020). Both the batch size and sequence length
+are fixed to 512. We use the AdamW optimizer with (𝛽1,𝛽2,𝜖) =(0.9, 0.98, 10−9). The learning rate
+is linearly warmed up from 0.01× the peak value to the peak over the first 10% of training, followed
+by cosine decay to 0.1× the peak. We apply a weight decay of 0.1 and gradient clipping with a norm
+of 1.0. Refer to Panferov et al. for more details on the hyperparameters. For quantized runs, we apply
+the method only to the linear layers within transformer blocks, excluding the embedding and output
+layers.
+Results. Table 1 reports the final validation loss achieved by each method. The results show that
+ECO substantially improves over naive removal of master weights. When stochastic rounding is used,
+ECO nearly recovers the performance of methods that retain master weights. As expected, the gains
+are smaller with round-to-nearest quantization, since it introduces bias into the momentum buffer.
+10
+ECO: Quantized Training without Full-Precision Master Weights
+Memory and Runtime. In addition, Figure 1 shows that ECO establishes a new static memory–loss
+Pareto frontier, offering significantly lower memory usage for a given validation loss. Regarding
+runtime, the injection is a simple element-wise operation and adds negligible overhead.
+0 50 100 150 200 250 300
+Step
+0.9994
+0.9996
+0.9998
+1.0000Relative Norm 0.7
+0.8
+0.9
+Cosine Similarity
+Figure 2 | Similarity of consecutive quantization
+errors. Left: relative norm ∥e𝑡+1 ∥2 /∥e𝑡∥2. Right:
+cosine similarity between e𝑡 and e𝑡+1.
+StudyontheSimilarityofConsecutiveErrors.
+We repeat the 30M experiment with master
+weights and round-to-nearest (RTN), and mea-
+sure the similarity between consecutive quanti-
+zation errors. Specifically, we track the relative
+norm ∥e𝑡+1 ∥ 2 ∥e𝑡∥ 2 and the cosine similarity between
+e𝑡 and e𝑡+1 throughout training. Figure 2 re-
+ports both metrics. The relative norm remains
+close to 1 during training, indicating that ∥e𝑡∥2
+variesslowlyovertime, andthecosinesimilarity
+stays consistently high, indicating strong align-
+ment between consecutive errors. The observed
+trend follows the learning-rate schedule: larger learning rates lead to larger differences between
+consecutive errors, while these differences diminish as the learning rate decays.
+4.3. Gemma 3 1B Pre-training
+Setting. We pre-train the Gemma 3 1B model (Gemma et al., 2025) from scratch on 40B tokens
+from the C4 dataset (Raffel et al., 2020). The batch size is 256 and the sequence length is 512. We
+use the publicly available Gemma 3 tokenizer. Training uses the AdamW optimizer with the same
+hyperparameters as in the scaling law experiments. The learning rate peaks at 10−4, with a linear
+warmup from 10−6 over the first 10% of training, followed by cosine decay to 10−5.
+Results. Figure 3 (Left) compares the final validation loss across methods. The results confirm the
+effectiveness of ECO, particularly when combined with stochastic rounding.
+4.4. Mixture of Experts Pre-training
+Setting. We pre-train a sparse mixture-of-experts (SMoE) model with 2.1B total parameters. The
+model contains 32 experts, of which 4 are activated per token. It consists of 24 transformer layers,
+each with a hidden dimension of 576, an intermediate dimension of 2304, and 9 attention heads.
+Training uses 100× the number of active parameters in tokens from the LM1B dataset (Chelba et al.,
+2013). We reuse the T5 tokenizer (Kudo and Richardson, 2018; Raffel et al., 2020). Optimization is
+performed with AdamW, using a weight decay of 0.1, and a learning rate that increases linearly from
+2 × 10−6 to 2 × 10−5 over the first 1% of training, followed by cosine decay back to 2 × 10−6. The
+batch size is 256 and the sequence length is 512. For the quantized runs, we only quantize the expert
+linear layers.
+Results. Figure 3 (Left) summarizes the final validation loss for each method. Consistent with prior
+experiments, ECO clearly outperforms naive master weight removal, while incurring only a minimal
+loss compared to approaches that retain master weights.
+11
+ECO: Quantized Training without Full-Precision Master Weights
+SMoE 2.1B Gemma 2 1B
+2.7
+2.8
+2.9
+3.0
+3.1Validation Loss
+2.8829
+2.7554
+2.9144
+2.7615
+2.9177
+2.7579
+3.0997 3.1103
+2.9232
+2.7671
+Base
+FP8 w/ MW + RTN
+FP8 w/ MW + SR
+FP8 w/o MW + SR
+FP8 w/o MW ECO + SR
+0 10 20 30 40 50 60 70
+Step
+1.0
+1.5
+2.0
+2.5
+3.0Loss
+ diverged
+ diverged
+INT4 w/ MW + RTN
+INT4 w/ MW + SR
+INT4 w/o MW + RTN
+INT4 w/o MW + SR
+INT4 w/o MW ECO + RTN
+INT4 w/o MW ECO + SR
+Figure 3 | (Left) Gemma 3 1B and SMoE 2.1B validation loss comparison, and (Right) Smoothed
+training loss during fine-tuning of DeepSeek-MoE-16B-Base (Dai et al., 2024).
+Table 2 | Fine-tuned DeepSeek-MoE-16B zero-shot benchmarks. We omit naive master weight removal
+baselines because training diverged in those settings. ECO matches the master-weight baselines,
+demonstrating lossless accuracy while requiring significantly less memory.
+Method ARC-C ARC-E GSM8K HellaSwag PIQA MMLU
+Base 47.53 73.06 16.15 77.34 80.36 37.64
+INT4 w/ MW + RTN 48.29 71.38 16.68 78.76 80.69 37.87
+INT4 w/ MW + SR 48.55 71.13 16.15 78.78 80.90 38.57
+INT4 w/o MW ECO + RTN 49.15 71.59 16.30 78.88 81.34 38.63
+INT4 w/o MW ECO + SR 48.55 71.17 16.00 78.84 81.50 38.41
+Discussion on Memory. Due to the SMoE model architecture, the memory required for activation
+storage is substantially smaller than that required for weights. With activation checkpointing enabled
+and no gradient accumulation, peak memory usage is dominated by master weights and optimizer
+states. ReducingmasterweightprecisionfromFP32toFP8thereforelowerspeakmemoryconsumption
+from 12 bytes per parameter to 9, a reduction of approximately 25%.
+4.5. DeepSeek-MoE-16B Fine-tuning
+Setting. We apply ECO to tensor-wise INT4 weight-only QAT of DeepSeek-MoE-16B-Base (Dai et al.,
+2024). The model has 64 experts, with 8 active experts per token (approximately 2.8B parameters),
+including 2 shared experts. We fine-tune on the OpenAssistant-Guanaco dataset (Dettmers et al.,
+2023) for 3 epochs with sequence length 2048, using AdamW with micro-batch size 1 and gradient
+accumulation of 16. The learning rate is linearly warmed up from 2 × 10−10 to 2 × 10−5 over the
+first 3% of training, then annealed to zero with a cosine schedule. We apply gradient clipping with
+threshold 1 and use no weight decay.
+Results. Figure 3 (Right) compares training loss across methods. Naive master-weight removal
+diverges under both round-to-nearest (RTN) and stochastic rounding (SR), whereas ECO matches
+the master-weight baseline in both cases. In addition, Table 2 reports zero-shot accuracy on standard
+benchmarks, where ECO similarly recovers the performance of the master-weight models.
+12
+ECO: Quantized Training without Full-Precision Master Weights
+5. Conclusion
+ECO is the first general-purpose, scalable method for quantized LLM training without master weights.
+It removes high-precision accumulation by forming an error-feedback loop through the optimizer’s
+momentum, with no additional memory overhead. Our analysis shows that ECO avoids the instability
+of naive master-weight removal. Empirically, across dense Transformers and SMoE models, ECO
+nearly matches high-precision baselines while improving the static-memory versus loss trade-off,
+showing that it can serve as a practical building block for future low-precision training.
+Limitations. Both theory and experiments indicate that ECO performs best with stochastic rounding
+(SR). While SR is becoming more common in hardware, some devices only support round-to-nearest
+(RTN). In that setting, ECO still outperforms naive approaches but can exhibit a higher noise floor,
+consistent with our theory. Moreover, when master weights are available, RTN generally slightly
+outperforms SR in practice (Castro et al., 2025); in contrast, ECO relies on the unbiasedness of SR
+for its strongest guarantees. This introduces a slight accuracy ceiling relative to the best RTN-based
+master-weight baselines.
+References
+S. Ashkboos, A. Mohtashami, M. L. Croci, B. Li, P. Cameron, M. Jaggi, D. Alistarh, T. Hoefler, and
+J. Hensman. Quarot: Outlier-free 4-bit inference in rotated llms. Advances in Neural Information
+Processing Systems, 37:100213–100240, 2024.
+S. Ashkboos, M. Nikdan, S. Tabesh, R. L. Castro, T. Hoefler, and D. Alistarh. Halo: Hadamard-assisted
+lower-precision optimization for llms. arXiv preprint arXiv:2501.02625, 2025.
+R. L. Castro, A. Panferov, S. Tabesh, O. Sieberling, J. Chen, M. Nikdan, S. Ashkboos, and D. Alis-
+tarh. Quartet: Native fp4 training can be optimal for large language models. arXiv preprint
+arXiv:2505.14669, 2025.
+C. Chelba, T. Mikolov, M. Schuster, Q. Ge, T. Brants, P. Koehn, and T. Robinson. One billion word
+benchmark for measuring progress in statistical language modeling. arXiv preprint arXiv:1312.3005,
+2013.
+M. Chen, W. Shao, P. Xu, J. Wang, P. Gao, K. Zhang, and P. Luo. Efficientqat: Efficient quantization-
+awaretrainingforlargelanguagemodels. InProceedingsofthe63rdAnnualMeetingoftheAssociation
+for Computational Linguistics (Volume 1: Long Papers), pages 10081–10100, 2025.
+B. Chmiel, M. Fishman, R. Banner, and D. Soudry. Fp4 all the way: Fully quantized training of llms.
+arXiv preprint arXiv:2505.19115, 2025.
+J. Choi, Z. Wang, S. Venkataramani, P. I.-J. Chuang, V. Srinivasan, and K. Gopalakrishnan. Pact:
+Parameterized clipping activation for quantized neural networks. arXiv preprint arXiv:1805.06085,
+2018.
+D. Dai, C. Deng, C. Zhao, R. X. Xu, H. Gao, D. Chen, J. Li, W. Zeng, X. Yu, Y. Wu, Z. Xie, Y. K.
+Li, P. Huang, F. Luo, C. Ruan, Z. Sui, and W. Liang. Deepseekmoe: Towards ultimate expert
+specialization in mixture-of-experts language models. CoRR, abs/2401.06066, 2024. URL https:
+//arxiv.org/abs/2401.06066.
+T. Dettmers, M. Lewis, S. Shleifer, and L. Zettlemoyer. 8-bit optimizers via block-wise quantization.
+arXiv preprint arXiv:2110.02861, 2021.
+13
+ECO: Quantized Training without Full-Precision Master Weights
+T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer. Qlora: Efficient finetuning of quantized
+llms. Advances in neural information processing systems, 36:10088–10115, 2023.
+S. K. Esser, J. L. McKinstry, D. Bablani, R. Appuswamy, and D. S. Modha. Learned step size quantization.
+arXiv preprint arXiv:1902.08153, 2019.
+M. Fishman, B. Chmiel, R. Banner, and D. Soudry. Scaling fp8 training to trillion-token llms. arXiv
+preprint arXiv:2409.12517, 2024.
+E. Frantar, S. Ashkboos, T. Hoefler, and D. Alistarh. Gptq: Accurate post-training quantization for
+generative pre-trained transformers. arXiv preprint arXiv:2210.17323, 2022.
+T. Gemma, A. Kamath, J. Ferret, S. Pathak, N. Vieillard, R. Merhej, S. Perrin, T. Matejovicova, A. Ramé,
+M. Rivière, et al. Gemma 3 technical report. arXiv preprint arXiv:2503.19786, 2025.
+J. Hoffmann, S. Borgeaud, A. Mensch, E. Buchatskaya, T. Cai, E. Rutherford, D. d. L. Casas, L. A.
+Hendricks, J. Welbl, A. Clark, et al. Training compute-optimal large language models. arXiv preprint
+arXiv:2203.15556, 2022.
+T. Huang, T. Luo, and J. T. Zhou. Apt: The master-copy-free training method for quantised neural
+network on edge devices. Journal of Parallel and Distributed Computing, 166:95–103, 2022.
+S. Jung, C. Son, S. Lee, J. Son, J.-J. Han, Y. Kwak, S. J. Hwang, and C. Choi. Learning to quantize
+deep networks by optimizing quantization intervals with task loss. In Proceedings of the IEEE/CVF
+conference on computer vision and pattern recognition, pages 4350–4359, 2019.
+T. Kudo and J. Richardson. Sentencepiece: A simple and language independent subword tokenizer
+and detokenizer for neural text processing. arXiv preprint arXiv:1808.06226, 2018.
+B. Li, J. Chen, and J. Zhu. Memory efficient optimizers with 4-bit states. Advances in Neural Information
+Processing Systems, 36:15136–15171, 2023.
+J. Lin, L. Zhu, W.-M. Chen, W.-C. Wang, C. Gan, and S. Han. On-device training under 256kb memory.
+Advances in Neural Information Processing Systems, 35:22941–22954, 2022.
+J. Lin, J. Tang, H. Tang, S. Yang, W.-M. Chen, W.-C. Wang, G. Xiao, X. Dang, C. Gan, and S. Han. Awq:
+Activation-aware weight quantization for on-device llm compression and acceleration. Proceedings
+of machine learning and systems, 6:87–100, 2024.
+A. Liu, B. Feng, B. Xue, B. Wang, B. Wu, C. Lu, C. Zhao, C. Deng, C. Zhang, C. Ruan, et al. Deepseek-v3
+technical report. arXiv preprint arXiv:2412.19437, 2024a.
+Z. Liu, B. Oguz, C. Zhao, E. Chang, P. Stock, Y. Mehdad, Y. Shi, R. Krishnamoorthi, and V. Chandra.
+Llm-qat: Data-free quantization aware training for large language models. In Findings of the
+Association for Computational Linguistics: ACL 2024, pages 467–484, 2024b.
+Z. Liu, C. Zhao, I. Fedorov, B. Soran, D. Choudhary, R. Krishnamoorthi, V. Chandra, Y. Tian,
+and T. Blankevoort. Spinquant: Llm quantization with learned rotations. arXiv preprint
+arXiv:2405.16406, 2024c.
+P. Micikevicius, S. Narang, J. Alben, G. Diamos, E. Elsen, D. Garcia, B. Ginsburg, M. Houston,
+O. Kuchaiev, G. Venkatesh, et al. Mixed precision training. arXiv preprint arXiv:1710.03740, 2017.
+K. Ozkara, T. Yu, and Y. Park. Stochastic rounding for llm training: Theory and practice. arXiv preprint
+arXiv:2502.20566, 2025.
+14
+ECO: Quantized Training without Full-Precision Master Weights
+A. Panferov, J. Chen, S. Tabesh, R. L. Castro, M. Nikdan, and D. Alistarh. Quest: Training accurate
+llms over highly-compressed weights and activation. In Sparsity in LLMs (SLLM): Deep Dive into
+Mixture of Experts, Quantization, Hardware, and Inference.
+H. Peng, K. Wu, Y. Wei, G. Zhao, Y. Yang, Z. Liu, Y. Xiong, Z. Yang, B. Ni, J. Hu, et al. Fp8-lm: Training
+fp8 large language models. arXiv preprint arXiv:2310.18313, 2023.
+C. Raffel, N. Shazeer, A. Roberts, K. Lee, S. Narang, M. Matena, Y. Zhou, W. Li, and P. J. Liu. Exploring
+the limits of transfer learning with a unified text-to-text transformer. Journal of machine learning
+research, 21(140):1–67, 2020.
+P. Richtárik, I. Sokolov, and I. Fatkhullin. Ef21: A new, simpler, theoretically better, and practically
+faster error feedback. Advances in Neural Information Processing Systems, 34:4384–4396, 2021.
+B. D. Rouhani, R. Zhao, A. More, M. Hall, A. Khodamoradi, S. Deng, D. Choudhary, M. Cornea,
+E. Dellinger, K. Denolf, et al. Microscaling data formats for deep learning. arXiv preprint
+arXiv:2310.10537, 2023.
+F. Seide, H. Fu, J. Droppo, G. Li, and D. Yu. 1-bit stochastic gradient descent and its application to
+data-parallel distributed training of speech dnns. In Interspeech, volume 2014, pages 1058–1062.
+Singapore, 2014.
+Y. Sun, R. Liu, H. Bai, H. Bao, K. Zhao, Y. Li, J. Hu, X. Yu, L. Hou, C. Yuan, et al. Flatquant: Flatness
+matters for llm quantization. arXiv preprint arXiv:2410.09426, 2024.
+H. Tang, S. Gan, A. A. Awan, S. Rajbhandari, C. Li, X. Lian, J. Liu, C. Zhang, and Y. He. 1-bit adam:
+Communication efficient large-scale training with adam’s convergence speed. In International
+Conference on Machine Learning, pages 10118–10129. PMLR, 2021.
+K. Team, Y. Bai, Y. Bao, G. Chen, J. Chen, N. Chen, R. Chen, Y. Chen, Y. Chen, Y. Chen, et al. Kimi k2:
+Open agentic intelligence. arXiv preprint arXiv:2507.20534, 2025.
+A. Tseng, T. Yu, and Y. Park. Training llms with mxfp4. arXiv preprint arXiv:2502.20586, 2025.
+G. Wang, H. Qin, S. A. Jacobs, C. Holmes, S. Rajbhandari, O. Ruwase, F. Yan, L. Yang, and Y. He.
+Zero++: Extremely efficient collective communication for giant model training. arXiv preprint
+arXiv:2306.10209, 2023a.
+H. Wang, S. Ma, L. Dong, S. Huang, H. Wang, L. Ma, F. Yang, R. Wang, Y. Wu, and F. Wei. Bitnet:
+Scaling 1-bit transformers for large language models. arXiv preprint arXiv:2310.11453, 2023b.
+H. Xi, H. Cai, L. Zhu, Y. Lu, K. Keutzer, J. Chen, and S. Han. Coat: Compressing optimizer states and
+activation for memory-efficient fp8 training. arXiv preprint arXiv:2410.19313, 2024a.
+H. Xi, Y. Chen, K. Zhao, K. J. Teh, J. Chen, and J. Zhu. Jetfire: Efficient and accurate transformer
+pretraining with int8 data flow and per-block quantization. arXiv preprint arXiv:2403.12422,
+2024b.
+T. Yu, G. Gupta, K. Gopalswamy, A. Mamidala, H. Zhou, J. Huynh, Y. Park, R. Diamant, A. Deo-
+ras, and L. Huan. Collage: Light-weight low-precision strategy for llm training. arXiv preprint
+arXiv:2405.03637, 2024.
+J. Zhang, N. Ullah, E. Schultheis, and R. Babbar. Elmo: Efficiency via low-precision and peak memory
+optimization in large output spaces. arXiv preprint arXiv:2510.11168, 2025.
+S. Zhou, Y. Wu, Z. Ni, X. Zhou, H. Wen, and Y. Zou. Dorefa-net: Training low bitwidth convolutional
+neural networks with low bitwidth gradients. arXiv preprint arXiv:1606.06160, 2016.
+15
+ECO: Quantized Training without Full-Precision Master Weights
+A. Exact Error Injection
+This appendix shows that SGDM with high-precision master weights can be reproduced exactly using
+only quantized weights, provided the momentum buffer receives an “ideal” correction that depends
+on both the current and previous quantization residuals.
+SGDM with Master Weights. Let q(·) be the weight quantizer. Let 𝜽𝑡 denote the high-precision
+master weights, and let ˆ𝜽 MW 𝑡 ← q(𝜽𝑡) be the quantized weights used for the forward/backward pass
+at step 𝑡. Using the gradient
+g𝑡 ←∇𝑓(ˆ𝜽 MW 𝑡 ), (21)
+SGDM with master weights updates
+mMW 𝑡+1 ← 𝛽 mMW 𝑡 +(1− 𝛽) g𝑡, (22)
+𝜽𝑡+1 ← 𝜽𝑡 −𝜂 mMW 𝑡+1 , (23)
+ˆ𝜽 MW 𝑡+1 ← q(𝜽𝑡+1), (24)
+and we define the quantization residual of 𝜽𝑡+1 as
+eMW 𝑡+1 := 𝜽𝑡+1 − ˆ𝜽 MW 𝑡+1 . (25)
+No-Master-Weight SGDM with Ideal Momentum Injection. This variant stores only quantized
+weights ˆ𝜽 IM 𝑡 , a momentum buffer mIM 𝑡 , and the previous residual eIM 𝑡 . At step 𝑡, it computes
+g𝑡 ←∇𝑓(ˆ𝜽 IM 𝑡 ),
+¯m𝑡+1 ← 𝛽 mIM 𝑡 +(1− 𝛽) g𝑡, (26)
+˜𝜽𝑡+1 ← ˆ𝜽 IM 𝑡 −𝜂 ¯m𝑡+1, (27)
+ˆ𝜽 IM 𝑡+1 ← q(˜𝜽𝑡+1), (28)
+eIM 𝑡+1 ← ˜𝜽𝑡+1 − ˆ𝜽 IM 𝑡+1, (29)
+mIM 𝑡+1 ← ¯m𝑡+1 + 1 𝜂 eIM 𝑡 − 1 𝜂𝛽 eIM 𝑡+1. (30)
+Theorem(Exactequivalence). AssumeSGDMwithmasterweightsstartsfrom (𝜽0, mMW 0 ). Initialize
+the injected method by
+ˆ𝜽 IM 0 ← q(𝜽0), eIM 0 ← 𝜽0 − ˆ𝜽 IM 0 , mIM 0 ← mMW 0 − 1 𝜂𝛽 eIM 0 . (31)
+Then, for all 𝑡≥ 0, the quantized iterates produced by the injected method satisfy
+ˆ𝜽 IM 𝑡 = ˆ𝜽 MW 𝑡 ,
+and therefore the two procedures produce identical gradients at every step.
+16
+ECO: Quantized Training without Full-Precision Master Weights
+Proof. Define the implicit master weights and momentum corresponding to the injected method by
+𝜽★ 𝑡 := ˆ𝜽 IM 𝑡 + eIM 𝑡 , m★ 𝑡 := mIM 𝑡 + 1 𝜂𝛽 eIM 𝑡 . (32)
+By (31), we have 𝜽★ 0 = 𝜽0 and m★ 0 = mMW 0 .
+From (29), we have
+˜𝜽𝑡+1 = ˆ𝜽 IM 𝑡+1 + eIM 𝑡+1. (33)
+Hence,
+𝜽★ 𝑡+1 = ˆ𝜽 IM 𝑡+1 + eIM 𝑡+1 = ˜𝜽𝑡+1. (34)
+Combining with (28), we get ˆ𝜽 IM 𝑡+1 ← q(𝜽★ 𝑡+1).
+Next, using (30) and (32),
+m★ 𝑡+1 = mIM 𝑡+1 + 1 𝜂𝛽 eIM 𝑡+1
+= ¯m𝑡+1 + 1 𝜂 eIM 𝑡 − 1 𝜂𝛽 eIM 𝑡+1 + 1 𝜂𝛽 eIM 𝑡+1
+= ¯m𝑡+1 + 1 𝜂 eIM 𝑡
+= 𝛽 mIM 𝑡 +(1− 𝛽) g𝑡 + 1 𝜂 eIM 𝑡 (35)
+= 𝛽
+
+mIM 𝑡 + 1 𝜂𝛽 eIM 𝑡  +(1− 𝛽) g𝑡
+= 𝛽 m★ 𝑡 +(1− 𝛽) g𝑡. (36)
+Thus m★ 𝑡+1 follows the same SGDM momentum recurrence as (22).
+Finally, using (34), (27), and (35),
+𝜽★ 𝑡+1 = ˜𝜽𝑡+1 = ˆ𝜽 IM 𝑡 −𝜂 ¯m𝑡+1
+=(ˆ𝜽 IM 𝑡 + eIM 𝑡 )−𝜂   ¯m𝑡+1 + 1 𝜂 eIM 𝑡 
+= 𝜽★ 𝑡 −𝜂 m★ 𝑡+1, (37)
+which matches the master-weight update (23). Therefore, with identical initial conditions, the implicit
+variables(𝜽★ 𝑡 , m★ 𝑡 ) evolve exactly as SGDM with master weights, implying
+ˆ𝜽 IM 𝑡 = q(𝜽★ 𝑡 ) = q(𝜽𝑡) = ˆ𝜽 MW 𝑡 for all 𝑡.
+□
+B. Convergence Proofs
+B.1. Proof of Lemma 3.5
+Proof. First, substitute ˜m𝑡+1 from Eq. (6) into Eq. (3):
+˜𝜽𝑡+1 = ˆ𝜽𝑡 −𝜂( ˆm𝑡+1 −𝛼e𝑡+1). (38)
+17
+ECO: Quantized Training without Full-Precision Master Weights
+Using e𝑡+1 = ˜𝜽𝑡+1 − ˆ𝜽𝑡+1, we rearrange to solve for ˆ𝜽𝑡+1:
+ˆ𝜽𝑡+1 + e𝑡+1 = ˆ𝜽𝑡 −𝜂 ˆm𝑡+1 +𝜂𝛼e𝑡+1
+ˆ𝜽𝑡+1 = ˆ𝜽𝑡 −𝜂 ˆm𝑡+1 −(1−𝜂𝛼)e𝑡+1. (39)
+Substituting 𝛼 = 1 𝜂(1− 1 𝛽), we have 1−𝜂𝛼 = 1 𝛽. Thus:
+ˆ𝜽𝑡+1 = ˆ𝜽𝑡 −𝜂 ˆm𝑡+1 − 1 𝛽 e𝑡+1. (40)
+Now, examine the update of the virtual sequence 𝜽𝑡+1:
+𝜽𝑡+1 = ˆ𝜽𝑡+1 − 𝜂𝛽 1− 𝛽 ˆm𝑡+1. (41)
+We expand this expression:
+𝜽𝑡+1 = ˆ𝜽𝑡+1 − 𝜂𝛽 1− 𝛽 ˆm𝑡+1
+=(˜𝜽𝑡+1 − e𝑡+1)− 𝜂𝛽 1− 𝛽( ˜m𝑡+1 +𝛼e𝑡+1)
+=(ˆ𝜽𝑡 −𝜂 ˜m𝑡+1 − e𝑡+1)− 𝜂𝛽 1− 𝛽 ˜m𝑡+1 − 𝜂𝛽𝛼 1− 𝛽 e𝑡+1
+= ˆ𝜽𝑡 −𝜂
+
+1+ 𝛽 1− 𝛽  ˜m𝑡+1 −  1+ 𝜂𝛽𝛼 1− 𝛽  e𝑡+1. (42)
+Using the identity 1 + 𝛽 1−𝛽 = 1 1−𝛽, the coefficient of ˜m𝑡+1 is − 𝜂 1−𝛽. Now check the coefficient of e𝑡+1.
+Using 𝛼 = 𝛽−1 𝜂𝛽 =− 1−𝛽 𝜂𝛽 :
+1+ 𝜂𝛽 1− 𝛽  − 1− 𝛽 𝜂𝛽  = 1− 1 = 0. (43)
+The error term e𝑡+1 vanishes perfectly. We are left with:
+𝜽𝑡+1 = ˆ𝜽𝑡 − 𝜂 1− 𝛽 ˜m𝑡+1. (44)
+Expanding ˜m𝑡+1 = 𝛽 ˆm𝑡 +(1− 𝛽)∇𝑓(ˆ𝜽𝑡):
+𝜽𝑡+1 = ˆ𝜽𝑡 − 𝜂𝛽 1− 𝛽 ˆm𝑡 −𝜂∇𝑓(ˆ𝜽𝑡)
+= 𝜽𝑡 −𝜂∇𝑓(ˆ𝜽𝑡). (45)
+□
+B.2. Proof of Lemma 3.6
+Proof. Applying the standard descent lemma to the virtual sequence 𝜽𝑡:
+𝑓(𝜽𝑡+1)≤ 𝑓(𝜽𝑡)+⟨∇𝑓(𝜽𝑡), 𝜽𝑡+1 − 𝜽𝑡⟩+ 𝐿 2 ∥𝜽𝑡+1 − 𝜽𝑡∥2 2
+≤ 𝑓(𝜽𝑡)−𝜂⟨∇𝑓(𝜽𝑡),∇𝑓(ˆ𝜽𝑡)⟩+ 𝐿𝜂2 2 ∇𝑓(ˆ𝜽𝑡)  2 2 . (46)
+18
+ECO: Quantized Training without Full-Precision Master Weights
+Using the identity−⟨𝑎,𝑏⟩ =− 1 2 ∥𝑎∥2 2 − 1 2 ∥𝑏∥2 2 + 1 2 ∥𝑎−𝑏∥2 2:
+𝑓(𝜽𝑡+1)≤ 𝑓(𝜽𝑡)− 𝜂 2 ∥∇𝑓(𝜽𝑡)∥2 2 − 𝜂 2 (1−𝐿𝜂) ∇𝑓(ˆ𝜽𝑡)  2 2 + 𝜂 2 ∇𝑓(𝜽𝑡)−∇𝑓(ˆ𝜽𝑡)  2 2 . (47)
+The term with ∥∇𝑓(𝜽𝑡)∥2 2 is non-positive. Additionally, as 𝜂 ≤ 1 2𝐿, we have 1 − 𝐿𝜂 ≥ 1 2 . Using
+𝐿-smoothness on the last term:
+𝑓(𝜽𝑡+1)≤ 𝑓(𝜽𝑡)− 𝜂 4 ∇𝑓(ˆ𝜽𝑡)  2 2 + 𝜂𝐿2 2 𝜽𝑡 − ˆ𝜽𝑡  2 2 . (48)
+The difference between the virtual and actual (quantized) parameters is:
+𝜽𝑡 − ˆ𝜽𝑡 =− 𝜂𝛽 1− 𝛽 ˆm𝑡. (49)
+Substituting𝐶 = 𝜂𝛽 1−𝛽 yields 𝜽𝑡 − ˆ𝜽𝑡  2 2 =𝐶2 ∥ ˆm𝑡∥2 2. Substituting into the inequality gives:
+𝑓(𝜽𝑡+1)≤ 𝑓(𝜽𝑡)− 𝜂 4 ∇𝑓(ˆ𝜽𝑡)  2 2 + 𝜂𝐿2𝐶2 2 ∥ ˆm𝑡∥2 2 . (50)
+□
+B.3. Proof of Lemma 3.7
+Proof. We expand the recursion for ˆm𝑡 starting from ˆm0 = 0. With the updated update rule ˜m𝑡+1 =
+𝛽 ˆm𝑡 +(1− 𝛽)∇𝑓(ˆ𝜽𝑡), the expansion becomes:
+ˆm𝑡 =
+𝑡∑︁
+𝑘=1
+𝛽𝑡−𝑘
+
+(1− 𝛽)∇𝑓(ˆ𝜽𝑘−1)+𝛼e𝑘
+
+. (51)
+We define two components, the gradient accumulation𝑆1 and the error accumulation𝑆2:
+𝑆1 =(1− 𝛽)
+𝑡∑︁
+𝑘=1
+𝛽𝑡−𝑘∇𝑓(ˆ𝜽𝑘−1), 𝑆2 =
+𝑡∑︁
+𝑘=1
+𝛽𝑡−𝑘𝛼e𝑘. (52)
+Using the inequality∥𝑎+𝑏∥2 ≤ 2∥𝑎∥2 + 2∥𝑏∥2, we have 𝔼[∥ ˆm𝑡∥2]≤ 2𝔼[∥𝑆1 ∥2]+ 2𝔼[∥𝑆2 ∥2].
+For the gradient term 𝑆1, we use the deterministic triangle inequality bound. The (1 − 𝛽) factor
+scales the sum:
+∥𝑆1 ∥≤(1− 𝛽)
+𝑡∑︁
+𝑘=1
+𝛽𝑡−𝑘∥∇𝑓(ˆ𝜽𝑘−1)∥≤𝐺(1− 𝛽)
+𝑡−1∑︁
+𝑗=0
+𝛽𝑗. (53)
+Using the geometric series sum bound ˝𝑡−1 𝑗=0 𝛽𝑗 ≤ 1 1−𝛽, the terms cancel nicely:
+∥𝑆1 ∥≤𝐺(1− 𝛽) 1 1− 𝛽 =𝐺. (54)
+Thus 𝔼[∥𝑆1 ∥2]≤𝐺2.
+19
+ECO: Quantized Training without Full-Precision Master Weights
+For the error term𝑆2, utilizing the unbiasedness assumption where 𝔼[e𝑘|e𝑗] = 0 for 𝑘 > 𝑗:
+𝔼[∥𝑆2 ∥2] = 𝔼
+  𝑡∑︁ 𝑘=1 𝛽𝑡−𝑘𝛼e𝑘  2
+=
+𝑡∑︁
+𝑘=1
+𝛽2(𝑡−𝑘)𝛼2𝔼[∥e𝑘∥2]+ ∑︁
+𝑗≠𝑘
+Cross Terms
+=
+𝑡∑︁
+𝑘=1
+𝛽2(𝑡−𝑘)𝛼2𝔼[∥e𝑘∥2]. (55)
+Using 𝔼[∥e𝑘∥2]≤ 𝜎2, we bound the sum by the infinite geometric series with ratio 𝛽2:
+𝔼[∥𝑆2 ∥2]≤ 𝛼2𝜎2
+∞∑︁
+𝑗=0
+(𝛽2)𝑗 = 𝛼2𝜎2
+1− 𝛽2 . (56)
+Combining these results:
+𝔼[∥ ˆm𝑡∥2]≤ 2𝐺2 + 2𝛼2𝜎2 1− 𝛽2 . (57)
+□
+B.4. Proof of Theorem 3.8
+Proof. We take expectations from both sides of the descent Lemma 3.6 and substitute the momentum
+bound 𝑀2 (Lemma 3.7).
+𝔼 [𝑓(𝜽𝑡+1)]≤ 𝔼 [𝑓(𝜽𝑡)]− 𝜂 4 𝔼  ∥∇𝑓( ˆ𝜽𝑡)∥2 + 𝜂𝐿2𝐶2 2 𝑀2. (58)
+Rearranging to isolate the gradient norm:
+𝜂
+4 𝔼
+
+∥∇𝑓( ˆ𝜽𝑡)∥2 ≤ 𝔼 [𝑓(𝜽𝑡)− 𝑓(𝜽𝑡+1)]+ 𝜂𝐿2𝐶2 2 𝑀2. (59)
+Summing from 𝑡 = 0 to𝑇− 1:
+𝜂
+4
+𝑇−1∑︁
+𝑡=0
+𝔼
+
+∥∇𝑓( ˆ𝜽𝑡)∥2 ≤ 𝔼 [𝑓(𝜽0)− 𝑓(𝜽𝑇)]+ 𝑇−1∑︁
+𝑡=0
+𝜂𝐿2𝐶2
+2 𝑀2
+≤ 𝑓(𝜽0)− 𝑓∗+𝑇𝜂𝐿2𝐶2 2 𝑀2. (60)
+Dividing by𝑇𝜂/4:
+1
+𝑇
+𝑇−1∑︁
+𝑡=0
+𝔼
+
+∥∇𝑓( ˆ𝜽𝑡)∥2 ≤ 4(𝑓(𝜽0)− 𝑓∗) 𝜂𝑇 + 2𝐿2𝐶2 𝑀2. (61)
+Defining 𝜎2 quant = 2𝐿2𝐶2 𝑀2 yields the final result. □
+20
+ECO: Quantized Training without Full-Precision Master Weights
+B.5. Proof of Lemma 3.9
+Proof. Let∥e𝑡∥≤ 𝛿 (absolute error bound).
+∥ ˆm𝑡+1 ∥≤ 𝛽∥ ˆm𝑡∥+(1− 𝛽)∥∇𝑓(ˆ𝜽𝑡)∥+|𝛼|∥e𝑡+1 ∥. (62)
+Using the bounded gradient assumption∥∇𝑓(𝜽)∥≤𝐺:
+∥ ˆm𝑡+1 ∥≤ 𝛽∥ ˆm𝑡∥+(1− 𝛽)𝐺+|𝛼|𝛿. (63)
+This is a linear recurrence of the form 𝑥𝑡+1 ≤ 𝛽𝑥𝑡 +𝐾. Assuming ˆm0 = 0, the sequence is bounded by
+the sum of the geometric series:
+∥ ˆm𝑡∥≤
+𝑡∑︁
+𝑖=0
+𝛽𝑖((1− 𝛽)𝐺+|𝛼|𝛿)≤𝐺+ |𝛼|𝛿 1− 𝛽 := 𝑀. (64)
+□
+B.6. Proof of Theorem 3.10
+Proof. We use Lemmas 3.6 and 3.9.
+Summing the descent inequality from 𝑡 = 0 to𝑇− 1:
+𝑓(𝜽𝑇)≤ 𝑓(𝜽0)− 𝜂 4
+𝑇−1∑︁
+𝑡=0
+∇𝑓( ˆ𝜽𝑡)  2 2 + 𝜂𝑇𝐿2𝐶2 2 𝑀2 det. (65)
+Rearranging and using 𝑓∗≤ 𝑓(𝜽𝑇):
+1
+𝑇
+𝑇−1∑︁
+𝑡=0
+∇𝑓( ˆ𝜽𝑡)  2 2 ≤ 4(𝑓(𝜽0)− 𝑓∗) 𝜂𝑇 + 2𝐿2𝐶2 𝑀2 det. (66)
+Defining Γ2 quant = 2𝐿2𝐶2 𝑀2 det completes the proof. □
+C. Formal Analysis of the Worst-Case Lower-Bounds
+This appendix provides proofs for the claims made in Section 3.4.
+All three regimes considered below can be written in the linear form
+𝑥𝑡+1 =𝑎𝑥𝑡 +𝑏𝑚𝑡 +𝐵1𝜉𝑡+1,
+𝑚𝑡+1 =𝑐𝑥𝑡 +𝑑𝑚𝑡 +𝐵2𝜉𝑡+1,
+(67)
+for constants 𝑎,𝑏,𝑐,𝑑,𝐵1,𝐵2 that depend on the regime. Define the second moments
+𝑢𝑡 = 𝔼[𝑥2 𝑡 ], 𝑣𝑡 = 𝔼[𝑥𝑡𝑚𝑡], 𝑤𝑡 = 𝔼[𝑚2 𝑡 ]. (68)
+Lemma C.1 (Second-moment update equations). The dynamics (67) imply
+𝑢𝑡+1 =𝑎2𝑢𝑡 + 2𝑎𝑏𝑣𝑡 +𝑏2𝑤𝑡 +𝐵2 1𝜎2, (69)
+𝑣𝑡+1 =𝑎𝑐𝑢𝑡 +(𝑎𝑑+𝑏𝑐)𝑣𝑡 +𝑏𝑑𝑤𝑡 +𝐵1 𝐵2𝜎2, (70)
+𝑤𝑡+1 =𝑐2𝑢𝑡 + 2𝑐𝑑𝑣𝑡 +𝑑2𝑤𝑡 +𝐵2 2𝜎2. (71)
+Proof. Expand each square/product and remove all cross terms. For example, for𝑢𝑡+1:
+𝑢𝑡+1 = 𝔼[(𝑎𝑥𝑡 +𝑏𝑚𝑡 +𝐵1𝜉𝑡+1)2] =𝑎2𝑢𝑡 + 2𝑎𝑏𝑣𝑡 +𝑏2𝑤𝑡 +𝐵2 1𝔼[𝜉2 𝑡+1],
+since 𝔼[𝑥𝑡𝜉𝑡+1] = 𝔼[𝑚𝑡𝜉𝑡+1] = 0 and 𝔼[𝜉2 𝑡+1] =𝜎2. The proofs for 𝑣𝑡+1 and 𝑤𝑡+1 are identical. □
+21
+ECO: Quantized Training without Full-Precision Master Weights
+Stability. Let 𝐴 =
+
+𝑎 𝑏
+𝑐 𝑑
+
+denote the deterministic part of (67). A sufficient and standard condition
+for existence of a unique stationary second moment is 𝜌(𝐴) < 1, where 𝜌(𝐴) indicates 𝐴’s largest
+absolute eigenvalue. For the SGDM parameters used below, this holds whenever
+0 < 𝜂 < 2(1+ 𝛽) (1− 𝛽)𝐿. (72)
+All stationary calculations below assume (72), which also guarantees that the denominators appearing
+in the closed forms are strictly positive.
+C.1. Fundamental limits on 𝑓(𝑥) = 𝐿 2 𝑥2
+We now analyze the stationary squared gradient of the quantized parameter used by the model. For
+any regime, define the (steady-state) metric
+L := lim
+𝑡→∞
+𝔼[𝑔(ˆ𝑥𝑡)2] = 𝐿2 lim 𝑡→∞ 𝔼[ˆ𝑥2 𝑡 ], (73)
+where ˆ𝑥𝑡 is the parameter seen by the forward/backward pass (quantized weights).
+C.1.1. SGDM with master weights
+Algorithm. We store a full-precision master weight 𝑥𝑡. Each step quantizes it for the gradient:
+ˆ𝑥𝑡 =𝑞(𝑥𝑡) =𝑥𝑡 +𝜉𝑡, (74)
+then performs SGDM using ˆ𝑥𝑡:
+𝑚𝑡+1 = 𝛽𝑚𝑡 +(1− 𝛽)𝐿ˆ𝑥𝑡, 𝑥𝑡+1 =𝑥𝑡 −𝜂𝑚𝑡+1. (75)
+Linear form. Let 𝑐 :=(1− 𝛽)𝐿, and define
+𝑎 := 1−𝜂𝑐, 𝑏 :=−𝜂𝛽, 𝑑 := 𝛽. (76)
+Using ˆ𝑥𝑡 =𝑥𝑡 +𝜉𝑡, we obtain
+𝑥𝑡+1 =𝑎𝑥𝑡 +𝑏𝑚𝑡 +(−𝜂𝑐)𝜉𝑡,
+𝑚𝑡+1 =𝑐𝑥𝑡 +𝑑𝑚𝑡 +𝑐𝜉𝑡.
+(77)
+This matches (67) with(𝐵1,𝐵2) =(−𝜂𝑐, 𝑐).
+Stationary second moments. Let (𝑢,𝑣,𝑤) denote the stationary solution of (69)–(71). Plugging
+𝐵1 =−𝜂𝑐 and 𝐵2 =𝑐 into Lemma C.1 and setting(𝑢𝑡+1,𝑣𝑡+1,𝑤𝑡+1) =(𝑢,𝑣,𝑤) yields the linear system
+𝑢 =𝑎2𝑢+ 2𝑎𝑏𝑣+𝑏2𝑤+𝜂2𝑐2𝜎2, (78)
+𝑣 =𝑎𝑐𝑢+(𝑎𝑑+𝑏𝑐)𝑣+𝑏𝑑𝑤−𝜂𝑐2𝜎2, (79)
+𝑤 =𝑐2𝑢+ 2𝑐𝑑𝑣+𝑑2𝑤+𝑐2𝜎2. (80)
+We solve it by elimination.
+From (80) and 𝑑 = 𝛽,
+(1− 𝛽2)𝑤 =𝑐2 (𝑢+𝜎2)+ 2𝑐𝛽𝑣 =⇒ 𝑤 = 𝑐2 (𝑢+𝜎2)+ 2𝑐𝛽𝑣 1− 𝛽2 . (81)
+22
+ECO: Quantized Training without Full-Precision Master Weights
+Substitute (81) into (79). Using 𝑎𝑑+𝑏𝑐 = 𝛽(1 −𝜂𝑐)+(−𝜂𝛽)𝑐 = 𝛽− 2𝜂𝛽𝑐 and 𝑏𝑑 = 𝑏𝛽 =−𝜂𝛽2, we
+rewrite (79) as
+𝑣 =𝑎𝑐𝑢+(𝛽− 2𝜂𝛽𝑐)𝑣−𝜂𝛽2𝑤−𝜂𝑐2𝜎2. (82)
+Move the 𝑣 and 𝑤 terms to the left and substitute 𝑤 from (81). This yields a single linear equation in
+𝑣 and𝑢, which solves to
+𝑣 = 𝐿2𝜂𝜎2 (𝛽− 1) 2(1+ 𝛽)−𝐿𝜂(1− 𝛽) . (83)
+Plugging (83) back into (81) gives
+𝑤 = 2𝐿2𝜎2 (1− 𝛽) 2(1+ 𝛽)−𝐿𝜂(1− 𝛽) . (84)
+Finally, substitute (83) and (84) into (78). Solving for𝑢 yields
+𝑢 = 𝔼[𝑥2] = 𝐿𝜂𝜎2 (1+ 𝛽) 2(1+ 𝛽)−𝐿𝜂(1− 𝛽) . (85)
+Limit of the squared gradient. The model uses ˆ𝑥 =𝑥+𝜉 with 𝔼[𝑥𝜉] = 0. Hence
+𝔼[ˆ𝑥2] = 𝔼[𝑥2]+ 𝔼[𝜉2] =𝑢+𝜎2. (86)
+Therefore the stationary squared gradient satisfies
+LMW = 𝐿2 (𝑢+𝜎2). (87)
+Taking 𝜂→ 0 in (85) gives𝑢→ 0, so
+lim
+𝜂→0
+LMW = 𝐿2𝜎2. (88)
+C.1.2. Naive master-weight removal
+Algorithm. We store only quantized weights ˆ𝑥𝑡. Each step:
+𝑚𝑡+1 = 𝛽𝑚𝑡 +(1− 𝛽)𝐿ˆ𝑥𝑡, ˜𝑥𝑡+1 = ˆ𝑥𝑡 −𝜂𝑚𝑡+1, ˆ𝑥𝑡+1 =𝑞(˜𝑥𝑡+1) = ˜𝑥𝑡+1 +𝜉𝑡+1. (89)
+Linear form. With 𝑐 =(1− 𝛽)𝐿 and the same 𝑎,𝑏,𝑑 as above,
+ˆ𝑥𝑡+1 =𝑎ˆ𝑥𝑡 +𝑏𝑚𝑡 + 1·𝜉𝑡+1,
+𝑚𝑡+1 =𝑐ˆ𝑥𝑡 +𝑑𝑚𝑡.
+(90)
+This matches (67) with(𝐵1,𝐵2) =(1, 0) and state 𝑥𝑡 ≡ ˆ𝑥𝑡.
+Stationary second moments. Let (𝑢,𝑣,𝑤) denote the stationary solution for 𝑢 = 𝔼[ˆ𝑥2]. Plugging
+(𝐵1,𝐵2) =(1, 0) into Lemma C.1 and setting stationarity yields
+𝑢 =𝑎2𝑢+ 2𝑎𝑏𝑣+𝑏2𝑤+𝜎2, (91)
+𝑣 =𝑎𝑐𝑢+(𝑎𝑑+𝑏𝑐)𝑣+𝑏𝑑𝑤, (92)
+𝑤 =𝑐2𝑢+ 2𝑐𝑑𝑣+𝑑2𝑤. (93)
+23
+ECO: Quantized Training without Full-Precision Master Weights
+From (93) and 𝑑 = 𝛽,
+(1− 𝛽2)𝑤 =𝑐2𝑢+ 2𝑐𝛽𝑣 =⇒ 𝑤 = 𝑐2𝑢+ 2𝑐𝛽𝑣 1− 𝛽2 . (94)
+Substitute (94) into (92); as above, 𝑎𝑑+𝑏𝑐 = 𝛽− 2𝜂𝛽𝑐 and 𝑏𝑑 =−𝜂𝛽2. This yields one linear equation
+in(𝑢,𝑣), which solves to
+𝑣 =− 𝜎2 (𝐿𝜂− 𝛽− 1)
+𝜂
+ 2(1+ 𝛽)−𝐿𝜂(1− 𝛽) . (95)
+Plugging (95) into (94) gives 𝑤; substituting (𝑣,𝑤) into (91) and solving for 𝑢 yields the closed form
+𝑢 = 𝔼[ˆ𝑥2] =𝜎2 (1− 𝛽2)+ 2𝛽𝐿𝜂
+𝐿𝜂
+ 2(1− 𝛽2)−𝐿𝜂(1− 𝛽)2 . (96)
+Divergence as 𝜂 → 0. From (96), as 𝜂 → 0 the denominator is 2𝐿𝜂(1 − 𝛽2)+ 𝑜(𝜂) while the
+numerator is(1− 𝛽2)+𝑜(1), hence
+𝔼[ˆ𝑥2] = 𝜎2
+2𝐿𝜂 +𝑂(1), 𝜂→ 0. (97)
+Therefore
+LNaive = 𝐿2𝔼[ˆ𝑥2]∼ 𝐿𝜎2 2𝜂 −−−→ 𝜂→0 ∞. (98)
+C.1.3. ECO: momentum injection eliminates the 1/𝜂 blow-up
+Algorithm. ECO uses the same SGDM step as the naive method to compute (˜𝑥𝑡+1, ˜𝑚𝑡+1) from (ˆ𝑥𝑡, ˆ𝑚𝑡),
+then quantizes and injects the quantization error into momentum. Concretely:
+˜𝑚𝑡+1 = 𝛽 ˆ𝑚𝑡 +(1− 𝛽)𝐿ˆ𝑥𝑡, ˜𝑥𝑡+1 = ˆ𝑥𝑡 −𝜂 ˜𝑚𝑡+1, ˆ𝑥𝑡+1 =𝑞(˜𝑥𝑡+1) = ˜𝑥𝑡+1 +𝜉𝑡+1. (99)
+Define the (post-quantization) error 𝑒𝑡+1 := ˜𝑥𝑡+1 − ˆ𝑥𝑡+1 =−𝜉𝑡+1. ECO then sets
+ˆ𝑚𝑡+1 = ˜𝑚𝑡+1 +𝛼𝑒𝑡+1 = ˜𝑚𝑡+1 −𝛼𝜉𝑡+1, 𝛼 = 1 𝜂  1− 1 𝛽  = 𝛽− 1 𝜂𝛽 . (100)
+Since 𝛽∈(0, 1), 𝛼 < 0. Define the positive injection gain
+𝛾 :=−𝛼 = 1− 𝛽 𝜂𝛽 > 0, (101)
+so that ˆ𝑚𝑡+1 = ˜𝑚𝑡+1 +𝛾𝜉𝑡+1.
+Linear form. With 𝑐 =(1− 𝛽)𝐿 and the same 𝑎,𝑏,𝑑 as above, ECO becomes
+ˆ𝑥𝑡+1 =𝑎ˆ𝑥𝑡 +𝑏 ˆ𝑚𝑡 + 1·𝜉𝑡+1,
+ˆ𝑚𝑡+1 =𝑐ˆ𝑥𝑡 +𝑑 ˆ𝑚𝑡 +𝛾𝜉𝑡+1,
+(102)
+i.e., (67) with(𝐵1,𝐵2) =(1,𝛾).
+24
+ECO: Quantized Training without Full-Precision Master Weights
+Stationary second moments. Applying Lemma C.1 to (102) and setting stationarity yields
+𝑢 =𝑎2𝑢+ 2𝑎𝑏𝑣+𝑏2𝑤+𝜎2, (103)
+𝑣 =𝑎𝑐𝑢+(𝑎𝑑+𝑏𝑐)𝑣+𝑏𝑑𝑤+𝛾𝜎2, (104)
+𝑤 =𝑐2𝑢+ 2𝑐𝑑𝑣+𝑑2𝑤+𝛾2𝜎2. (105)
+We again eliminate 𝑤 using (105) (same algebra as before) and then eliminate 𝑣 using (104). The
+resulting expressions simplify dramatically because 𝛾 is coupled to (𝜂,𝛽) by (101). Solving (103)–
+(105) yields the closed form
+𝑢 = 𝔼[ˆ𝑥2] = 2𝜎2
+2(1− 𝛽2)−𝐿𝜂(1− 𝛽)2 . (106)
+Finite noise floor as 𝜂→ 0. Taking 𝜂→ 0 in (106) gives
+lim
+𝜂→0
+𝔼[ˆ𝑥2] = 𝜎2
+1− 𝛽2 , (107)
+and therefore the stationary squared gradient satisfies
+lim
+𝜂→0
+LECO = lim 𝜂→0 𝐿2𝔼[ˆ𝑥2] = 𝐿2𝜎2 1− 𝛽2 . (108)
+Interpretation. Comparing (98) and (108), naive master-weight removal yields a stationary error
+that blows up like 1/𝜂, while ECO stabilizes the dynamics and yields a finite noise floor controlled by
+the geometric factor 1/(1− 𝛽2).
+25

@@ -1,0 +1,23 @@
+[r1-mirror-n32] start eval 8.3665
+[r1-mirror-n32] it 1 t    0.3s tok   0.001M eval 8.3663 up/step 0.000MB {'gradNorm': 657390.562, 'fitStd': 0.00307}
+[r1-mirror-n32] it 2 t    0.4s tok   0.002M eval 8.3662 up/step 0.000MB {'gradNorm': 656976.875, 'fitStd': 0.00309}
+[r1-mirror-n32] it 5 t    0.8s tok   0.005M eval 8.3641 up/step 0.000MB {'gradNorm': 660287.25, 'fitStd': 0.00213}
+[r1-mirror-n32] it 10 t    1.5s tok   0.010M eval 8.3587 up/step 0.000MB {'gradNorm': 656241.375, 'fitStd': 0.00223}
+[r1-mirror-n32] it 20 t    2.8s tok   0.020M eval 8.3492 up/step 0.000MB {'gradNorm': 656886.875, 'fitStd': 0.00202}
+[r1-mirror-n32] it 49 t    6.7s tok   0.050M eval 8.3367 up/step 0.000MB {'gradNorm': 661364.688, 'fitStd': 0.00259}
+[r1-mirror-n32] it 77 t   10.3s tok   0.079M eval 8.3261 up/step 0.000MB {'gradNorm': 660190.188, 'fitStd': 0.00186}
+[r1-mirror-n32] it 98 t   13.1s tok   0.100M eval 8.3167 up/step 0.000MB {'gradNorm': 662489.25, 'fitStd': 0.00244}
+[r1-mirror-n32] it 153 t   20.4s tok   0.157M eval 8.2774 up/step 0.000MB {'gradNorm': 660009.312, 'fitStd': 0.00252}
+[r1-mirror-n32] it 196 t   26.1s tok   0.201M eval 8.2492 up/step 0.000MB {'gradNorm': 657189.438, 'fitStd': 0.00308}
+[r1-mirror-n32] it 229 t   30.4s tok   0.234M eval 8.2009 up/step 0.000MB {'gradNorm': 660119.25, 'fitStd': 0.00248}
+[r1-mirror-n32] it 305 t   40.5s tok   0.312M eval 8.0455 up/step 0.000MB {'gradNorm': 665162.062, 'fitStd': 0.00332}
+[r1-mirror-n32] it 381 t   50.5s tok   0.390M eval 7.8986 up/step 0.000MB {'gradNorm': 670604.25, 'fitStd': 0.00232}
+[r1-mirror-n32] it 457 t   60.5s tok   0.468M eval 7.8191 up/step 0.000MB {'gradNorm': 663623.688, 'fitStd': 0.00177}
+[r1-mirror-n32] it 489 t   64.7s tok   0.501M eval 7.8009 up/step 0.000MB {'gradNorm': 658611.875, 'fitStd': 0.00122}
+[r1-mirror-n32] it 533 t   70.5s tok   0.546M eval 7.7822 up/step 0.000MB {'gradNorm': 662992.188, 'fitStd': 0.00169}
+[r1-mirror-n32] it 609 t   80.6s tok   0.624M eval 7.7401 up/step 0.000MB {'gradNorm': 670436.938, 'fitStd': 0.00198}
+[r1-mirror-n32] it 685 t   90.6s tok   0.701M eval 7.7121 up/step 0.000MB {'gradNorm': 665823.875, 'fitStd': 0.00273}
+[r1-mirror-n32] it 761 t  100.6s tok   0.779M eval 7.6657 up/step 0.000MB {'gradNorm': 659805.625, 'fitStd': 0.00202}
+[r1-mirror-n32] it 837 t  110.6s tok   0.857M eval 7.6478 up/step 0.000MB {'gradNorm': 664906.562, 'fitStd': 0.00195}
+[r1-mirror-n32] it 909 t  120.1s tok   0.931M eval 7.6482 up/step 0.000MB {'gradNorm': 659928.562, 'fitStd': 0.00156}
+{"label": "r1-mirror-n32", "steps": 909, "startLoss": 8.366497993469238, "finalLoss": 7.648193359375, "bestLoss": 7.647794008255005, "diverged": false, "upBytesPerStep": 136.0, "tokens": 930816}

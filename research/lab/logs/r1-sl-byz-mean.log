@@ -1,0 +1,6 @@
+[r1-sl-byz-mean] start eval 8.3665
+[r1-sl-byz-mean] it 1 t    1.2s tok   0.123M eval 8.1907 up/step 0.858MB {'simTime': 30.0, 'innerLoss': 7.0972, 'kept': 4, 'msgNorm': 32.3149, 'bitsPerParam': 0.2337}
+[r1-sl-byz-mean] it 2 t    2.3s tok   0.246M eval 8.3723 up/step 0.858MB {'simTime': 60.0, 'innerLoss': 7.0516, 'kept': 4, 'msgNorm': 41.2092, 'bitsPerParam': 0.2337}
+[r1-sl-byz-mean] it 5 t    6.1s tok   0.614M eval 10.5173 up/step 0.858MB {'simTime': 150.0, 'innerLoss': 7.0626, 'kept': 4, 'msgNorm': 53.9675, 'bitsPerParam': 0.2337}
+[r1-sl-byz-mean] diverged
+{"label": "r1-sl-byz-mean", "steps": 5, "startLoss": 8.366497993469238, "finalLoss": 10.517323970794678, "bestLoss": 8.190682172775269, "diverged": true, "upBytesPerStep": 858112.0, "tokens": 614400}

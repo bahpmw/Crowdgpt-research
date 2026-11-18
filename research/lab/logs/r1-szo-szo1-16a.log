@@ -1,0 +1,20 @@
+[r1-szo-szo1-16a] start eval 8.3665
+[r1-szo-szo1-16a] it 1 t    1.4s tok   0.001M eval 8.3662 up/step 14.687MB {'gradNorm': 39.3956, 'forwards': 497, 'loss': 8.35, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 2 t    2.9s tok   0.002M eval 8.3653 up/step 14.687MB {'gradNorm': 37.9774, 'forwards': 497, 'loss': 8.3579, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 5 t    7.5s tok   0.005M eval 8.3612 up/step 14.687MB {'gradNorm': 31.9532, 'forwards': 497, 'loss': 8.3633, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 8 t   12.1s tok   0.008M eval 8.3543 up/step 14.687MB {'gradNorm': 35.7849, 'forwards': 497, 'loss': 8.3708, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 10 t   15.1s tok   0.010M eval 8.3481 up/step 14.687MB {'gradNorm': 34.3497, 'forwards': 497, 'loss': 8.3634, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 15 t   22.7s tok   0.015M eval 8.3300 up/step 14.687MB {'gradNorm': 36.1218, 'forwards': 497, 'loss': 8.3422, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 20 t   30.3s tok   0.020M eval 8.3037 up/step 14.687MB {'gradNorm': 46.8204, 'forwards': 497, 'loss': 8.2975, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 22 t   33.3s tok   0.023M eval 8.2905 up/step 14.687MB {'gradNorm': 43.1891, 'forwards': 497, 'loss': 8.2824, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 29 t   43.9s tok   0.030M eval 8.2180 up/step 14.687MB {'gradNorm': 44.7395, 'forwards': 497, 'loss': 8.2273, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 36 t   54.5s tok   0.037M eval 8.1139 up/step 14.687MB {'gradNorm': 54.9823, 'forwards': 497, 'loss': 8.1323, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 43 t   65.1s tok   0.044M eval 8.0137 up/step 14.687MB {'gradNorm': 88.9688, 'forwards': 497, 'loss': 8.1264, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 49 t   74.2s tok   0.050M eval 7.9303 up/step 14.687MB {'gradNorm': 47.0269, 'forwards': 497, 'loss': 7.9055, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 50 t   75.8s tok   0.051M eval 7.9165 up/step 14.687MB {'gradNorm': 49.2576, 'forwards': 497, 'loss': 7.9277, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 57 t   86.3s tok   0.058M eval 7.8338 up/step 14.687MB {'gradNorm': 56.9764, 'forwards': 497, 'loss': 7.9568, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 64 t   96.9s tok   0.066M eval 7.7720 up/step 14.687MB {'gradNorm': 36.9654, 'forwards': 497, 'loss': 7.8355, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 71 t  107.5s tok   0.073M eval 7.7190 up/step 14.687MB {'gradNorm': 100.2339, 'forwards': 497, 'loss': 7.7199, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 78 t  118.1s tok   0.080M eval 7.6713 up/step 14.687MB {'gradNorm': 56.6021, 'forwards': 497, 'loss': 7.7654, 'adaClipped': 0}
+[r1-szo-szo1-16a] it 80 t  121.1s tok   0.082M eval 7.6587 up/step 14.687MB {'gradNorm': 68.3434, 'forwards': 497, 'loss': 7.6361, 'adaClipped': 0}
+{"label": "r1-szo-szo1-16a", "steps": 80, "startLoss": 8.366497993469238, "finalLoss": 7.658742666244507, "bestLoss": 7.658742666244507, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 81920}

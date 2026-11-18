@@ -1,0 +1,20 @@
+[r1-sl-noef] start eval 8.3665
+[r1-sl-noef] it 1 t    1.1s tok   0.123M eval 7.9425 up/step 0.858MB {'simTime': 30.0, 'innerLoss': 7.0972, 'kept': 4, 'msgNorm': 16.2055, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 2 t    2.3s tok   0.246M eval 7.6400 up/step 0.858MB {'simTime': 60.0, 'innerLoss': 7.0172, 'kept': 4, 'msgNorm': 12.0031, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 5 t    6.1s tok   0.614M eval 7.2433 up/step 0.858MB {'simTime': 150.0, 'innerLoss': 6.6759, 'kept': 4, 'msgNorm': 11.5303, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 9 t   11.1s tok   1.106M eval 6.7985 up/step 0.858MB {'simTime': 270.0, 'innerLoss': 6.5126, 'kept': 4, 'msgNorm': 11.0919, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 10 t   12.3s tok   1.229M eval 6.7124 up/step 0.858MB {'simTime': 300.0, 'innerLoss': 6.5177, 'kept': 4, 'msgNorm': 10.9965, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 17 t   21.1s tok   2.089M eval 6.3401 up/step 0.858MB {'simTime': 510.0, 'innerLoss': 6.319, 'kept': 4, 'msgNorm': 10.754, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 18 t   22.4s tok   2.212M eval 6.3075 up/step 0.858MB {'simTime': 540.0, 'innerLoss': 6.3054, 'kept': 4, 'msgNorm': 10.6619, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 26 t   32.4s tok   3.195M eval 6.1540 up/step 0.858MB {'simTime': 780.0, 'innerLoss': 6.302, 'kept': 4, 'msgNorm': 10.2725, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 34 t   42.4s tok   4.178M eval 6.0577 up/step 0.858MB {'simTime': 1020.0, 'innerLoss': 6.1732, 'kept': 4, 'msgNorm': 10.1823, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 41 t   51.2s tok   5.038M eval 5.9949 up/step 0.858MB {'simTime': 1230.0, 'innerLoss': 6.078, 'kept': 4, 'msgNorm': 10.2878, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 42 t   52.4s tok   5.161M eval 5.9864 up/step 0.858MB {'simTime': 1260.0, 'innerLoss': 6.1171, 'kept': 4, 'msgNorm': 10.256, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 50 t   62.6s tok   6.144M eval 5.9303 up/step 0.858MB {'simTime': 1500.0, 'innerLoss': 6.0688, 'kept': 4, 'msgNorm': 10.3371, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 58 t   72.6s tok   7.127M eval 5.8835 up/step 0.858MB {'simTime': 1740.0, 'innerLoss': 6.0001, 'kept': 4, 'msgNorm': 10.1955, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 66 t   82.6s tok   8.110M eval 5.8371 up/step 0.858MB {'simTime': 1980.0, 'innerLoss': 6.0047, 'kept': 4, 'msgNorm': 10.2353, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 74 t   92.6s tok   9.093M eval 5.7878 up/step 0.858MB {'simTime': 2220.0, 'innerLoss': 5.9999, 'kept': 4, 'msgNorm': 10.0946, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 82 t  102.7s tok  10.076M eval 5.7477 up/step 0.858MB {'simTime': 2460.0, 'innerLoss': 5.818, 'kept': 4, 'msgNorm': 10.0001, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 90 t  112.7s tok  11.059M eval 5.6973 up/step 0.858MB {'simTime': 2700.0, 'innerLoss': 5.8272, 'kept': 4, 'msgNorm': 10.0848, 'bitsPerParam': 0.2337}
+[r1-sl-noef] it 96 t  120.2s tok  11.796M eval 5.6619 up/step 0.858MB {'simTime': 2880.0, 'innerLoss': 5.904, 'kept': 4, 'msgNorm': 10.148, 'bitsPerParam': 0.2337}
+{"label": "r1-sl-noef", "steps": 96, "startLoss": 8.366497993469238, "finalLoss": 5.661857962608337, "bestLoss": 5.661857962608337, "diverged": false, "upBytesPerStep": 858112.0, "tokens": 11796480}

@@ -1,0 +1,39 @@
+=== s-10m-k1 14:12:14
+[s-10m-k1] it 977 t   37.1s tok   4.002M eval 5.2636 up/step 0.000MB {'loss0': 5.3053, 'cos0': 1.0, 'cosIt': 950}
+{"label": "s-10m-k1", "steps": 977, "startLoss": 8.361234903335571, "finalLoss": 5.263646841049194, "bestLoss": 5.263646841049194, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}
+=== s-10m-k2 14:12:53
+[s-10m-k2] it 977 t   46.3s tok   4.002M eval 5.2132 up/step 2.097MB {'loss0': 5.2598, 'loss1': 5.2699, 'tau0': 0.765, 'cos0': 0.8817, 'cos1': 1.0, 'cosIt': 950}
+{"label": "s-10m-k2", "steps": 977, "startLoss": 8.361234903335571, "finalLoss": 5.213204026222229, "bestLoss": 5.213204026222229, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 4001792}
+=== s-10m-k3 14:13:42
+[s-10m-k3] it 977 t   57.1s tok   4.002M eval 5.2490 up/step 4.194MB {'loss0': 5.3017, 'loss1': 5.2889, 'loss2': 5.3023, 'tau0': 0.748, 'tau1': 0.742, 'cos0': 0.7719, 'cos1': 0.932, 'cos2': 1.0, 'cosIt': 950}
+{"label": "s-10m-k3", "steps": 977, "startLoss": 8.361234903335571, "finalLoss": 5.2489529848098755, "bestLoss": 5.2489529848098755, "diverged": false, "upBytesPerStep": 4194304.0, "tokens": 4001792}
+=== s-10m-k6 14:14:41
+[s-10m-k6] it 977 t   86.4s tok   4.002M eval 5.2207 up/step 10.486MB {'loss0': 5.2667, 'loss1': 5.2698, 'loss2': 5.2638, 'loss3': 5.2572, 'loss4': 5.2521, 'loss5': 5.2772, 'tau0': 0.756, 'tau1': 0.752, 'tau2': 0.747, 'tau3': 0.746, 'tau4': 0.744, 'cos0': 0.7773, 'cos1': 0.7887, 'cos2': 0.8657, 'cos3': 0.9101, 'cos4': 0.9467, 'cos5': 1.0, 'cosIt': 950}
+{"label": "s-10m-k6", "steps": 977, "startLoss": 8.361234903335571, "finalLoss": 5.220706105232239, "bestLoss": 5.220706105232239, "diverged": false, "upBytesPerStep": 10485760.0, "tokens": 4001792}
+=== s-10m-k2-priv 14:16:10
+[s-10m-k2-priv] it 977 t   49.4s tok   4.002M eval 5.2002 up/step 2.097MB {'loss0': 5.261, 'loss1': 5.2476, 'tau0': 0.734, 'cos0': 0.8296, 'cos1': 1.0, 'cosIt': 950}
+{"label": "s-10m-k2-priv", "steps": 977, "startLoss": 8.361234903335571, "finalLoss": 5.200179576873779, "bestLoss": 5.200179576873779, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 4001792}
+=== s-100m-k1 14:17:02
+[s-100m-k1] it 977 t  376.4s tok   4.002M eval 5.1651 up/step 0.000MB {'loss0': 5.2318, 'cos0': 1.0, 'cosIt': 950}
+{"label": "s-100m-k1", "steps": 977, "startLoss": 8.471426725387573, "finalLoss": 5.165126442909241, "bestLoss": 5.165126442909241, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}
+=== s-100m-k2 14:23:29
+[s-100m-k2] it 977 t  411.6s tok   4.002M eval 5.1432 up/step 6.291MB {'loss0': 5.1761, 'loss1': 5.1864, 'tau0': 0.814, 'cos0': 0.8645, 'cos1': 1.0, 'cosIt': 950}
+{"label": "s-100m-k2", "steps": 977, "startLoss": 8.471426725387573, "finalLoss": 5.143224000930786, "bestLoss": 5.143224000930786, "diverged": false, "upBytesPerStep": 6291456.0, "tokens": 4001792}
+=== s-100m-k4 14:30:31
+[s-100m-k4] it 977 t  478.4s tok   4.002M eval 5.1380 up/step 18.874MB {'loss0': 5.1598, 'loss1': 5.1474, 'loss2': 5.1461, 'loss3': 5.1748, 'tau0': 0.821, 'tau1': 0.813, 'tau2': 0.81, 'cos0': 0.6409, 'cos1': 0.9162, 'cos2': 0.9537, 'cos3': 1.0, 'cosIt': 950}
+{"label": "s-100m-k4", "steps": 977, "startLoss": 8.471426725387573, "finalLoss": 5.13795018196106, "bestLoss": 5.13795018196106, "diverged": false, "upBytesPerStep": 18874368.0, "tokens": 4001792}
+=== s-100m-k6 14:38:41
+[s-100m-k6] it 977 t  551.7s tok   4.002M eval 5.1191 up/step 31.457MB {'loss0': 5.1698, 'loss1': 5.153, 'loss2': 5.1519, 'loss3': 5.1448, 'loss4': 5.1399, 'loss5': 5.1651, 'tau0': 0.822, 'tau1': 0.815, 'tau2': 0.811, 'tau3': 0.809, 'tau4': 0.81, 'cos0': 0.7213, 'cos1': 0.8155, 'cos2': 0.8568, 'cos3': 0.9062, 'cos4': 0.9598, 'cos5': 1.0, 'cosIt': 950}
+{"label": "s-100m-k6", "steps": 977, "startLoss": 8.471426725387573, "finalLoss": 5.119054317474365, "bestLoss": 5.119054317474365, "diverged": false, "upBytesPerStep": 31457280.0, "tokens": 4001792}
+=== s-300m-k1 14:48:05
+[s-300m-k1] it 977 t 1171.7s tok   4.002M eval 5.1198 up/step 0.000MB {'loss0': 5.1785, 'cos0': 1.0, 'cosIt': 950}
+{"label": "s-300m-k1", "steps": 977, "startLoss": 8.518358945846558, "finalLoss": 5.119829297065735, "bestLoss": 5.119829297065735, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}
+=== s-300m-k2 00:20:19
+round1.sh: line 16: 29800 Done                    grep -v '^#' "$ARMS"
+     29801                       | grep -v '^$'
+     29802 Killed: 9               | while IFS= read -r arm; do
+    label=$(echo "$arm" | sed -n 's/.*--label \([^ ]*\).*/\1/p'); if [ -f "results/$label.json" ]; then
+        echo "skip $label"; continue;
+    fi; echo "=== $label $(date +%T)"; $PY harness.py --seconds 120 $arm > "logs/$label.log" 2>&1 || echo "FAILED $label"; tail -n 2 "logs/$label.log";
+done
+solo_queue.sh: line 4: 29797 Killed: 9               sh round1.sh "$f"

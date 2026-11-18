@@ -1,0 +1,15 @@
+# SOLO study C: SOLO in a crowd (MOSAIC: worker owns one module, local steps, sparse 2-bit uploads), 10m, 10M tokens, seq 128 x batch 8 per worker step
+mosaic K=1 workers=8 --tokens 10000000 --seconds 100000 --label s-mo-k1w8
+mosaic K=2 workers=8 --tokens 10000000 --seconds 100000 --label s-mo-k2w8
+mosaic K=3 workers=6 --tokens 10000000 --seconds 100000 --label s-mo-k3w6
+mosaic K=6 workers=6 --tokens 10000000 --seconds 100000 --label s-mo-k6w6
+mosaic K=2 workers=4 --tokens 10000000 --seconds 100000 --label s-mo-k2w4
+mosaic K=2 workers=16 --tokens 10000000 --seconds 100000 --label s-mo-k2w16
+mosaic K=2 workers=32 --tokens 10000000 --seconds 100000 --label s-mo-k2w32
+mosaic K=1 workers=32 --tokens 10000000 --seconds 100000 --label s-mo-k1w32
+mosaic K=2 workers=8 topk=0 --tokens 10000000 --seconds 100000 --label s-mo-k2w8-dense
+mosaic K=2 workers=8 het=budget speeds=[1,1,1,1,0.5,0.5,0.25,0.25] --tokens 10000000 --seconds 100000 --label s-mo-k2w8-het
+mosaic K=2 workers=8 byz=2 gauntlet=1 --tokens 10000000 --seconds 100000 --label s-mo-k2w8-byz-g
+mosaic K=2 workers=8 drop=0.25 --tokens 10000000 --seconds 100000 --label s-mo-k2w8-drop
+solo K=1 lr=0.003 --tokens 10000000 --seconds 100000 --label s-bp-128x8
+mosaic K=2 workers=32 H=10 --tokens 10000000 --seconds 100000 --label s-mo-k2w32-h10

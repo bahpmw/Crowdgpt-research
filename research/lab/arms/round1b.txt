@@ -1,0 +1,14 @@
+# Throttle (2609.39357)
+throttle rule=mean --label r1-th-mean
+throttle --label r1-th-q13
+throttle rule=mean byz=2 attack=fast --label r1-th-mean-fast
+throttle byz=2 attack=fast --label r1-th-q13-fast
+throttle q=3 lam=0.5 tau=1 byz=2 attack=fast --label r1-th-q3-tight-fast
+# SOMA (2609.37899)
+soma n=1 seconds=120 --label r1-soma-n1
+soma n=4 seconds=120 --label r1-soma-n4
+soma n=1 head_freeze=200 seconds=120 --label r1-soma-n1-hf200
+soma n=4 head_freeze=200 seconds=120 --label r1-soma-n4-hf200
+# extra controls from plans
+wismezo k=4 eps=0.001 lr=0.0001 r=0.05 tau=100 mask=random --init ckpt/adam30.pt --label r1-ft-wisrand-r05
+ddiloco mom=0.5 grace=0 --label r1-dd-async-m5-nograce

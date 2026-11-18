@@ -1,0 +1,119 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-loo",
+ "method": "loo",
+ "cfg": {
+  "lr": 0.2,
+  "sigma": 0.001
+ },
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 10.0,
+ "steps": 61,
+ "totals": {
+  "tokens": 62464,
+  "fwd": 1998848.0,
+  "bwd": 0.0,
+  "up": 8296.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 1998848.0
+ },
+ "startLoss": 8.366497993469238,
+ "finalLoss": 8.32314133644104,
+ "bestLoss": 8.32314133644104,
+ "diverged": false,
+ "upBytesPerStep": 136.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 8.366497993469238
+  },
+  {
+   "it": 1,
+   "seconds": 0.281,
+   "tokens": 1024,
+   "compute": 32768.0,
+   "up": 136.0,
+   "down": 0.0,
+   "evalLoss": 8.366393327713013,
+   "gradNorm": 486226.75,
+   "fitStd": 0.00283
+  },
+  {
+   "it": 2,
+   "seconds": 0.5,
+   "tokens": 2048,
+   "compute": 65536.0,
+   "up": 272.0,
+   "down": 0.0,
+   "evalLoss": 8.366299152374268,
+   "gradNorm": 484281.188,
+   "fitStd": 0.00261
+  },
+  {
+   "it": 5,
+   "seconds": 1.166,
+   "tokens": 5120,
+   "compute": 163840.0,
+   "up": 680.0,
+   "down": 0.0,
+   "evalLoss": 8.365657806396484,
+   "gradNorm": 489190.875,
+   "fitStd": 0.00188
+  },
+  {
+   "it": 10,
+   "seconds": 2.28,
+   "tokens": 10240,
+   "compute": 327680.0,
+   "up": 1360.0,
+   "down": 0.0,
+   "evalLoss": 8.363499402999878,
+   "gradNorm": 488034.969,
+   "fitStd": 0.00237
+  },
+  {
+   "it": 20,
+   "seconds": 4.213,
+   "tokens": 20480,
+   "compute": 655360.0,
+   "up": 2720.0,
+   "down": 0.0,
+   "evalLoss": 8.357452869415283,
+   "gradNorm": 488277.344,
+   "fitStd": 0.00209
+  },
+  {
+   "it": 49,
+   "seconds": 8.35,
+   "tokens": 50176,
+   "compute": 1605632.0,
+   "up": 6664.0,
+   "down": 0.0,
+   "evalLoss": 8.332351446151733,
+   "gradNorm": 492707.562,
+   "fitStd": 0.00247
+  },
+  {
+   "it": 61,
+   "seconds": 10.071,
+   "tokens": 62464,
+   "compute": 1998848.0,
+   "up": 8296.0,
+   "down": 0.0,
+   "evalLoss": 8.32314133644104,
+   "gradNorm": 490380.781,
+   "fitStd": 0.00324
+  }
+ ]
+}

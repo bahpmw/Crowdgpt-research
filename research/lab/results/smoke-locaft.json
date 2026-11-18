@@ -1,0 +1,123 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "smoke-locaft",
+ "method": "locaft",
+ "cfg": {},
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 4.0,
+ "steps": 53,
+ "totals": {
+  "tokens": 438272,
+  "fwd": 438272.0,
+  "bwd": 4096.0,
+  "up": 11722752.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 446464.0
+ },
+ "startLoss": 5.597691893577576,
+ "finalLoss": 5.5902780294418335,
+ "bestLoss": 5.5902780294418335,
+ "diverged": false,
+ "upBytesPerStep": 221184.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 5.597691893577576
+  },
+  {
+   "it": 1,
+   "seconds": 0.245,
+   "tokens": 12288,
+   "compute": 20480.0,
+   "up": 221184.0,
+   "down": 0.0,
+   "evalLoss": 5.596943974494934,
+   "selCE": 5.5759,
+   "bestSelCE": 5.5759,
+   "Bnorm": 0.0837
+  },
+  {
+   "it": 2,
+   "seconds": 0.31,
+   "tokens": 20480,
+   "compute": 28672.0,
+   "up": 442368.0,
+   "down": 0.0,
+   "evalLoss": 5.596509218215942,
+   "selCE": 5.5756,
+   "bestSelCE": 5.5756,
+   "Bnorm": 0.1262
+  },
+  {
+   "it": 6,
+   "seconds": 0.586,
+   "tokens": 53248,
+   "compute": 61440.0,
+   "up": 1327104.0,
+   "down": 0.0,
+   "evalLoss": 5.594616770744324,
+   "selCE": 5.5732,
+   "bestSelCE": 5.5732,
+   "Bnorm": 0.2313
+  },
+  {
+   "it": 12,
+   "seconds": 1.021,
+   "tokens": 102400,
+   "compute": 110592.0,
+   "up": 2654208.0,
+   "down": 0.0,
+   "evalLoss": 5.593669056892395,
+   "selCE": 5.5723,
+   "bestSelCE": 5.5721,
+   "Bnorm": 0.3294
+  },
+  {
+   "it": 24,
+   "seconds": 1.899,
+   "tokens": 200704,
+   "compute": 208896.0,
+   "up": 5308416.0,
+   "down": 0.0,
+   "evalLoss": 5.592181324958801,
+   "selCE": 5.571,
+   "bestSelCE": 5.571,
+   "Bnorm": 0.4724
+  },
+  {
+   "it": 28,
+   "seconds": 2.263,
+   "tokens": 233472,
+   "compute": 241664.0,
+   "up": 6193152.0,
+   "down": 0.0,
+   "evalLoss": 5.5916078090667725,
+   "selCE": 5.5703,
+   "bestSelCE": 5.5703,
+   "Bnorm": 0.5397
+  },
+  {
+   "it": 53,
+   "seconds": 4.013,
+   "tokens": 438272,
+   "compute": 446464.0,
+   "up": 11722752.0,
+   "down": 0.0,
+   "evalLoss": 5.5902780294418335,
+   "selCE": 5.568,
+   "bestSelCE": 5.568,
+   "Bnorm": 0.7544
+  }
+ ]
+}

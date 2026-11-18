@@ -1,0 +1,23 @@
+[r1-ft-wis-r05] start eval 5.5977
+[r1-ft-wis-r05] it 1 t    0.1s tok   0.005M eval 5.5977 up/step 0.000MB {'projGrad': 0.7706}
+[r1-ft-wis-r05] it 6 t    0.2s tok   0.010M eval 5.5975 up/step 0.000MB {'projGrad': -2.0051}
+[r1-ft-wis-r05] it 16 t    0.5s tok   0.020M eval 5.5972 up/step 0.000MB {'projGrad': 1.2548}
+[r1-ft-wis-r05] it 45 t    1.4s tok   0.050M eval 5.5970 up/step 0.000MB {'projGrad': 0.3295}
+[r1-ft-wis-r05] it 94 t    2.9s tok   0.100M eval 5.5965 up/step 0.000MB {'projGrad': -1.6072}
+[r1-ft-wis-r05] it 188 t    5.7s tok   0.201M eval 5.5971 up/step 0.000MB {'projGrad': -0.0794}
+[r1-ft-wis-r05] it 328 t   10.1s tok   0.352M eval 5.5963 up/step 0.000MB {'projGrad': -1.2128}
+[r1-ft-wis-r05] it 469 t   14.5s tok   0.501M eval 5.5967 up/step 0.000MB {'projGrad': -1.0819}
+[r1-ft-wis-r05] it 649 t   20.1s tok   0.693M eval 5.5961 up/step 0.000MB {'projGrad': -1.9467}
+[r1-ft-wis-r05] it 937 t   29.1s tok   1.000M eval 5.5966 up/step 0.000MB {'projGrad': -1.1003}
+[r1-ft-wis-r05] it 970 t   30.1s tok   1.034M eval 5.5967 up/step 0.000MB {'projGrad': -2.3038}
+[r1-ft-wis-r05] it 1291 t   40.1s tok   1.375M eval 5.5971 up/step 0.000MB {'projGrad': 5.3244}
+[r1-ft-wis-r05] it 1611 t   50.1s tok   1.719M eval 5.5981 up/step 0.000MB {'projGrad': 1.1497}
+[r1-ft-wis-r05] it 1878 t   58.5s tok   2.001M eval 5.5993 up/step 0.000MB {'projGrad': 0.582}
+[r1-ft-wis-r05] it 1932 t   60.1s tok   2.060M eval 5.5997 up/step 0.000MB {'projGrad': -1.5962}
+[r1-ft-wis-r05] it 2253 t   70.2s tok   2.401M eval 5.5989 up/step 0.000MB {'projGrad': -0.3526}
+[r1-ft-wis-r05] it 2574 t   80.2s tok   2.742M eval 5.5986 up/step 0.000MB {'projGrad': 1.2949}
+[r1-ft-wis-r05] it 2895 t   90.2s tok   3.083M eval 5.5998 up/step 0.000MB {'projGrad': -2.2902}
+[r1-ft-wis-r05] it 3215 t  100.2s tok   3.427M eval 5.5992 up/step 0.000MB {'projGrad': -2.3468}
+[r1-ft-wis-r05] it 3536 t  110.2s tok   3.768M eval 5.5979 up/step 0.000MB {'projGrad': 0.3009}
+[r1-ft-wis-r05] it 3850 t  120.0s tok   4.102M eval 5.5978 up/step 0.000MB {'projGrad': 0.1881}
+{"label": "r1-ft-wis-r05", "steps": 3850, "startLoss": 5.597691893577576, "finalLoss": 5.597780227661133, "bestLoss": 5.596064805984497, "diverged": false, "upBytesPerStep": 48.0, "tokens": 4102144}

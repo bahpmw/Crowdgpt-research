@@ -1,0 +1,22 @@
+[s-100m-k1] start eval 8.4714
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[s-100m-k1] it 1 t    0.7s tok   0.004M eval 8.0826 up/step 0.000MB {'loss0': 8.4838, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 2 t    1.0s tok   0.008M eval 7.5011 up/step 0.000MB {'loss0': 8.1423, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 3 t    1.4s tok   0.012M eval 7.4306 up/step 0.000MB {'loss0': 7.5548, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 5 t    2.1s tok   0.020M eval 7.0987 up/step 0.000MB {'loss0': 7.1619, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 13 t    5.1s tok   0.053M eval 7.0934 up/step 0.000MB {'loss0': 7.112, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 25 t    9.5s tok   0.102M eval 7.0484 up/step 0.000MB {'loss0': 6.9623, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 49 t   18.3s tok   0.201M eval 6.8288 up/step 0.000MB {'loss0': 6.8088, 'cos0': 1.0, 'cosIt': 0}
+[s-100m-k1] it 123 t   46.4s tok   0.504M eval 6.1497 up/step 0.000MB {'loss0': 6.2336, 'cos0': 1.0, 'cosIt': 100}
+[s-100m-k1] it 161 t   60.9s tok   0.659M eval 6.0110 up/step 0.000MB {'loss0': 6.0744, 'cos0': 1.0, 'cosIt': 150}
+[s-100m-k1] it 245 t   92.5s tok   1.004M eval 5.8280 up/step 0.000MB {'loss0': 5.9049, 'cos0': 1.0, 'cosIt': 200}
+[s-100m-k1] it 319 t  121.2s tok   1.307M eval 5.6963 up/step 0.000MB {'loss0': 5.7174, 'cos0': 1.0, 'cosIt': 300}
+[s-100m-k1] it 467 t  181.2s tok   1.913M eval 5.4992 up/step 0.000MB {'loss0': 5.4976, 'cos0': 1.0, 'cosIt': 450}
+[s-100m-k1] it 489 t  189.5s tok   2.003M eval 5.4597 up/step 0.000MB {'loss0': 5.4119, 'cos0': 1.0, 'cosIt': 450}
+[s-100m-k1] it 624 t  241.3s tok   2.556M eval 5.3486 up/step 0.000MB {'loss0': 5.4863, 'cos0': 1.0, 'cosIt': 600}
+[s-100m-k1] it 782 t  301.4s tok   3.203M eval 5.2623 up/step 0.000MB {'loss0': 5.273, 'cos0': 1.0, 'cosIt': 750}
+[s-100m-k1] it 938 t  361.4s tok   3.842M eval 5.1775 up/step 0.000MB {'loss0': 5.1468, 'cos0': 1.0, 'cosIt': 900}
+[s-100m-k1] it 977 t  376.4s tok   4.002M eval 5.1651 up/step 0.000MB {'loss0': 5.2318, 'cos0': 1.0, 'cosIt': 950}
+{"label": "s-100m-k1", "steps": 977, "startLoss": 8.471426725387573, "finalLoss": 5.165126442909241, "bestLoss": 5.165126442909241, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}

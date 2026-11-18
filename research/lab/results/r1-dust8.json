@@ -1,0 +1,241 @@
+{
+ "schema": "crowd-lab-run-1",
+ "label": "r1-dust8",
+ "method": "dust",
+ "cfg": {
+  "pop": 8,
+  "chunk": 8,
+  "lr": 0.05
+ },
+ "preset": "10m",
+ "params": 7343360,
+ "seq": 128,
+ "batch": 8,
+ "seed": 0,
+ "device": "mps",
+ "budgetSeconds": 120.0,
+ "steps": 81,
+ "totals": {
+  "tokens": 82944,
+  "fwd": 41803776.0,
+  "bwd": 0.0,
+  "up": 1189624320.0,
+  "down": 0.0,
+  "extra": {},
+  "compute": 41803776.0
+ },
+ "startLoss": 8.366497993469238,
+ "finalLoss": 7.434339880943298,
+ "bestLoss": 7.434339880943298,
+ "diverged": false,
+ "upBytesPerStep": 14686720.0,
+ "curve": [
+  {
+   "it": 0,
+   "seconds": 0.0,
+   "tokens": 0,
+   "compute": 0.0,
+   "up": 0.0,
+   "down": 0.0,
+   "evalLoss": 8.366497993469238
+  },
+  {
+   "it": 1,
+   "seconds": 1.301,
+   "tokens": 1024,
+   "compute": 516096.0,
+   "up": 14686720.0,
+   "down": 0.0,
+   "evalLoss": 8.365829229354858,
+   "gradNorm": 22.1983,
+   "forwards": 63
+  },
+  {
+   "it": 2,
+   "seconds": 2.717,
+   "tokens": 2048,
+   "compute": 1032192.0,
+   "up": 29373440.0,
+   "down": 0.0,
+   "evalLoss": 8.364947319030762,
+   "gradNorm": 21.3921,
+   "forwards": 63
+  },
+  {
+   "it": 5,
+   "seconds": 7.194,
+   "tokens": 5120,
+   "compute": 2580480.0,
+   "up": 73433600.0,
+   "down": 0.0,
+   "evalLoss": 8.36079454421997,
+   "gradNorm": 21.7134,
+   "forwards": 63
+  },
+  {
+   "it": 8,
+   "seconds": 11.625,
+   "tokens": 8192,
+   "compute": 4128768.0,
+   "up": 117493760.0,
+   "down": 0.0,
+   "evalLoss": 8.353553295135498,
+   "gradNorm": 20.2256,
+   "forwards": 63
+  },
+  {
+   "it": 10,
+   "seconds": 14.587,
+   "tokens": 10240,
+   "compute": 5160960.0,
+   "up": 146867200.0,
+   "down": 0.0,
+   "evalLoss": 8.347107887268066,
+   "gradNorm": 20.1516,
+   "forwards": 63
+  },
+  {
+   "it": 15,
+   "seconds": 22.01,
+   "tokens": 15360,
+   "compute": 7741440.0,
+   "up": 220300800.0,
+   "down": 0.0,
+   "evalLoss": 8.327174663543701,
+   "gradNorm": 21.2915,
+   "forwards": 63
+  },
+  {
+   "it": 20,
+   "seconds": 29.464,
+   "tokens": 20480,
+   "compute": 10321920.0,
+   "up": 293734400.0,
+   "down": 0.0,
+   "evalLoss": 8.299947261810303,
+   "gradNorm": 23.0924,
+   "forwards": 63
+  },
+  {
+   "it": 22,
+   "seconds": 32.468,
+   "tokens": 22528,
+   "compute": 11354112.0,
+   "up": 323107840.0,
+   "down": 0.0,
+   "evalLoss": 8.287285804748535,
+   "gradNorm": 20.3429,
+   "forwards": 63
+  },
+  {
+   "it": 29,
+   "seconds": 42.982,
+   "tokens": 29696,
+   "compute": 14966784.0,
+   "up": 425914880.0,
+   "down": 0.0,
+   "evalLoss": 8.224719762802124,
+   "gradNorm": 21.2385,
+   "forwards": 63
+  },
+  {
+   "it": 36,
+   "seconds": 53.503,
+   "tokens": 36864,
+   "compute": 18579456.0,
+   "up": 528721920.0,
+   "down": 0.0,
+   "evalLoss": 8.124112844467163,
+   "gradNorm": 20.182,
+   "forwards": 63
+  },
+  {
+   "it": 43,
+   "seconds": 64.002,
+   "tokens": 44032,
+   "compute": 22192128.0,
+   "up": 631528960.0,
+   "down": 0.0,
+   "evalLoss": 7.996969103813171,
+   "gradNorm": 23.2827,
+   "forwards": 63
+  },
+  {
+   "it": 49,
+   "seconds": 73.039,
+   "tokens": 50176,
+   "compute": 25288704.0,
+   "up": 719649280.0,
+   "down": 0.0,
+   "evalLoss": 7.876551628112793,
+   "gradNorm": 15.0115,
+   "forwards": 63
+  },
+  {
+   "it": 50,
+   "seconds": 74.536,
+   "tokens": 51200,
+   "compute": 25804800.0,
+   "up": 734336000.0,
+   "down": 0.0,
+   "evalLoss": 7.854885935783386,
+   "gradNorm": 16.4476,
+   "forwards": 63
+  },
+  {
+   "it": 57,
+   "seconds": 85.095,
+   "tokens": 58368,
+   "compute": 29417472.0,
+   "up": 837143040.0,
+   "down": 0.0,
+   "evalLoss": 7.7110817432403564,
+   "gradNorm": 16.1585,
+   "forwards": 63
+  },
+  {
+   "it": 64,
+   "seconds": 95.672,
+   "tokens": 65536,
+   "compute": 33030144.0,
+   "up": 939950080.0,
+   "down": 0.0,
+   "evalLoss": 7.611633777618408,
+   "gradNorm": 8.9536,
+   "forwards": 63
+  },
+  {
+   "it": 71,
+   "seconds": 106.15,
+   "tokens": 72704,
+   "compute": 36642816.0,
+   "up": 1042757120.0,
+   "down": 0.0,
+   "evalLoss": 7.523294568061829,
+   "gradNorm": 19.1294,
+   "forwards": 63
+  },
+  {
+   "it": 78,
+   "seconds": 116.612,
+   "tokens": 79872,
+   "compute": 40255488.0,
+   "up": 1145564160.0,
+   "down": 0.0,
+   "evalLoss": 7.457506060600281,
+   "gradNorm": 9.6699,
+   "forwards": 63
+  },
+  {
+   "it": 81,
+   "seconds": 121.09,
+   "tokens": 82944,
+   "compute": 41803776.0,
+   "up": 1189624320.0,
+   "down": 0.0,
+   "evalLoss": 7.434339880943298,
+   "gradNorm": 8.3693,
+   "forwards": 63
+  }
+ ]
+}

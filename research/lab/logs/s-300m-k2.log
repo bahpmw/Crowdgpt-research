@@ -1,0 +1,24 @@
+[s-300m-k2] start eval 8.5184
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[s-300m-k2] it 1 t    9.6s tok   0.004M eval 8.0209 up/step 8.389MB {'loss0': 8.5425, 'loss1': 8.5421, 'tau0': 1.0, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 2 t   18.3s tok   0.008M eval 7.8749 up/step 8.389MB {'loss0': 8.1445, 'loss1': 8.0853, 'tau0': 0.999, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 3 t   20.3s tok   0.012M eval 7.7278 up/step 8.389MB {'loss0': 7.8528, 'loss1': 7.8972, 'tau0': 0.999, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 5 t   24.1s tok   0.020M eval 7.2610 up/step 8.389MB {'loss0': 7.8201, 'loss1': 7.4518, 'tau0': 0.998, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 13 t   39.3s tok   0.053M eval 7.0959 up/step 8.389MB {'loss0': 7.4644, 'loss1': 7.1209, 'tau0': 0.998, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 25 t   61.9s tok   0.102M eval 7.0454 up/step 8.389MB {'loss0': 6.9707, 'loss1': 6.9748, 'tau0': 1.002, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 38 t  130.9s tok   0.156M eval 6.8952 up/step 8.389MB {'loss0': 7.0055, 'loss1': 7.0002, 'tau0': 1.001, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 49 t  155.4s tok   0.201M eval 6.7237 up/step 8.389MB {'loss0': 6.776, 'loss1': 6.7507, 'tau0': 0.998, 'cos0': 0.572, 'cos1': 1.0, 'cosIt': 0}
+[s-300m-k2] it 68 t  261.4s tok   0.279M eval 6.4607 up/step 8.389MB {'loss0': 6.4828, 'loss1': 6.4967, 'tau0': 0.995, 'cos0': 0.8943, 'cos1': 1.0, 'cosIt': 50}
+[s-300m-k2] it 97 t  385.3s tok   0.397M eval 6.3004 up/step 8.389MB {'loss0': 6.375, 'loss1': 6.3964, 'tau0': 0.987, 'cos0': 0.8943, 'cos1': 1.0, 'cosIt': 50}
+[s-300m-k2] it 123 t  480.0s tok   0.504M eval 6.1742 up/step 8.389MB {'loss0': 6.2669, 'loss1': 6.2617, 'tau0': 0.979, 'cos0': 0.9693, 'cos1': 1.0, 'cosIt': 100}
+[s-300m-k2] it 136 t  506.8s tok   0.557M eval 6.1305 up/step 8.389MB {'loss0': 6.1278, 'loss1': 6.1933, 'tau0': 0.974, 'cos0': 0.9693, 'cos1': 1.0, 'cosIt': 100}
+[s-300m-k2] it 195 t  626.9s tok   0.799M eval 5.9390 up/step 8.389MB {'loss0': 5.9209, 'loss1': 5.9478, 'tau0': 0.958, 'cos0': 0.9553, 'cos1': 1.0, 'cosIt': 150}
+[s-300m-k2] it 245 t  722.4s tok   1.004M eval 5.8269 up/step 8.389MB {'loss0': 5.8934, 'loss1': 5.8901, 'tau0': 0.948, 'cos0': 0.9843, 'cos1': 1.0, 'cosIt': 200}
+[s-300m-k2] it 257 t  747.0s tok   1.053M eval 5.7990 up/step 8.389MB {'loss0': 5.9054, 'loss1': 5.937, 'tau0': 0.945, 'cos0': 0.9824, 'cos1': 1.0, 'cosIt': 250}
+[s-300m-k2] it 319 t  868.3s tok   1.307M eval 5.6941 up/step 8.389MB {'loss0': 5.6928, 'loss1': 5.7344, 'tau0': 0.935, 'cos0': 0.989, 'cos1': 1.0, 'cosIt': 300}
+[s-300m-k2] it 379 t  989.4s tok   1.552M eval 5.5804 up/step 8.389MB {'loss0': 5.5877, 'loss1': 5.6238, 'tau0': 0.928, 'cos0': 0.9756, 'cos1': 1.0, 'cosIt': 350}
+[s-300m-k2] it 424 t 1109.8s tok   1.737M eval 5.5454 up/step 8.389MB {'loss0': 5.5268, 'loss1': 5.5274, 'tau0': 0.924, 'cos0': 0.9872, 'cos1': 1.0, 'cosIt': 400}
+[s-300m-k2] it 468 t 1232.0s tok   1.917M eval 5.4689 up/step 8.389MB {'loss0': 5.4692, 'loss1': 5.4763, 'tau0': 0.921, 'cos0': 0.9726, 'cos1': 1.0, 'cosIt': 450}
+[s-300m-k2] it 489 t 1287.0s tok   2.003M eval 5.4355 up/step 8.389MB {'loss0': 5.3707, 'loss1': 5.3836, 'tau0': 0.92, 'cos0': 0.9726, 'cos1': 1.0, 'cosIt': 450}

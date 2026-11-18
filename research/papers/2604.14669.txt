@@ -1,0 +1,3074 @@
+Zeroth-Order Optimization at the Edge of Stability
+Minhak Song 1 2 Liang Zhang 3 4 Bingcong Li 3 Niao He 3 Michael Muehlebach 4 Sewoong Oh 5
+Abstract
+Zeroth-order (ZO) methods are widely used when
+gradients are unavailable or prohibitively expen-
+sive, including black-box learning and memory-
+efficient fine-tuning of large models, yet their
+optimization dynamics in deep learning remain
+underexplored. In this work, we provide an ex-
+plicit step size condition that exactly captures the
+(mean-square) linear stability of a family of ZO
+methods based on the standard two-point estima-
+tor. Our characterization reveals a sharp contrast
+with first-order (FO) methods: whereas FO sta-
+bility is governed solely by the largest Hessian
+eigenvalue, mean-square stability of ZO methods
+depends on the entire Hessian spectrum. Since
+computing the full Hessian spectrum is infeasible
+in practical neural network training, we further de-
+rive tractable stability bounds that depend only on
+the largest eigenvalue and the Hessian trace. Em-
+pirically, we find that full-batch ZO methods op-
+erate at the edge of stability: ZO-GD, ZO-GDM,
+and ZO-Adam consistently stabilize near the pre-
+dicted stability boundary across a range of deep
+learning training problems. Our results highlight
+an implicit regularization effect specific to ZO
+methods, where large step sizes primarily regu-
+larize the Hessian trace, whereas in FO methods
+they regularize the top eigenvalue.
+1. Introduction
+Zeroth-order (ZO) optimization methods, which rely only
+on function evaluations, are widely used when gradients are
+unavailable, unreliable, or expensive to compute. Such a
+setting arises in black-box learning, derivative-free control,
+and increasingly in modern large-model pipelines, where
+memory and systems constraints can make backpropagation
+1KAIST 2KRAFTON 3ETH Zurich 4Max Planck Institute for
+Intelligent Systems 5University of Washington. Correspondence
+to: Minhak Song <minhaksong@kaist.ac.kr>.
+Proceedings of the 43 rd International Conference on Machine
+Learning, Seoul, South Korea. PMLR 306, 2026. Copyright 2026
+by the author(s).
+0 5000 10000 15000 20000
+0
+100
+200
+300
+400Hessian Top Eigenvalue
+ 2/ = 400
+ 2/ = 250
+ 2/ = 200
+GD
+= 2/400
+= 2/250
+= 2/200
+0 100000 200000 300000 400000 500000
+0
+50
+100
+150
+200
+250
+300
+ZO-GD
+= 2/5000
+= 2/4000
+= 2/3000
+0 5000 10000 15000 20000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000Hessian Trace
+= 2/400
+= 2/250
+= 2/200
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+ 2/ = 5000
+ 2/ = 4000
+ 2/ = 3000
+= 2/5000
+= 2/4000
+= 2/3000
+Figure 1. EoS behaviors of FO and ZO methods are captured
+by different spectral quantities of the Hessian. We train full-
+batch GD (left) and ZO-GD (right) with varying step sizes η on
+a CNN for CIFAR-10. For GD, the largest eigenvalue of the
+Hessian λmaxpHtq stabilizes near 2{η. For ZO-GD, the trace of
+the Hessian TrpHtq instead stabilizes slightly below 2{η.
+costly. Recent work shows that ZO methods based on two-
+point function evaluations can fine-tune large language mod-
+els (LLMs) with competitive accuracy while substantially
+reducing memory usage and compute overhead (Malladi
+et al., 2023; Zhang et al., 2024b). Despite their growing
+practical relevance, the training dynamics of ZO methods
+in deep learning remain far less understood than those of
+first-order (FO) optimizers.
+For FO optimization in deep learning, one prominent empir-
+ical phenomenon is the edge of stability (EoS). In full-batch
+gradient descent (GD) with step size η on a quadratic ob-
+jective fquadpxq “ 1 2 xJHx, the iterates diverge when
+ηą 2{λmaxpHq. In neural network training, however, op-
+timization often remains well-behaved even at step sizes
+beyond this local quadratic threshold. Along the training tra-
+jectory txtu, the top eigenvalue of the Hessian λmaxpHtq
+increases early in training and then stabilizes near the thresh-
+old 2{η over long horizons (Cohen et al., 2021). This phe-
+nomenon has motivated a growing line of work aimed at
+understanding its mechanism and its connections to stabil-
+ity, curvature, and implicit regularization in deep learning
+optimization dynamics (Ahn et al., 2022; Arora et al., 2022;
+Damian et al., 2023; Cohen et al., 2025).
+In this work, we ask whether a similar phenomenon arises
+1
+arXiv:2604.14669v2  [cs.LG]  1 Jul 2026
+
+Zeroth-Order Optimization at the Edge of Stability
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000Hessian Trace
+ 2/ = 5000
+ 2/ = 4000
+ 2/ = 3000
+ZO-GD (varying )
+= 2/5000 : Tr(Ht)
+= 2/4000 : Tr(Ht)
+= 2/3000 : Tr(Ht)
+= 2/5000 : Tr(Ht) + 2 max(Ht)
+= 2/4000 : Tr(Ht) + 2 max(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000Hessian Trace
+ 2(1 )/ = 4000
+ 2(1 )/ = 3000
+ 2(1 )/ = 2000
+ZO-GDM (fixed , varying )
+= 0.8 : Tr(Ht)
+= 0.85 : Tr(Ht)
+= 0.9 : Tr(Ht)
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.85 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.9 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+10000
+20000
+30000
+40000
+50000Preconditioned Hessian Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 2. Zeroth-order methods operate at the mean-square edge of stability. We train full-batch ZO methods on a CNN for CIFAR-10
+and track the curvature terms defining the mean-square stability interval from Section 4.2. Across all panels, each color denotes one
+run; the solid curve is the lower-band term, the dash-dotted curve is the upper-band term, and the dashed line is the predicted stability
+threshold. Left (ZO-GD, varying η): lower TrpHtq, upper TrpHtq` 2λmaxpHtq, threshold 2{η in Eq. (5). Middle (ZO-GDM, varying
+β with fixed η“ 10´4): lower TrpHtq, upper TrpHtq` 2 1`β λmaxpHtq, threshold 2p1´ βq{η in Eq. (6). Right (ZO-Adam, varying η
+with fixed pβ1, β2q“p0.9, 0.999q): lower TrpP ´1 t Htq, upper TrpP ´1 t Htq` 2 1`β1 λmaxpP ´1 t Htq, threshold 2{η in Eq. (7). Across all methods, the threshold stays within (or very close to) the stability interval throughout training, indicating mean-square EoS behavior.
+in zeroth-order training. At first glance, this is far from ob-
+vious: ZO methods update parameters by drawing random
+search directions at every iteration, and their stability cannot
+be understood through the deterministic arguments typically
+used to explain FO dynamics and stability.
+As a preliminary experiment, Figure 1 compares full-batch
+(first-order) GD and zeroth-order gradient descent (ZO-GD)
+with varying step sizes η. For GD, the top Hessian eigen-
+value λmaxpHtq stabilizes near 2{η, consistent with the
+behavior predicted by standard EoS theory. For ZO-GD,
+however, λmaxpHtq does not exhibit the same trend; instead,
+perhaps surprisingly, the Hessian trace TrpHtq stabilizes
+slightly below 2{η. This suggests that ZO training may
+be governed by a different stability mechanism than FO
+training, and that ZO methods may exhibit their own EoS
+phenomenon in deep learning.
+These observations motivate the following fundamental
+questions: (i) do ZO methods operate at the edge of stability
+in neural network training, and (ii) if so, which curvature-
+related quantity governs their stability?
+We introduce a mean-square linear stability theory for ZO
+methods to investigate these questions. In Section 4, we
+provide an exact step size characterization of mean-square
+linear stability under the linearized dynamics for a family
+of ZO optimizers, including ZO-GD and its momentum
+and preconditioned variants. Unlike FO methods, whose
+stability is governed solely by the largest Hessian eigenvalue,
+mean-square stability of ZO methods depends on the entire
+Hessian spectrum. Moreover, momentum affects stability in
+opposite ways: increasing β enlarges the stable regime for
+GD with momentum (GDM), but shrinks it for ZO-GD with
+momentum (ZO-GDM). Since computing the full spectrum
+is typically infeasible, we also derive tractable bounds that
+depend only on the Hessian trace and the largest eigenvalue
+(summarized in Table 1).
+Technically, our analysis introduces a cone-preserving linear
+covariance operator with a rank-one global coupling term to
+capture the dynamics of the ZO second-moment recursion.
+This reduction allows one to characterize its spectral radius
+using the Krein–Rutman Theorem and derive the explicit
+mean-square stability conditions.
+In Section 5, we empirically find that full-batch ZO methods
+operate at the mean-square edge of stability across archi-
+tectures and tasks: ZO methods (ZO-GD, ZO-GDM, and
+ZO-Adam) consistently stabilize near the predicted mean-
+square stability boundary. Notably, this behavior is governed
+primarily by trace-based curvature quantities, providing new
+insight into how large step sizes implicitly bias ZO training
+toward solutions with small (preconditioned) Hessian trace.
+2. Related work
+Zeroth-order optimization. ZO methods optimize objec-
+tives using only function evaluations, typically via the stan-
+dard two-point estimator along a random direction. Empiri-
+cally, Malladi et al. (2023) report that ZO methods can fine-
+tune LLMs with performance comparable to FO methods
+while achieving up to 12ˆ memory and up to 2ˆ GPU-hour
+reduction, highlighting ZO optimization as a promising ap-
+proach for memory-efficient fine-tuning. ZO methods have
+also been applied to adversarial robustness (Chen et al.,
+2017; Andriushchenko et al., 2020), reinforcement learn-
+ing (Salimans et al., 2017), private fine-tuning (Zhang et al.,
+2024a) and distributed learning (Fang et al., 2022; Qin et al.,
+2024; Xu et al., 2024), where gradients may be noisy, un-
+available, or expensive to compute or communicate.
+On the theory side, most prior work studies ZO meth-
+ods through the lens of classical (non)convex optimiza-
+tion (Jamieson et al., 2012; Duchi et al., 2015; Shamir,
+2017; Wang et al., 2018; Malladi et al., 2023; Zhang et al.,
+2024a), emphasizing convergence under small step sizes
+2
+
+Zeroth-Order Optimization at the Edge of Stability
+Table 1. Summary of linear stability conditions for FO and ZO
+methods under the linearized dynamics (Definition 1). For FO
+methods of GD, GDM, and Adam, we report the exact critical
+step size η‹, and the mean and mean-square thresholds coin-
+cide. For ZO methods, we report lower and upper bounds on
+the mean-square critical step size η‹ ms; the critical step size in
+the mean, η‹ mean, matches the corresponding FO threshold. For
+Adam and ZO-Adam, the reported conditions correspond to the
+frozen-preconditioner variants and are governed by the spectrum
+of the preconditioned Hessian P ´1H. See Section 4 for details.
+Method Linear Stability Condition
+GD η‹ mean “ η‹ ms “ 2 λmaxpHq
+GDM (Cohen et al., 2021) η‹ mean “ η‹ ms “ 2p1` βq λmaxpHq
+Adam (Cohen et al., 2022) η‹ mean “ η‹ ms “ 2p1` β1q p1´ β1qλmaxpP ´1Hq
+ZO-GD (Theorem 1) η‹ ms ď 2 TrpHq
+η‹ ms ě 2 TrpHq` 2λmaxpHq
+ZO-GDM (Theorem 2) η‹ ms ď 2p1´ βq TrpHq
+η‹ ms ě 2p1´ βq TrpHq` 2λmax pHq 1`β
+ZO-Adam (Theorem 3) η‹ ms ď 2 TrpP ´1Hq
+η‹ ms ě 2 TrpP ´1Hq` 2λmax pP ´1 Hq 1`β1
+and smoothness assumptions. Notably, Zhang et al. (2025a)
+study the implicit bias of ZO-GD under smooth convex ob-
+jectives and show that it favors solutions with small Hessian
+trace.
+Edge of stability. Recent empirical work shows that FO
+methods often train near instability. In particular, Cohen
+et al. (2021) identify the edge of stability (EoS) in full-
+batch GD, where λmaxpHtq grows early in training and
+then equilibrates near 2{η. This observation has motivated
+extensive follow-up work on the mechanisms and implica-
+tions of EoS (Ahn et al., 2022; Arora et al., 2022; Wang
+et al., 2022; Damian et al., 2023; Song & Yun, 2023; Zhu
+et al., 2023; Yoo et al., 2025; Cohen et al., 2025). EoS-type
+behavior has also been studied for momentum and adap-
+tive optimizers (Cohen et al., 2022), mini-batch stochastic
+gradient descent (SGD) (Lee & Jang, 2023; Andreyev &
+Beneventano, 2024), and other families of FO optimizers,
+including sharpness-aware minimization (Foret et al., 2021;
+Long & Bartlett, 2024) and schedule-free methods (Defazio
+et al., 2024; Song et al., 2025).
+Dynamical stability analysis of optimizers. A growing
+body of work studies optimization methods through the lens
+of dynamical stability. Recent work analyzes linear stabil-
+ity by examining the behavior of the linearized dynamics
+under a local quadratic approximation, extending beyond
+GD to momentum methods (Muehlebach & Jordan, 2021)
+and stochastic optimization. For SGD, prior analyses have
+characterized linear stability condition in the mean-square
+sense (Wu et al., 2018; Granziol et al., 2022; Velikanov
+et al., 2023), for higher moments (Ma & Ying, 2021), and
+in probability (Ziyin et al., 2023). Most closely related
+to our setting, Mulayoff & Michaeli (2024) derive the ex-
+act mean-square stability threshold of mini-batch SGD and
+show that it is monotonically non-decreasing in the batch
+size. Our work also studies mean-square linear stability,
+but for ZO methods, where stochasticity arises from the
+estimator directions even under full-batch training.
+3. Preliminaries
+We consider the optimization problem
+min
+xPRd
+fpxq ,
+for a loss function f : Rd Ñ R and a model parameter x,
+and study the dynamics of zeroth-order (ZO) optimization
+methods. ZO methods iteratively update a sequence of iter-
+ates txtutě0 based solely on function evaluations without
+evaluating any gradients. We analyze the three most popular
+types of ZO methods: ZO-GD, ZO-GDM, and ZO-Adam.
+ZO Gradient Descent (ZO-GD) replaces the gradient
+∇fpxtq in the GD update with a gradient estimate p∇fpxtq:
+xt`1 “ xt ´ η p∇fpxtq ,
+for a step size ηą 0. We consider the standard two-point
+estimator (Nesterov & Spokoiny, 2017), defined as
+p∇fpxtq :“ fpxt ` µutq´ fpxt ´ µutq 2µ ¨ ut , (1)
+where ut i.i.d.„ Np0, Iq and µą 0 is a smoothing parameter.
+In general, p∇fpxtq is a biased estimator of ∇fpxtq, with
+bias that vanishes as µÑ 0.
+ZO Gradient Descent with Momentum (ZO-GDM) com-
+bines Polyak momentum terms with gradient estimates:
+mt`1 “ βmt ` p∇fpxtq ,
+xt`1 “ xt ´ ηmt`1 ,
+for a step size ηą 0 and a momentum parameter βPr0, 1q.
+ZO-Adam combines adaptive moment estimation (Adam)
+with gradient estimates:
+mt`1 “ β1mt `p1´ β1qp∇fpxtq ,
+xt`1 “ xt ´ ηP ´1 t`1mt`1 ,
+3
+
+Zeroth-Order Optimization at the Edge of Stability
+for step size ηą 0, momentum parameters β1, β2 Pr0, 1q,
+and ϵą 0, where Pt`1 is a preconditioner defined using an
+exponential moving average (EMA) of squared (estimated)
+gradients:
+νt`1 “ β2νt `p1´ β2q p∇fpxtqd p∇fpxtq ,
+Pt`1 “p1´ βt`1 1 q
+„
+diag
+ˆc νt`1
+1´ βt`1 2
+˙
+` ϵI
+ȷ
+,
+and d denotes element-wise multiplication. This form is
+equivalent to the standard bias-corrected Adam update, writ-
+ten as a preconditioned momentum step.
+In practical neural network training, the short-term stability
+behavior of Adam is often well approximated by a frozen-
+preconditioner variant, in which the preconditioner is held
+fixed at its current value (Cohen et al., 2022). Motivated by
+this, we also consider the corresponding ZO analogue.
+Frozen ZO-Adam uses a fixed preconditioner P ą 0 with
+a step size ηą 0:
+mt`1 “ β1mt `p1´ β1qp∇fpxtq ,
+xt`1 “ xt ´ ηP ´1mt`1 ,
+and a momentum parameter β1 Pr0, 1q. This optimizer is
+introduced purely for theoretical analysis and serves as the
+ZO analogue of Frozen Adam, which was used to study the
+adaptive edge of stability of Adam (Cohen et al., 2022).
+4. Linear stability analysis
+Directly analyzing the full dynamics of optimizers in deep
+learning is typically intractable. Instead, we adopt the stan-
+dard dynamical systems approach of studying stability near
+a local minimizer via the linearized dynamics. Exponential
+stability of the linearized dynamics implies local stability
+of the corresponding nonlinear dynamics near the equilib-
+rium, which justifies linear stability analysis as a principled
+tool (Khalil, 2002).
+Definition 1 (Linearized dynamics). Let x‹ be a local min-
+imizer of f , and assume that f is twice differentiable in a
+neighborhood of x‹. Let H :“ ∇2fpx‹q be the Hessian
+at x‹. The linearized dynamics of an optimizer around x‹
+are the dynamics obtained by applying the optimizer to the
+quadratic Taylor approximation of f at x‹,
+fquadpxq :“ fpx‹q` 1 2 px´ x‹qJHpx´ x‹q .
+Throughout, we assume H ľ 0 and H ‰ 0. Let λ1 ě
+¨¨¨ ě λd ě 0 denote the eigenvalues of H, and define
+λmaxpHq :“ λ1 and TrpHq :“ řd i“1 λi.
+We next formalize the notion of linear stability for the re-
+sulting (possibly stochastic) optimizer dynamics.
+Definition 2 (Linear stability). Let x‹ be as in Definition 1,
+and let txtutě0 denote the iterates generated by an optimizer
+applied to fquad.
+We say the optimizer is linearly stable in the mean if
+sup
+tě0
+››Erxt ´ x‹s ›› ă8 for every initialization x0 P Rd.
+We say the optimizer is mean-square linearly stable if
+sup
+tě0
+E
+“
+}xt ´ x‹}2‰ ă8 for every initialization x0 P Rd.
+Mean-square linear stability implies linear stability in the
+mean by Jensen’s inequality. For deterministic optimizers,
+the expectation is redundant, and the two notions coincide.
+Our goal is to theoretically characterize the critical step size
+that guarantees linear stability of ZO methods and empiri-
+cally connect it to the edge of stability phenomena.
+Definition 3 (Critical step size). Consider an optimizer with
+step size ηą 0 applied to fquad, producing iterates txtutě0.
+The critical step size in the mean is defined as
+η‹ mean:“ sup ! ηą 0 :@x0 P Rd, sup
+tě0
+››Erxt ´ x‹s ››ă8 ) ,
+and the critical step size in the mean-square is defined as
+η‹ ms :“ sup ! ηą 0 :@x0 P Rd, sup
+tě0
+E
+“
+}xt ´ x‹}2‰ ă8 ) .
+Next, we review known stability thresholds for FO methods
+(Section 4.1) and present our main results for ZO methods
+(Section 4.2). All proofs are deferred to Appendix A.
+4.1. Linear stability of first-order methods
+The first-order (FO) counterparts of the ZO optimizers in
+Section 3, namely GD, GDM, and Frozen Adam, are de-
+terministic, so their mean and mean-square linear stabil-
+ity conditions coincide. A key takeaway is that FO linear
+stability is governed solely by the top eigenvalue of the
+(preconditioned) Hessian, as summarized below.
+Proposition 1 (Stability of GD). The critical step size of
+GD is η‹ mean “ η‹ ms “ 2{λmaxpHq.
+The stability condition of GD with Momentum (GDM) was
+established in Theorem 2 of Cohen et al. (2021).
+Proposition 2 (Stability of GDM). The critical step size of
+GDM is η‹ mean “ η‹ ms “ 2p1` βq{λmaxpHq.
+The stability condition of Frozen Adam was established in
+Lemma 2 and Proposition 1 of Cohen et al. (2022).
+4
+
+Zeroth-Order Optimization at the Edge of Stability
+Proposition 3 (Stability of Frozen Adam). The critical step
+size of Frozen Adam is
+η‹ mean “ η‹ ms “ 2p1` β1q p1´ β1qλmaxpP ´1Hq .
+4.2. Linear stability of zeroth-order methods
+The inherent stochasticity in ZO updates fundamentally
+changes the linear stability as shown in Figure 1. However,
+the mean dynamics of a ZO method matches that of its FO
+counterpart, and η‹ mean coincides with the FO critical step
+size presented in Section 4.1. This is due to the fact that un-
+der the quadratic model fquad in Definition 1, the two-point
+estimator is unbiased: E
+“p∇fquadpxtq ‰ “ ∇fquadpxtq. The
+intricacy of ZO linear stability is only captured by the mean-
+square stability. In particular, we show that η‹ ms for ZO-GD,
+ZO-GDM, and Frozen ZO-Adam, depends on the entire
+eigen spectrum of the (preconditioned) Hessian and is dom-
+inated by its trace value.
+Theorem 1 (Stability of ZO-GD). For ZO-GD, η‹ mean “
+2{λmaxpHq, and the mean-square critical step size η‹ ms is
+the unique ηą 0 satisfying
+ηλmaxpHqă 1 and
+dÿ
+i“1
+ηλi
+2p1´ ηλiq “ 1 ,
+which admits the bounds
+2
+TrpHq` 2λmaxpHq ď η‹ ms ď 2 TrpHq . (2)
+Remark 1 (Computing η‹ ms). If the full spectrum tλiud i“1
+were available, η‹ ms in Theorem 1 can be computed by solv-
+ing řd i“1pηλi{2p1´ ηλiqq“ 1 over ηPp0, 1{λmaxpHqq.
+In practice, we instead track the bounds (2), which depend
+only on TrpHq and λmaxpHq and can be estimated effi-
+ciently during training, which is critical for large models.
+Theorem 2 (Stability of ZO-GDM). For ZO-GDM,
+η‹ mean “ 2p1` βq{λmaxpHq, and the mean-square crit-
+ical step size η‹ ms is the unique ηą 0 satisfying
+ηλmaxpHqă 1´ β2 and
+dÿ
+i“1
+ηλi
+2p1´ βq
+`
+1´ ηλi 1´β2 ˘ “ 1 ,
+which admits the bounds
+2p1´ βq
+TrpHq` 2λmax pHq 1`β ď η‹ ms ď 2p1´ βq TrpHq . (3)
+Proof sketch. We analyze the recursions of the second-
+moment matrices ErxtxJ t s, ErxtmJ t s, and ErmtmJ t s. Us-
+ing the Isserlis’ Theorem to evaluate Gaussian fourth mo-
+ments, we obtain a linear recursion that can be expressed as
+a cone-preserving linear operator on a product cone. Mean-
+square stability is then equivalent to this operator having
+spectral radius smaller than one. We characterize this spec-
+tral radius using Theorem 4 in Appendix A.2, which lever-
+ages the Krein–Rutman Theorem and leads to the explicit
+mean-square stability condition.
+Theorem 3 (Stability of Frozen ZO-Adam). Let ˜λ1 ě ˜λ2 ě
+¨¨¨ě ˜λd ě 0 denote the eigenvalues of the preconditioned
+Hessian P ´1H. For Frozen ZO-Adam, η‹ mean “ 2p1`
+β1q{
+`
+p1´ β1qλmaxpP ´1Hq ˘ . Assuming P H“ HP , the
+mean-square critical step size η‹ ms is the unique η ą 0
+satisfying
+ηλmaxpP ´1Hqă 1` β1 and
+dÿ
+i“1
+η˜λi
+2
+`
+1´ η˜λi 1`β1 ˘ “ 1 ,
+and it admits the bounds
+2
+TrpP ´1Hq` 2λmax pP ´1 Hq 1`β1 ď η‹ ms ď 2 TrpP ´1Hq . (4)
+Remark 2 (Commutativity assumption). The condition
+P H “ HP ensures that P ´1H is diagonalizable in
+the same eigenbasis as H, which allows the mean-square
+dynamics to decouple across eigendirections and enables
+a tractable spectral analysis. Without commutativity,
+the second-moment recursion generally couples different
+eigenspaces, and obtaining an explicit stability characteri-
+zation becomes substantially less tractable. Empirically, in
+neural network training with ZO-Adam, we observe that
+Pt and Ht are nearly commuting: the relative commuta-
+tor Frobenius norm }PtHt ´ HtPt}F {}PtHt}F decreases
+from 0.8–0.9 at initialization to below 0.05 and remains
+below 0.05 throughout training (see Appendix D.3).
+Taken together, Theorems 1 to 3 provide exact mean-square
+stability characterizations under the linearized dynamics.
+In the next section, we use the corresponding upper and
+lower bounds in (2), (3), and (4) to empirically test whether
+ZO methods operate near the mean-square edge of stability
+during neural network training.
+Our main theory focuses on the Gaussian symmetric two-
+point estimator in (1), which is the standard estimator used
+in MeZO-style LLM fine-tuning (Malladi et al., 2023). Ap-
+pendix B shows that the same covariance-operator frame-
+work extends naturally to other estimator choices, including
+forward finite differences, non-Gaussian directions, and
+multi-query averages.
+5. Zeroth-order optimization operates at the
+mean-square edge of stability
+Building on the mean-square linear stability theory in Sec-
+tion 4.2, we empirically show that full-batch ZO methods on
+5
+
+Zeroth-Order Optimization at the Edge of Stability
+neural networks operate at the mean-square edge of stability
+(EoS): the training dynamics stabilizes near the predicted
+mean-square linear stability boundary.
+5.1. Tracking mean-square stability during training
+Let Ht :“ ∇2fpxtq denote the loss Hessian along the
+training trajectory. For each ZO optimizer, Section 4.2 pro-
+vides explicit mean-square stability conditions under the
+linearized dynamics, together with computable lower and
+upper bounds on the corresponding stability threshold that
+depend only on the trace and top eigenvalue of the relevant
+curvature matrix. In large-scale neural network training,
+however, evaluating the exact mean-square stability condi-
+tion is typically infeasible, since it requires the full spectrum
+of the Hessian (or the preconditioned Hessian for Adam-
+style methods). We therefore estimate only the trace and top
+eigenvalue during training, and use them to form tractable
+lower and upper bounds. Concretely, for the purpose of
+visualizing these dynamic conditions between Ht and the
+step size η, we present our results in the following format:
+(lower term) ď (stability threshold) ď (upper term),
+where the stability threshold depends on the step size η and
+does not change over iterations and the upper and lower
+terms depend on the spectrum of Ht (e.g., Figure 2). We
+say the training operates near the mean-square EoS when
+the stability threshold remains within, or very close to, this
+interval for a sustained portion of training.
+ZO-GD. From (2), we track mean-square stability via
+TrpHtq ď 2 η ď TrpHtq` 2λmaxpHtq. (5)
+ZO-GDM. From (3), we track mean-square stability via
+TrpHtq ď 2p1´ βq η ď TrpHtq` 2λmaxpHtq 1` β . (6)
+ZO-Adam. For ZO-Adam, the bounds depend on the pre-
+conditioner Pt at iteration t. From (4) in Theorem 3, we
+track mean-square stability via
+TrpP ´1 t Htqď 2 η ď TrpP ´1 t Htq` 2λmaxpP ´1 t Htq 1` β1 . (7)
+5.2. Experimental setup
+We consider an image classification task on a subset of
+CIFAR-10 and train ZO methods using the squared loss. We
+evaluate three representative vision architectures: a CNN,
+a ResNet, and a Vision Transformer (ViT). Unless stated
+otherwise, we use full-batch training and a constant step
+size to match the linearized stability theory in Section 4.
+10 2
+10 1
+Training Loss
+ZO-GD ( 1 2 3)
+0 100000 200000 300000 400000 500000 600000 700000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000Hessian Trace
+2/ 1 = 4000
+2/ 2 = 3000
+2/ 3 = 2000
+Tr(Ht)
+Tr(Ht) + 2 max(Ht)
+Figure 3. Catapult dynamics in ZO-GD. We train ZO-GD on
+CNN and increase the step size midway through training (from η1
+to η2 and then to η3). Top: the training loss exhibits a pronounced
+spike after each step size increase, consistent with catapult dynam-
+ics. Bottom: the Hessian trace TrpHtq drops sharply during the
+catapult phase and then rises again, re-equilibrating near the new
+stability threshold 2{η.
+Optimizers and hyperparameters. We study ZO-GD, ZO-
+GDM, and ZO-Adam, all using the standard two-point esti-
+mator with default smoothing parameter µ“ 10´3. During
+training, we log curvature statistics every 1,000 iterations
+by estimating the top Hessian eigenvalue using power iter-
+ation and the Hessian trace using Hutchinson’s estimator.
+Additional experimental details are provided in Appendix C.
+5.3. Main experiments
+In Figure 2, we train ZO methods on the CNN and track the
+stability intervals in (5), (6), and (7). Across all three opti-
+mizers, we observe a consistent mean-square EoS pattern:
+after an initial phase of progressive sharpening, the tracked
+curvature terms adjust and stabilize so that the stability
+threshold remains within, or very close to, the correspond-
+ing intervals. As shown in Figure 6 and Figure 7, we observe
+the same behavior when training a ResNet and a ViT.
+To test whether this behavior is specific to vision, we also
+train LSTM and Mamba sequence models on the synthetic
+sorting task described in Karpathy (2020), following the ex-
+perimental setup used by Cohen et al. (2025, Appendix B.3).
+These experiments exhibit the same qualitative mean-square
+EoS behavior; full plots are provided in Appendix D.1.
+Specifically, (i) for ZO-GD, the threshold 2{η remains close
+to the interval rTrpHtq, TrpHtq` 2λmaxpHtqs across step
+sizes; (ii) for ZO-GDM, the threshold 2p1´ βq{η remains
+close to rTrpHtq, TrpHtq` 2 1`β λmaxpHtqs across mo-
+mentum values; and (iii) for ZO-Adam, the threshold 2{η
+remains close to the corresponding preconditioned interval
+in (7). In all cases, the trace of the (preconditioned) Hessian
+provides the dominant stability signal throughout training.
+6
+
+Zeroth-Order Optimization at the Edge of Stability
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000Hessian Trace
+2/ = 4000
+ZO-GD (fixed , varying )
+= 10 4 : Tr(Ht)
+= 3 × 10 4 : Tr(Ht)
+= 10 3 : Tr(Ht)
+= 3 × 10 3 : Tr(Ht)
+= 10 2 : Tr(Ht)
+= 10 4 : Tr(Ht) + 2 max(Ht)
+= 3 × 10 4 : Tr(Ht) + 2 max(Ht)
+= 10 3 : Tr(Ht) + 2 max(Ht)
+= 3 × 10 3 : Tr(Ht) + 2 max(Ht)
+= 10 2 : Tr(Ht) + 2 max(Ht)
+Figure 4. Effect of the smoothing parameter µ. We train ZO-GD
+on a CNN with a fixed step size and vary the smoothing parameter
+µ in the two-point estimator. For moderate and small smoothing
+(µď 10´3), ZO-GD operates at the mean-square EoS. For larger
+smoothing (µě 3ˆ 10´3), ZO-GD no longer reaches the EoS
+threshold and instead trains in a lower-curvature regime with a
+smaller Hessian trace.
+5.4. Additional experiments
+Catapult dynamics. In Figure 3, we train ZO-GD and
+increase the step size midway through training (from η1 to
+η2 and then to η3). We observe a pronounced spike in the
+training loss after each increase, consistent with the catapult
+dynamics (Lewkowycz et al., 2020). Immediately after the
+step size increase, the new step size temporarily exceeds
+the mean-square stability critical step size at the current
+iterate, so the dynamics become locally unstable and the
+loss increases sharply. At the same time, the Hessian trace
+drops rapidly below the new threshold and then rises again,
+re-equilibrating near the new threshold.
+Effect of the smoothing parameter µ. In Figure 4, we
+train ZO-GD with fixed step size and vary the smoothing
+parameter µ in the two-point estimator. For moderate and
+small µ, the tracked stability terms increase early in training
+and then stabilize near the threshold 2{η, consistent with
+mean-square EoS behavior. For larger µ, both TrpHtq and
+TrpHtq` 2λmaxpHtq saturate at substantially smaller val-
+ues and remain far below 2{η, indicating that training does
+not approach the predicted mean-square stability boundary.
+Overall, mean-square EoS persists across a broad range of
+practically relevant smoothing levels, while overly large
+smoothing suppresses curvature growth. We attribute this
+phenomenon to implicit bias in Section 6.
+Beyond full-batch: mini-batch ZO-SGD. Although our
+main results focus on full-batch ZO methods, we include a
+preliminary mini-batch experiment in Figure 5. Compared
+to full-batch ZO-GD, mini-batch ZO-SGD converges to
+significantly flatter regimes.
+6. Discussion
+In this section, we discuss implications of our mean-square
+stability theory and empirical mean-square EoS results, and
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000Hessian Trace
+2/ = 5000
+ZO-GD (fixed , varying batch size)
+Full Batch: Tr(Ht)
+BS=500: Tr(Ht)
+BS=250: Tr(Ht)
+Full Batch: Tr(Ht) + 2 max(Ht)
+BS=500: Tr(Ht) + 2 max(Ht)
+BS=250: Tr(Ht) + 2 max(Ht)
+Figure 5. Effect of batch size in mini-batch ZO-SGD. We train
+mini-batch ZO-SGD on a CNN with a fixed step size and vary the
+batch size. Compared to full-batch ZO-GD, mini-batch ZO-SGD
+trains in a lower-curvature regime with a smaller Hessian trace.
+highlight several directions for future work.
+Why mean-square stability is the relevant notion for ZO
+dynamics. In ZO optimization, randomness persists even
+in full-batch training due to random perturbation directions.
+As a result, stability cannot be assessed solely through the
+mean trajectory; Erxts may remain bounded even when
+fluctuations grow and dominate the behavior of the iterates.
+Mean-square stability captures this effect by directly con-
+trolling the second moment E}xt ´ x‹}2, while remaining
+analyzable under the linearized dynamics and yielding ex-
+plicit step size conditions. Other notions of stability are
+also meaningful, such as stability of higher moments or tail-
+probability bounds. Nevertheless, our experiments suggest
+that the curvature quantities appearing in the mean-square
+stability conditions closely track the stability behavior ob-
+served during ZO neural network training.
+Curvature quantities that govern ZO stability. For FO
+methods under the linearized dynamics, stability depends
+only on the largest eigenvalue of the (preconditioned) Hes-
+sian. In contrast, our results show that mean-square stability
+of ZO methods depends on the full Hessian spectrum. This
+dependence appears explicitly in the exact stability condi-
+tions, and it is reflected in the computable bounds through
+both trace and top-eigenvalue terms. A practically important
+regime is when TrpHq dominates λmaxpHq, in which case
+these bounds become tight and the trace term largely sets
+the stability scale. Empirically, this matches our empirical
+observations: the Hessian trace (or the preconditioned trace
+for ZO-Adam) closely tracks the relevant stability threshold
+throughout training, while λmaxpHtq can be less informa-
+tive for ZO dynamics.
+Momentum reshapes ZO stability differently from FO
+stability. Momentum provides a concrete example show-
+ing that ZO stability is not a direct analogue of FO stability.
+For GD with momentum (GDM), the linearized stability
+threshold increases with β, corresponding to stable training
+at sharper curvature levels, with λmaxpHtq« 2p1` βq{η
+at the EoS. For ZO-GDM, our mean-square conditions im-
+7
+
+Zeroth-Order Optimization at the Edge of Stability
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000Hessian Trace
+ 2/ = 5000
+ 2/ = 4000
+ 2/ = 3000
+ZO-GD (varying )
+= 2/5000 : Tr(Ht)
+= 2/4000 : Tr(Ht)
+= 2/3000 : Tr(Ht)
+= 2/5000 : Tr(Ht) + 2 max(Ht)
+= 2/4000 : Tr(Ht) + 2 max(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000
+8000Hessian Trace
+ 2(1 )/ = 6000
+ 2(1 )/ = 5000
+ 2(1 )/ = 4000
+ZO-GDM (fixed , varying )
+= 0.7 : Tr(Ht)
+= 0.75 : Tr(Ht)
+= 0.8 : Tr(Ht)
+= 0.7 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.75 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Hessian Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 6. Mean-square EoS for full-batch ZO methods on ResNet. We train full-batch ZO-GD, ZO-GDM, and ZO-Adam on ResNet20
+for CIFAR-10 and track the corresponding mean-square stability bounds and threshold in Section 5.1.
+0 100000 200000 300000 400000 500000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000
+12000
+14000Hessian Trace
+ 2/ = 10000
+ 2/ = 6000
+ 2/ = 3000
+ZO-GD (varying )
+= 2/10000 : Tr(Ht)
+= 2/6000 : Tr(Ht)
+= 2/3000 : Tr(Ht)
+= 2/10000 : Tr(Ht) + 2 max(Ht)
+= 2/6000 : Tr(Ht) + 2 max(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000
+12000Hessian Trace
+ 2(1 )/ = 8000
+ 2(1 )/ = 6000
+ 2(1 )/ = 4000
+ZO-GDM (fixed , varying )
+= 0.6 : Tr(Ht)
+= 0.7 : Tr(Ht)
+= 0.8 : Tr(Ht)
+= 0.6 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.7 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Hessian Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 7. Mean-square EoS for full-batch ZO methods on Vision Transformer. We train full-batch ZO-GD, ZO-GDM, and ZO-Adam
+on a Vision Transformer for CIFAR-10 and track the corresponding mean-square stability bounds and threshold in Section 5.1.
+ply the opposite dependence: increasing β shrinks the sta-
+ble regime and reduces the corresponding stability scale.
+Empirically, this is consistent with ZO-GDM operating in
+lower-curvature regimes as β increases, with TrpHtq «
+2p1´ βq{η at the mean-square EoS.
+Intuitively, in FO-GDM, momentum damps deterministic
+oscillations along sharp directions, which enlarges the stable
+step-size region. In ZO-GDM, by contrast, momentum
+accumulates not only the gradient signal but also the random-
+direction estimator noise. Since ZO stability is governed by
+second moments, this extra accumulated noise makes the
+dynamics less stable and causes increasing β to shrink the
+stable region.
+A similar contrast appears for adaptive methods. For
+(frozen) Adam, increasing β1 increases the stability thresh-
+old, with λmaxpP ´1 t Htq « 2p1` β1q{pp1´ β1qηq. For
+ZO-Adam, by comparison, our experiments suggest that
+TrpP ´1 t Htq« 2{η at the mean-square EoS, which is inde-
+pendent of β1 (see Figure 10 and Appendix D.2). Under-
+standing how these effects translate into practical benefits
+(or tradeoffs) of momentum in ZO training is an interesting
+open question.
+Effect of the smoothing parameter µ and trace-related
+implicit bias. The two-point estimator introduces smooth-
+ing, controlled by µ, that changes both the bias and the noise
+structure of the ZO update. Zhang et al. (2025a) connect
+such ZO optimization to an implicit preference for small-
+trace regions, formalized as approximately minimizing
+fµpxq :“ fpxq` µ2 2 Tr ` ∇2fpxq ˘ ,
+up to higher-order terms. Under this perspective, µ directly
+modulates a curvature-dependent bias in the effective objec-
+tive, and large µ can prevent the dynamics from approach-
+ing the mean-square stability threshold predicted by the
+unsmoothed linearized model. A systematic theory that
+jointly captures (i) the mean-square stability constraint and
+(ii) the effect of smoothing bias on the effective landscape
+is an interesting direction for future work.
+Beyond full-batch: mini-batch ZO methods. Our analy-
+sis focuses on full-batch ZO dynamics, where the only ran-
+domness comes from the estimator directions. In practical
+settings, mini-batching introduces an additional noise source
+through stochastic sampling of data points. A complete sta-
+bility theory for mini-batch ZO training would need to incor-
+porate both estimator noise and sampling noise, and quan-
+tify how these two sources interact in the second-moment
+recursion. Recent work gives sharp mean-square stabil-
+ity thresholds for mini-batch SGD (Mulayoff & Michaeli,
+2024). Deriving analogous results for mini-batch ZO meth-
+ods would clarify whether mean-square EoS persists under
+data subsampling, and which curvature quantities control
+stability in that regime.
+8
+
+Zeroth-Order Optimization at the Edge of Stability
+7. Conclusion
+We developed a mean-square linear stability theory for
+zeroth-order (ZO) optimization methods based on the stan-
+dard two-point estimator, including ZO-GD, ZO-GDM, and
+Adam-style preconditioned variants. We derived exact step
+size characterizations for mean-square stability via lineariza-
+tion, showing that ZO stability depends on the full spectrum
+of the (preconditioned) Hessian and admits computable
+bounds in terms of the trace and top eigenvalue.
+Guided by these results, we empirically studied full-batch
+ZO training on standard neural network architectures (CNN,
+ResNet, and ViT) and found consistent evidence that ZO
+methods operate at the mean-square edge of stability:
+the curvature quantities governing the theoretical stability
+threshold adapt during training and stabilize near the pre-
+dicted boundary. Across methods, the stability behavior
+is driven primarily by trace-based curvature terms, provid-
+ing a concrete mechanism through which large step sizes
+implicitly regularize ZO training dynamics.
+Our results position mean-square stability as a principled
+framework for analyzing and predicting ZO optimization
+behavior in deep learning. A natural next step is to use
+this mean-square EoS perspective to extend the central-flow
+framework of Cohen et al. (2025) to zeroth-order meth-
+ods, and to empirically verify whether the resulting flow
+description captures ZO training dynamics across architec-
+tures and tasks. It is also important to extend the theory to
+mini-batch ZO methods. Another important direction is to
+understand how stability constraints interact with optimiza-
+tion efficiency and generalization in practice.
+Acknowledgements
+MS thanks Alex Damian and Jeremy Cohen for insightful
+discussion. LZ gratefully acknowledges funding by the
+Max Planck ETH Center for Learning Systems. BL and
+NH are supported by Swiss National Science Foundation
+(SNSF) Starting Grant. MM thanks the German Research
+Foundation for the support. SO acknowledges funding by
+NSF grants 2112471, 2229876, and 2505865.
+Impact Statement
+This paper presents work whose goal is to advance the field
+of machine learning. There are many potential societal
+consequences of our work, none which we feel must be
+specifically highlighted here.
+References
+Ahn, K., Zhang, J., and Sra, S. Understanding the unsta-
+ble convergence of gradient descent. In International
+Conference on Machine Learning, 2022.
+Andreyev, A. and Beneventano, P. Edge of stochastic sta-
+bility: Revisiting the edge of stability for SGD. arXiv
+preprint arXiv:2412.20553, 2024.
+Andriushchenko, M., Croce, F., Flammarion, N., and Hein,
+M. Square attack: A query-efficient black-box adversarial
+attack via random search. In European Conference on
+Computer Vision, 2020.
+Arora, S., Li, Z., and Panigrahi, A. Understanding gradient
+descent on the edge of stability in deep learning. In
+International Conference on Machine Learning, 2022.
+Chen, P.-Y., Zhang, H., Sharma, Y., Yi, J., and Hsieh, C.-J.
+Zoo: Zeroth order optimization based black-box attacks
+to deep neural networks without training substitute mod-
+els. In ACM Workshop on Artificial Intelligence and
+Security, 2017.
+Cohen, J., Kaur, S., Li, Y., Kolter, J. Z., and Talwalkar,
+A. Gradient descent on neural networks typically occurs
+at the edge of stability. In International Conference on
+Learning Representations, 2021.
+Cohen, J., Ghorbani, B., Krishnan, S., Agarwal, N., Medap-
+ati, S., Badura, M., Suo, D., Cardoze, D., Nado, Z., Dahl,
+G. E., et al. Adaptive gradient methods at the edge of
+stability. arXiv preprint arXiv:2207.14484, 2022.
+Cohen, J., Damian, A., Talwalkar, A., Kolter, J. Z., and Lee,
+J. D. Understanding optimization in deep learning with
+central flows. In International Conference on Learning
+Representations, 2025.
+Damian, A., Nichani, E., and Lee, J. D. Self-stabilization:
+The implicit bias of gradient descent at the edge of stabil-
+ity. In International Conference on Learning Representa-
+tions, 2023.
+Defazio, A., Yang, X., Khaled, A., Mishchenko, K., Mehta,
+H., and Cutkosky, A. The road less scheduled. In Ad-
+vances in Neural Information Processing Systems, 2024.
+Deimling, K. Nonlinear Functional Analysis. Springer
+Berlin, Heidelberg, 1985.
+Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn,
+D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer,
+M., Heigold, G., Gelly, S., Uszkoreit, J., and Houlsby,
+N. An image is worth 16x16 words: Transformers for
+image recognition at scale. In International Conference
+on Learning Representations, 2021.
+Duchi, J. C., Jordan, M. I., Wainwright, M. J., and Wibisono,
+A. Optimal rates for zero-order convex optimization: The
+power of two function evaluations. IEEE Transactions
+on Information Theory, 61(5):2788–2806, 2015.
+9
+
+Zeroth-Order Optimization at the Edge of Stability
+Fang, W., Yu, Z., Jiang, Y., Shi, Y., Jones, C. N., and Zhou,
+Y. Communication-efficient stochastic zeroth-order op-
+timization for federated learning. IEEE Transactions on
+Signal Processing, 70:5058–5073, 2022.
+Foret, P., Kleiner, A., Mobahi, H., and Neyshabur, B.
+Sharpness-aware minimization for efficiently improving
+generalization. In International Conference on Learning
+Representations, 2021.
+Granziol, D., Zohren, S., and Roberts, S. Learning rates as a
+function of batch size: A random matrix theory approach
+to neural network training. Journal of Machine Learning
+Research, 23(173):1–65, 2022.
+He, K., Zhang, X., Ren, S., and Sun, J. Deep residual
+learning for image recognition. In IEEE Conference on
+Computer Vision and Pattern Recognition, 2016.
+Jamieson, K. G., Nowak, R., and Recht, B. Query complex-
+ity of derivative-free optimization. In Advances in Neural
+Information Processing Systems, 2012.
+Karpathy, A. mingpt: A minimal PyTorch re-
+implementation of the OpenAI GPT training, 2020.
+Khalil, H. K. Nonlinear Systems. Prentice Hall, 2002.
+Krein, M. G. and Rutman, M. A. Linear operators leaving
+invariant a cone in a banach space. Uspekhi Matematich-
+eskikh Nauk, 3:3–95, 1948.
+Lee, S. and Jang, C. A new characterization of the edge
+of stability based on a sharpness measure aware of batch
+gradient distribution. In International Conference on
+Learning Representations, 2023.
+Lewkowycz, A., Bahri, Y., Dyer, E., Sohl-Dickstein, J.,
+and Gur-Ari, G. The large learning rate phase of
+deep learning: the catapult mechanism. arXiv preprint
+arXiv:2003.02218, 2020.
+Long, P. M. and Bartlett, P. L. Sharpness-aware minimiza-
+tion and the edge of stability. Journal of Machine Learn-
+ing Research, 25(179):1–20, 2024.
+Ma, C. and Ying, L. On linear stability of SGD and input-
+smoothness of neural networks. In Advances in Neural
+Information Processing Systems, 2021.
+Malladi, S., Gao, T., Nichani, E., Damian, A., Lee, J. D.,
+Chen, D., and Arora, S. Fine-tuning language models
+with just forward passes. In Advances in Neural Informa-
+tion Processing Systems, 2023.
+Muehlebach, M. and Jordan, M. I. Optimization with mo-
+mentum: Dynamical, control-theoretic, and symplectic
+perspectives. Journal of Machine Learning Research, 22
+(73):1–50, 2021.
+Mulayoff, R. and Michaeli, T. Exact mean square linear
+stability analysis for SGD. In Conference on Learning
+Theory, 2024.
+Nesterov, Y. and Spokoiny, V. Random gradient-free mini-
+mization of convex functions. Foundations of Computa-
+tional Mathematics, 17(2):527–566, 2017.
+Qin, Z., Chen, D., Qian, B., Ding, B., Li, Y., and Deng, S.
+Federated full-parameter tuning of billion-sized language
+models with communication cost under 18 kilobytes. In
+International Conference on Machine Learning, 2024.
+Salimans, T., Ho, J., Chen, X., Sidor, S., and Sutskever,
+I. Evolution strategies as a scalable alternative to rein-
+forcement learning. arXiv preprint arXiv:1703.03864,
+2017.
+Shamir, O. An optimal algorithm for bandit and zero-order
+convex optimization with two-point feedback. Journal of
+Machine Learning Research, 18(52):1–11, 2017.
+Song, M. and Yun, C. Trajectory alignment: Understanding
+the edge of stability phenomenon via bifurcation theory.
+In Advances in Neural Information Processing Systems,
+2023.
+Song, M., Baek, B., Ahn, K., and Yun, C. Through the
+river: Understanding the benefit of schedule-free meth-
+ods for language model training. In Advances in Neural
+Information Processing Systems, 2025.
+Velikanov, M., Kuznedelev, D., and Yarotsky, D. A view
+of mini-batch SGD via generating functions: conditions
+of convergence, phase transitions, benefit from negative
+momenta. In International Conference on Learning Rep-
+resentations, 2023.
+Wang, Y., Du, S., Balakrishnan, S., and Singh, A. Stochastic
+zeroth-order optimization in high dimensions. In Interna-
+tional Conference on Artificial Intelligence and Statistics,
+2018.
+Wang, Z., Li, Z., and Li, J. Analyzing sharpness along GD
+trajectory: Progressive sharpening and edge of stability.
+In Advances in Neural Information Processing Systems,
+2022.
+Wu, L., Ma, C., and E, W. How SGD selects the global
+minima in over-parameterized learning: A dynamical
+stability perspective. In Advances in Neural Information
+Processing Systems, 2018.
+Wu, Y. and He, K. Group normalization. In European
+Conference on Computer Vision, 2018.
+Xu, M., Cai, D., Wu, Y., Li, X., and Wang, S. FwdLLM:
+Efficient federated finetuning of large language models
+10
+
+Zeroth-Order Optimization at the Edge of Stability
+with perturbed inferences. In USENIX Annual Technical
+Conference, 2024.
+Yoo, G., Song, M., and Yun, C. Understanding sharpness
+dynamics in NN training with a minimalist example: The
+effects of dataset difficulty, depth, stochasticity, and more.
+In International Conference on Machine Learning, 2025.
+Zhang, L., Li, B., Thekumparampil, K. K., Oh, S., and
+He, N. Dpzero: Private fine-tuning of language models
+without backpropagation. In International Conference on
+Machine Learning, 2024a.
+Zhang, L., Li, B., Thekumparampil, K. K., Oh, S., Muehle-
+bach, M., and He, N. Zeroth-order optimization finds flat
+minima. In Advances in Neural Information Processing
+Systems, 2025a.
+Zhang, Y., Li, P., Hong, J., Li, J., Zhang, Y., Zheng, W.,
+Chen, P.-Y., Lee, J. D., Yin, W., Hong, M., Wang, Z., Liu,
+S., and Chen, T. Revisiting zeroth-order optimization
+for memory-efficient LLM fine-tuning: A benchmark. In
+International Conference on Machine Learning, 2024b.
+Zhang, Y., Chen, C., Li, Z., Ding, T., Wu, C., Kingma, D. P.,
+Ye, Y., Luo, Z.-Q., and Sun, R. Adam-mini: Use fewer
+learning rates to gain more. In International Conference
+on Learning Representations, 2025b.
+Zhu, X., Wang, Z., Wang, X., Zhou, M., and Ge, R. Under-
+standing edge-of-stability training dynamics with a mini-
+malist example. In International Conference on Learning
+Representations, 2023.
+Ziyin, L., Li, B., Galanti, T., and Ueda, M. Type-ii saddles
+and probabilistic stability of stochastic gradient descent.
+arXiv preprint arXiv:2303.13093, 2023.
+11
+
+Zeroth-Order Optimization at the Edge of Stability
+A. Proofs for the mean-square stability analysis of zeroth-order methods
+In this section, we provide the proofs of the mean-square linear stability results in Section 4.2. Our analysis treats zeroth-
+order gradient descent with momentum (ZO-GDM) as the canonical zeroth-order method. The remaining algorithms studied
+in the paper are handled as special cases or extensions: ZO-GD corresponds to the specialization β “ 0, while Frozen
+ZO-Adam is analyzed by modifying the covariance recursion under an additional commutativity assumption.
+The core of the analysis proceeds in two steps. First, we derive an explicit linear recursion for the second-moment quantities
+of the ZO-GDM iterates under the linearized dynamics (Appendix A.1). This recursion induces a linear operator acting
+on a product space of covariance matrices. Second, we characterize mean-square linear stability by analyzing the spectral
+radius of this operator (Appendix A.2). A key technical ingredient is that the operator preserves a natural cone and includes
+a rank-one global coupling term, which allows its spectral radius to be characterized via the Krein–Rutman Theorem.
+We first derive the second-moment recursion for ZO-GDM and express it in operator form. We then develop the spectral
+analysis of the resulting covariance operator and use it to prove Theorem 2. Theorem 1 follows immediately as the special
+case β“ 0, and Theorem 3 is proved by adapting the analogous argument to the frozen preconditioned setting.
+The proof of Theorem 2 is provided in Appendix A.3, and the proof of Theorem 3 is provided in Appendix A.4.
+A.1. Second-moment recursion and covariance operator for ZO-GDM
+In this subsection, we derive the linear recursion governing the second-moment dynamics of ZO-GDM under the linearized
+dynamics. Following Definition 1, we consider applying ZO-GDM to the quadratic objective
+fquadpxq“ 1 2 xJHx,
+where H ľ 0 and H‰ 0.
+Recall that the ZO-GDM updates are given by
+mt`1 “ βmt ` p∇fquadpxtq,
+xt`1 “ xt ´ ηmt`1,
+where βPr0, 1q with initialization m0 “ 0, and p∇fquadpxtq denotes the standard two-point estimator
+p∇fquadpxtq“ fquadpxt ` µutq´ fquadpxt ´ µutq 2µ ut, ut „ Np0, Idq.
+Under the quadratic model, this estimator admits the explicit form
+p∇fquadpxtq“putuJ t qHxt,
+and is unbiased, i.e., Erp∇fquadpxtqs“ Hxt.
+Let H“ U ΛU J with Λ“ diagpλ1, . . . , λdq and orthogonal U . Defining rotated variables ¯xt “ U Jxt, ¯mt “ U Jmt,
+and ¯ut “ U Jut, rotational invariance implies ¯ut „ Np0, Idq i.i.d., and the dynamics in the rotated coordinates take the
+same form with H replaced by Λ. Hence, without loss of generality, we assume H“ Λ in what follows.
+We now state a lemma that reduces the ZO-GDM second-moment dynamics to a linear covariance operator, which will be
+the basis for the spectral analysis in subsequent subsections.
+Lemma 1 (Second-moment recursion and covariance operator for ZO-GDM). Consider ZO-GDM applied to the quadratic
+model fquadpxq“ 1 2 xJΛx with Λ“ diagpλ1, . . . , λdq‰ 0, step size ηą 0, and momentum βPr0, 1q. For each iteration
+t and coordinate i“ 1, . . . , d, define the 2ˆ 2 covariance block
+Wi,t :“
+„ Erx2 i,ts Erηxi,tmi,ts
+Erηxi,tmi,ts Erη2m2 i,ts
+ȷ
+,
+where xt “px1,t, . . . , xd,tqP Rd and mt “pm1,t, . . . , md,tqP Rd. Then the covariance blocks satisfy the recursion
+Wi,t`1 “ AiWi,tAJ i ` η2
+˜
+λ2 i pWi,tq11 `
+dÿ
+j“1
+λ2 j pWj,tq11
+¸
+Q,
+12
+
+Zeroth-Order Optimization at the Edge of Stability
+where
+Ai :“
+„
+1´ ηλi ´β
+ηλi β
+ȷ
+, Q :“
+„
+1 ´1
+´1 1
+ȷ
+.
+Proof of Lemma 1. We consider with the augmented state pxt, ηmtqP R2d, for which the ZO-GDM update can be written
+as
+„
+xt`1
+ηmt`1
+ȷ
+“
+„
+I´ ηutuJ t Λ ´βI
+ηutuJ t Λ βI
+ȷ„
+xt
+ηmt
+ȷ
+.
+To track second moments, define
+Xt :“ ErxtxJ t s, Yt :“ Erη2mtmJ t s, Ct :“ ErηxtmJ t s.
+Using independence of ut from pxt, mtq and applying Lemma 4 (Isserlis’s theorem) to evaluate the Gaussian fourth
+moments, we obtain the following closed recursion:
+Xt`1 “ Xt ´ ηpΛXt ` XtΛq` η2` 2ΛXtΛ` TrpΛXtΛqI ˘ ´ βpCt ` CJ t q` βηpΛCt ` CJ t Λq` β2Yt,
+Yt`1 “ η2` 2ΛXtΛ` TrpΛXtΛqI ˘ ` ηβpΛCt ` CJ t Λq` β2Yt,
+Ct`1 “ ηXtΛ´ η2` 2ΛXtΛ` TrpΛXtΛqI ˘ ` βCt ´ βηpΛCt ` CJ t Λq´ β2Yt.
+Since Λ is diagonal, the coordinates decouple except through the scalar coupling term
+TrpΛXtΛq“
+dÿ
+j“1
+λ2 j pXtqjj .
+Taking diagonal entries, for each coordinate i“ 1, . . . , d, we obtain
+pXt`1qii “p1´ 2ηλi ` 2η2λ2 i qpXtqii ` β2pYtqii ` 2βp´1` ηλiqpCtqii ` η2
+dÿ
+j“1
+λ2 j pXtqjj ,
+pYt`1qii “ 2η2λ2 i pXtqii ` β2pYtqii ` 2βηλipCtqii ` η2
+dÿ
+j“1
+λ2 j pXtqjj ,
+pCt`1qii “pηλi ´ 2η2λ2 i qpXtqii ´ β2pYtqii ` βp1´ 2ηλiqpCtqii ´ η2
+dÿ
+j“1
+λ2 j pXtqjj .
+Recalling that
+pXtqii “ Erx2 i,ts, pYtqii “ Erη2m2 i,ts, pCtqii “ Erηxi,tmi,ts,
+the above relations can be grouped into the 2ˆ 2 covariance block Wi,t defined in the statement of the lemma. A direct
+calculation then gives
+Wi,t`1 “ AiWi,tAJ i ` η2
+˜
+λ2 i pWi,tq11 `
+dÿ
+j“1
+λ2 j pWj,tq11
+¸
+Q,
+with
+Ai :“
+„
+1´ ηλi ´β
+ηλi β
+ȷ
+, Q :“
+„
+1 ´1
+´1 1
+ȷ
+.
+This completes the proof.
+Lemma 1 shows that the ZO-GDM second-moment dynamics are governed by a closed linear recursion over the covariance
+blockstWi,tud i“1. In particular,
+E}xt}2 “
+dÿ
+i“1
+pWi,tq11,
+13
+
+Zeroth-Order Optimization at the Edge of Stability
+so mean-square linear stability is equivalent to uniform boundedness of the quantity řd i“1pWi,tq11 over iterations.
+Collecting the blocks into the product space of 2ˆ 2 symmetric matrices pS2qd, the mapping tWi,tud i“1 ÞÑtWi,t`1ud i“1
+can be viewed as the action of a linear operator T :pS2qd ÑpS2qd, parameterized by the step size η, momentum β, and the
+eigenvalues λ1, . . . , λd. In the next subsection, we analyze the spectral properties of this covariance operator and derive
+explicit conditions under which its spectral radius is smaller than one.
+A.2. Spectral analysis of the covariance operator
+In this subsection, we analyze the spectral properties of the covariance operator induced by the ZO-GDM second-moment
+recursion derived in Lemma 1 (Appendix A.1). That recursion is governed by a linear operator T :pS2qd ÑpS2qd acting
+on the covariance blocks tWi,tud i“1, and in particular controls E}xt}2 “ řd i“1pWi,tq11. We therefore analyze the spectral
+radius of T .
+The operator T preserves the cone pS2 `qd and contains a rank-one coupling term across coordinates, allowing us to invoke
+the Krein–Rutman theorem. The following theorem gives an exact characterization of the spectral radius of T , which forms
+the technical core of the mean-square stability analysis for ZO-GDM.
+Theorem 4 (Spectral characterization of ZO-GDM covariance operator). Let X :“pS2qd and K :“pS2 `qd. Fix η ą 0,
+βPr0, 1q, and λmax “ λ1 ě λ2 ě¨¨¨ě λd ą 0. Define the linear operator T : X Ñ X blockwise by
+pTpWqqi “ AiWiAJ i ` η2
+˜
+λ2 i pWiq11 `
+dÿ
+j“1
+λ2 j pWj q11
+¸
+Q, i“ 1, . . . , d,
+where
+Ai :“
+„
+1´ ηλi ´β
+ηλi β
+ȷ
+, Q :“
+„
+1 ´1
+´1 1
+ȷ
+.
+Define the scalar function
+Spη, βq :“
+dÿ
+i“1
+ηλi
+2p1´ βq
+´
+1´ ηλi 1´β2
+¯ .
+Then the operator T satisfies the following properties.
+(a) (Leading eigenvalue in the cone) The operator T preserves the cone K, i.e., TpKqĎ K. Moreover, T has an eigenvalue
+equal to its spectral radius ρpTq, with an associated eigenvector W ‹ “pW ‹ 1 , . . . , W ‹ d qP Kzt0u satisfying
+ρpTqě η2
+dÿ
+i“1
+λ2 i ą 0 and
+dÿ
+i“1
+pW ‹ i q11 ą 0.
+(b) (Critical case)
+ρpTq“ 1 ðñ ηλmax ă 1´ β2 and Spη, βq“ 1.
+(c) (Subcritical case)
+ρpTqă 1 ðñ ηλmax ă 1´ β2 and Spη, βqă 1.
+Proof of Theorem 4. We work on the product space X :“ pS2qd equipped with the product cone K :“ pS2 `qd and the
+induced partial order ĺ.
+Proof of (a). Let W “pW1, . . . , WdqP K, i.e., Wi ľ 0 for all i“ 1, . . . , d. Then AiWiAJ i ľ 0 and pWiq11 ě 0, sořd
+j“1 λ2 j pWj q11 ě 0. HencepTpWqqi ľ 0 for all i, and therefore TpKqĎ K.
+Since X is finite dimensional and K is a closed, convex, pointed cone with nonempty interior, the Krein–Rutman theorem
+(Lemma 6) implies that T has an eigenvalue equal to its spectral radius ρpTq with a corresponding eigenvector W ‹ P Kzt0u.
+14
+
+Zeroth-Order Optimization at the Edge of Stability
+To lower bound ρpTq, define sQ :“pQ, . . . , QqP Kzt0u. For each i,
+pTpsQqqi “ AiQAJ i ` η2
+˜
+λ2 i `
+dÿ
+j“1
+λ2 j
+¸
+Q ľ η2
+˜ dÿ
+j“1
+λ2 j
+¸
+Q.
+Thus TpsQq ľ c sQ with c :“ η2 řd j“1 λ2 j ą 0. Iterating gives T tpsQq ľ ct sQ for all tě 1. Fixing any norm on X and
+applying Gelfand’s formula, we obtain
+ρpTqě c“ η2
+dÿ
+j“1
+λ2 j .
+Finally, we show ř ipW ‹ i q11 ą 0. IfpW ‹ i q11 “ 0 for all i, then W ‹ i “ “ 0 0 0 yi ‰ with yi ě 0. But then
+ρpTqW ‹ i “pTpW ‹qqi “ AiW ‹ i AJ i “ β2yi Q .
+Note that β2yi Q has the same value at the p1, 1q-entry and p2, 2q-entry. Consequently, ρpTqW ‹ i should have the same value
+at the p1, 1q-entry and p2, 2q-entry. Thus ρpTqyi “ 0, forcing yi “ 0 since ρpTqą 0. Hence W ‹ “ 0, a contradiction.
+This concludes the proof of (a).
+Local-global decomposition. For each i“ 1, . . . , d, we define the local linear map Mi : S2 Ñ S2 by
+MipXq :“ AiXAJ i ` η2λ2 i pXq11Q.
+Define the global coupling scalar function s : X Ñ R by
+spWq :“
+dÿ
+j“1
+η2λ2 j pWj q11.
+Then, the linear operator T : X Ñ X can be decomposed as below:
+pTpWqqi “ MipWiq` spWqQ, i“ 1, . . . , d. (8)
+Note that each linear map Mi is S2 `-preserving, i.e., MipS2 `qĎ S2 `. Define the block-diagonal operator M : X Ñ X and ¯QP K by
+pMpWqqi :“ MipWiq , and sQ :“pQ, . . . , QqP K . (9)
+Then (8) can be written as
+TpWq“ MpWq` spWq sQ .
+Positivity of spW ‹q. Let W ‹ P Kzt0u denote the leading eigenvector of T satisfying TpW ‹q “ ρpTq W ‹ andřd
+i“1pW ‹ i q11 ą 0, which exists by Theorem 4(a). Then, spW ‹q“ řd j“1 η2λ2 j pW ‹ j q11 ą 0.
+Key lemmas. We use the following key lemmas to prove (b) and (c): Lemma 2 and Lemma 3.
+Lemma 2 shows that ρpMiqă 1 if and only if ηλi ă 1´ β2. Moreover, if ηλi ă 1´ β2, then Id´ Mi is invertible,
+pId´ Miq´1pS2 `qĎ S2 `, and Yi :“pId´ Miq´1pQqP S2 ` satisfies
+γi :“pYiq11 “ 1` β 2ηλip1´ β2 ´ ηλiq .
+Lemma 3 gives a scaled infeasibility statement: for any cą 0, if ρpcMiqě 1, then for every αą 0, there does not exist
+W ľ 0 such that
+pId´ cMiqpWq ľ αQ.
+15
+
+Zeroth-Order Optimization at the Edge of Stability
+Proof of (b). We prove
+ρpTq“ 1 ðñ ηλmax ă 1´ β2 and Spη, βq“ 1 .
+( ùñ ) Assume ρpTq“ 1. By Theorem 4(a), there exists W ‹ P Kzt0u with TpW ‹q“ W ‹. Let s‹ :“ spW ‹q. Then,
+s‹ ą 0 by the positivity of spW ‹q. From (8), for each i,
+W ‹ i “pTpW ‹qqi “ MipW ‹ i q` s‹Q,
+or equivalently,
+pId´ MiqpW ‹ i q“ s‹Q.
+Since s‹ ą 0, Lemma 3 implies ρpMiqă 1 for every i, and by Lemma 2(a),
+ηλi ă 1´ β2 for all i, hence ηλmax ă 1´ β2.
+By Lemma 2(b), Id´ Mi is invertible andpId´ Miq´1 is S2 `-preserving, so
+W ‹ i “ s‹pId´ Miq´1Q“ s‹Yi,
+where Yi ľ 0 and γi :“pYiq11 is given by Lemma 2(c). Taking p1, 1q-entries and plugging into the definition of s‹, we get
+s‹ “
+dÿ
+i“1
+η2λ2 i pW ‹ i q11 “
+dÿ
+i“1
+η2λ2 i γi s‹.
+Cancelling s‹ ą 0 gives
+1“
+dÿ
+i“1
+η2λ2 i γi.
+Using Lemma 2(c),
+η2λ2 i γi “ η2λ2 i ¨ 1` β 2ηλip1´ β2 ´ ηλiq “ ηλi 2p1´ βq ´ 1´ ηλi 1´β2 ¯ .
+Therefore řd i“1 η2λ2 i γi “ Spη, βq, and thus we conclude that Spη, βq“ 1.
+(ðù ) Assume ηλmax ă 1´ β2 and Spη, βq“ 1. Then, ηλi ă 1´ β2 for all i.
+By Lemma 2(b), the matrices Yi :“pId´ Miq´1Q are well-defined and satisfy Yi ľ 0. Set Y :“pY1, . . . , YdqP Kzt0u.
+For each i,pId´ MiqpYiq“ Q, i.e. MipYiq“ Yi ´ Q. Moreover,
+spYq“
+dÿ
+i“1
+η2λ2 i pYiq11 “
+dÿ
+i“1
+η2λ2 i γi “ Spη, βq“ 1.
+Thus (8) gives, for each i,
+pTpYqqi “ MipYiq` spYqQ“pYi ´ Qq` Q“ Yi,
+so TpYq“ Y . Hence, 1 is an eigenvalue of T with eigenvector Y , and therefore ρpTqě 1. Set r :“ ρpTqě 1.
+By Theorem 4(a), there exists W ‹ P Kzt0u with TpW ‹q“ ρpTqW ‹. Set s‹ :“ spW ‹q. By the positivity of spW ‹q, we
+have s‹ ą 0. From TpW ‹q“ rW ‹ and the decomposition (9), we obtain
+rW ‹ “ MpW ‹q` s‹ sQ, so that ´ Id´ 1 r M ¯ W ‹ “ s‹ r sQ.
+Since ηλmax ă 1´ β2, Lemma 2(a) implies that ρpMiqă 1 for all i. Consequently, ρpMq“ maxi ρpMiqă 1. Since
+rě 1, we have ρp 1 r Mqď ρpMqă 1 and hence Id´ 1 r M is invertible with
+´
+Id´ 1 r M ¯´1 “ 8ÿ
+k“0
+´
+1
+r M
+¯k
+,
+16
+
+Zeroth-Order Optimization at the Edge of Stability
+where the series converges in operator norm. Applying this inverse gives
+W ‹ “ s‹ r ´ Id´ 1 r M ¯´1 sQ.
+Applying the nonnegative functional sp¨q to both sides and cancelling s‹ ą 0, we obtain
+r“ s
+´´
+Id´ 1 r M ¯´1 sQ ¯ . (10)
+Using the Neumann series, we have
+s
+´´
+Id´ 1 r M ¯´1 sQ ¯ “ 8ÿ
+k“0
+r´k spMkpsQqqď
+8ÿ
+k“0
+spMkpsQqq“ s ´ pId´ Mq´1 sQ ¯ .
+Because M is block-diagonal,pId´ Mq´1 is block-diagonal with blockspId´ Miq´1, and thus
+pId´ Mq´1 sQ“ ` pId´ M1q´1Q, . . . ,pId´ Mdq´1Q ˘ “pY1, . . . , Ydq“ Y .
+Therefore,
+s
+´
+pId´ Mq´1 sQ ¯ “ spYq“ Spη, βq“ 1.
+Combining with (10) shows that rď 1, and hence r“ 1. Therefore, we conclude ρpTq“ 1. This finishes the proof of (b).
+Proof of (c). We prove
+ρpTqă 1 ðñ ηλmax ă 1´ β2 and Spη, βqă 1.
+( ùñ ) Assume ρpTqă 1. Set r :“ ρpTqă 1. By Theorem 4(a), there exists W ‹ P Kzt0u with TpW ‹q“ rW ‹. Let
+s‹ :“ spW ‹q. Then, s‹ ą 0 by the positivity of spW ‹q. From (8), for each i,
+rW ‹ i “pTpW ‹qqi “ MipW ‹ i q` s‹Q,
+or equivalently,
+pId´ 1 r MiqpW ‹ i q“ s‹ r Q.
+Since s‹ r ą 0 and W ‹ i ľ 0, Lemma 3 with c“ 1 r implies ρp 1 r Miqă 1, and thus ρpMiqă ră 1. By Lemma 2(a),
+ηλi ă 1´ β2 for all i, hence ηλmax ă 1´ β2.
+Moreover, since ρp 1 r Miqă 1 and Mi is S2 `-preserving,
+´
+Id´ 1 r Mi
+¯´1
+“
+8ÿ
+k“0
+´
+1
+r Mi
+¯k
+is well defined and S2 `-preserving. Therefore
+W ‹ i “ s‹ r ´ Id´ 1 r Mi ¯´1 Q ľ 0.
+Since this holds for every block, ρp 1 r Mqă 1, so the block inverse ` Id´ 1 r M ˘´1 is well defined. Applying sp¨q to the
+identity W ‹ “ s‹ r pId´ 1 r Mq´1 sQ gives, after cancelling s‹ ą 0,
+r“ s
+´´
+Id´ 1 r M ¯´1 sQ ¯ . (11)
+17
+
+Zeroth-Order Optimization at the Edge of Stability
+Using the Neumann series and ră 1, we have
+s
+´´
+Id´ 1 r M ¯´1 sQ ¯ “ 8ÿ
+k“0
+r´k spMkpsQqqě
+8ÿ
+k“0
+spMkpsQqq“ s ´ pId´ Mq´1 sQ ¯ .
+Then from (11), we obtain
+rě s
+´
+pId´ Mq´1 sQ ¯ “ spYq“ Spη, βq.
+Since ră 1, we conclude that Spη, βqă 1.
+( ðù ) Assume ηλmax ă 1´ β2 and Spη, βqă 1. We prove ρpTqă 1 by contradiction. Assume ρpTqě 1, and let
+W ‹ P Kzt0u satisfy TpW ‹q“ rW ‹ with r :“ ρpTqě 1. Set s‹ :“ spW ‹qą 0. Recall from (9) that
+rW ‹ “ MpW ‹q` s‹ sQ, so ´ Id´ 1 r M ¯ W ‹ “ s‹ r sQ.
+Since ηλmax ă 1´ β2, Lemma 2(a) gives ρpMiq ă 1 for all i, hence ρpMq ă 1. Since r ě 1, we have ρp 1 r Mq ď
+ρpMqă 1, so Id´ 1 r M is invertible and
+W ‹ “ s‹ r ´ Id´ 1 r M ¯´1 sQ.
+Applying sp¨q and cancelling s‹ ą 0, we obtain
+r“ s
+´´
+Id´ 1 r M ¯´1 sQ ¯ . (12)
+Using the Neumann series, we have
+s
+´´
+Id´ 1 r M ¯´1 sQ ¯ “ 8ÿ
+k“0
+r´k spMkpsQqqď
+8ÿ
+k“0
+spMkpsQqq“ s ´ pId´ Mq´1 sQ ¯ .
+As in (b),pId´ Mq´1 sQ“ Y “pY1, . . . , Ydq, hence
+s
+´
+pId´ Mq´1 sQ ¯ “ spYq“ Spη, βq.
+Combining with (12) yields
+rď Spη, βqă 1,
+contradicting rě 1. Therefore ρpTqă 1. This completes the proof of (c).
+Lemma 2. For each i“ 1, . . . , d, define Mi : S2 Ñ S2 by
+MipXq :“ AiXAJ i ` η2λ2 i pXq11Q ,
+where Ai and Q are defined in Theorem 4, and ηλi ą 0. It holds that
+(a) ρpMiqă 1 if and only if ηλi ă 1´ β2
+(b) If ηλi ă 1´ β2, then Id´ Mi is invertible andpId´ Miq´1 is S2 `-preserving.
+(c) If ηλi ă 1´ β2, define Yi :“pId´ Miq´1QP S2 ` and γi :“pYiq11. Then,
+γi “ 1` β 2ηλip1´ β2 ´ ηλiq .
+18
+
+Zeroth-Order Optimization at the Edge of Stability
+Proof of Lemma 2. Let Φ : S2 Ñ R3 be the isomorphism defined by
+Φ
+ˆ„
+x11 x12
+x12 x22
+ȷ˙
+“
+»
+–
+x11
+x12
+x22
+fi
+fl P R3.
+Then, for each i“ 1, . . . , d, it holds that
+@XP S2 ΦpMipXqq“ KiΦpXq, Ki “
+»
+–
+1´ 2ηλi ` 2η2λ2 i 2βp´1` ηλiq β2
+ηλi ´ 2η2λ2 i βp1´ 2ηλiq ´β2
+2η2λ2 i 2βηλi β2
+fi
+fl .
+Since Φ is an isomorphism, ρpMiq“ ρpKiq.
+Proof of (a): Exact condition for ρpKiqă 1. Fix i and write x :“ ηλi ą 0 and b :“ βPr0, 1q. Under the identification
+Φ : S2 Ñ R3 in the proof, ρpMiq“ ρpKiq. Let pprq :“ detprI´ Kiq“ r3 ` c1r2 ` c2r` c3. A direct expansion gives
+c1 “´b2 ` 2bx´ b´ 2x2 ` 2x´ 1, (13)
+c2 “ b
+`
+b2 ` b` 1´ 2pb` 1qx ˘ , (14)
+c3 “´b3. (15)
+We use the strict Jury criterion for a monic cubic with real coefficients: all roots of pprq“ r3 ` c1r2 ` c2r` c3 lie in
+t|r|ă 1u if and only if
+|c3|ă 1, pp1qą 0, 1´ c1 ` c2 ´ c3 ą 0, 1´ c2 3 ą|c2 ´ c1c3| . (16)
+We verify (16) and show that they hold if and only if 0ă xă 1´ b2.
+First, from (15),|c3|“ b3 ă 1, so the first condition in (16) holds.
+A direct substitution of (13),(14), and (15) gives
+pp1q“ 1` c1 ` c2 ` c3 “ 2xp1´ b2 ´ xq.
+Hence,
+pp1qą 0 ðñ 0ă xă 1´ b2.
+Next, substitution of (13),(14), and (15) gives
+1´ c1 ` c2 ´ c3 “ 2ϕpxq, ϕpxq :“ x2 ´pb` 1q2x`pb3 ` b2 ` b` 1q.
+The discriminant of ϕ is
+∆ϕ “pb` 1q4 ´ 4pb3 ` b2 ` b` 1q“ b4 ` 2b2 ´ 3“pb2 ´ 1qpb2 ` 3qă 0 pbPr0, 1qq,
+and ϕ has leading coefficient 1ą 0, so ϕpxqą 0 for all xP R. Therefore 1´ c1 ` c2 ´ c3 ą 0 holds automatically for all
+xě 0 and bPr0, 1q.
+It remains to check the last condition in (16): 1´ c2 3 ą|c2 ´ c1c3|. Again, by substituting (13),(14), and (15) gives
+p1´ c2 3q´pc2 ´ c1c3q“ 2b3x2 ` 2bp1` bq2p1´ bqx`p1` bqp1´ bq3p1` b` b2qą 0
+for any xě 0 and bPr0, 1q. Moreover, we have
+p1´ c2 3q`pc2 ´ c1c3q“´2b3x2 ´ 2bp1` bq2p1´ bqx`p1` bqp1´ bqp1` b2qp1` b` b2q :“ ψpxq .
+19
+
+Zeroth-Order Optimization at the Edge of Stability
+If b“ 0, then ψpxq“ 1ą 0. Otherwise, bPp0, 1q, and ψ is a concave quadratic and has a global maximum at xă 0.
+Hence, if 0ă xă 1´ b2, then ψpxqą mintψp0q, ψp1´ b2qu. Note that
+ψp0q“p1` bqp1´ bqp1` b2qp1` b` b2qą 0 ,
+ψp1´ b2q“p1` bqp1´ bqp1` b` b2q “ p1´ bq2 ` 2b3‰ ą 0 ,
+for all bPp0, 1q. Therefore we conclude that all the strict Jury conditions (16) hold if and only if 0ă xă 1´ b2. Putting
+x“ ηλi and b“ β, we conclude
+ρpMiq“ ρpKiqă 1 ðñ 0ă ηλi ă 1´ β2,
+which proves part (a).
+Proof of (b). Assume that ηλi ă 1´ β2. Note that
+detpI´ Kiq“ 2ηλip1´ β2 ´ ηλiq‰ 0,
+so I´ Ki is invertible, and hence Id´ Mi is also invertible. According to (a), we have ρpMiqă 1, and
+pId´ Miq´1 “
+8ÿ
+k“0
+Mk i
+converges in operator norm (finite-dimensional Neumann series). Since MipS2 `qĎ S2 `, we have Mk i pS2 `qĎ S2 ` for any
+kě 0, and thus
+pId´ Miq´1pS2 `qĎ S2 `.
+This concludes the proof of (b).
+Proof of (c). Assume that ηλi ă 1´ β2 and define Yi :“pId´ Miq´1QP S2 `. In R3, we have
+»
+–
+pYiq11
+pYiq12
+pYiq22
+fi
+fl “ ΦpYiq“pI´ Kiq´1ΦpQq“
+»
+–
+2ηλi ´ 2η2λ2 i 2βp1´ ηλiq ´β2
+´ηλi ` 2η2λ2 i 1´ βp1´ 2ηλiq β2
+´2η2λ2 i ´2βηλi 1´ β2
+fi
+fl
+´1 »
+–
+1
+´1
+1
+fi
+fl .
+Solving this 3ˆ 3 system and extracting the first coordinate gives
+γi :“pYiq11 “ 1` β 2ηλip1´ β2 ´ ηλiq .
+This concludes the proof of (c).
+Lemma 3. Let Mi denote a linear map defined as in Lemma 2. For any cą 0, if ρpcMiqě 1, then for every αą 0, there
+does not exist W ľ 0 such that
+pId´ cMiqpWq ľ αQ ,
+where Q is defined in Theorem 4.
+Proof of Lemma 3. Define Ni :“ cMi. Since Mi is S2 `-preserving, so is Ni. Hence its adjoint N ˚ i preserves the dual cone,
+which is again S2 `. Since S2 ` Ă S2 is a closed, convex, pointed cone with nonempty interior, the Krein–Rutman Theorem
+(see also Lemma 6) implies that there exists Y ľ 0 with Y ‰ 0 such that
+N ˚ i pYq“ ρpNiqY .
+Define Li :“ Id´ Ni. Then, its adjoint L˚ i “ Id´ N ˚ i satisfies
+L˚ i pYq“p1´ ρpNiqqY ĺ 0,
+20
+
+Zeroth-Order Optimization at the Edge of Stability
+since ρpNiqě 1. Since Y ľ 0 and Q ľ 0, we havexY , Qyě 0.
+Now, we show thatxY , Qyą 0. Assume the contrary thatxY , Qy“ 0. Then,
+xY , Qy“ TrpY Qq“ TrpY 1{2QY 1{2q“ 0.
+Since Y 1{2QY 1{2 ľ 0 and TrpY 1{2QY 1{2q “ 0, we have Y 1{2QY 1{2 “ 0 and thus QY “ 0. Note that Q ““
+1 ´1
+‰J“ 1 ´1 ‰ has null space NullpQq“ spanp “ 1 1 ‰J q. Since QY “ 0 and Y ‰ 0, we have
+RangepYqĎ NullpQq“ span
+ˆ„
+1
+1
+ȷ˙
+, and hence Y “ a
+„
+1
+1
+ȷ“
+1 1
+‰
+“ a
+„
+1 1
+1 1
+ȷ
+for some aą 0.
+Then, it holds that
+N ˚ i pYq“ cAJ i Y Ai ` cη2λ2 i xY , Qy
+„
+1 0
+0 0
+ȷ
+“ cAJ i Y Ai
+“ ca
+ˆ
+AJ i
+„
+1
+1
+ȷ˙ˆ
+AJ i
+„
+1
+1
+ȷ˙J
+“ ca
+„
+1 0
+0 0
+ȷ
+However,
+ca
+„
+1 0
+0 0
+ȷ
+“ N ˚ i pYq“ ρpNiqY “ ρpNiqa
+„
+1 1
+1 1
+ȷ
+gives a contradiction. Hence,xY , Qyą 0.
+Finally, assume for contradiction that there exists W ľ 0 such that
+pId´ cMiqpWq ľ αQ.
+Then,
+xY ,pId´ cMiqpWqyě αxY , Qyą 0.
+However, since W ľ 0 and L˚ i pYq ĺ 0, it holds that
+xY ,pId´ cMiqpWqy“xpId´ cM˚ i qpYq, Wy“xL˚ i pYq, Wyď 0,
+a contradiction. This concludes the proof of Lemma 3.
+A.3. Proof of Theorem 2
+We prove Theorem 2 by characterizing mean-square linear stability of the linearized ZO-GDM dynamics. Specifically, if
+ηλmaxpHqă 1´ β2 and
+dÿ
+i“1
+ηλi
+2p1´ βq
+´
+1´ ηλi 1´β2
+¯ ă 1, (17)
+then the linearized dynamics is mean-square stable. Conversely, mean-square linear stability implies
+ηλmaxpHqă 1´ β2 and
+dÿ
+i“1
+ηλi
+2p1´ βq
+´
+1´ ηλi 1´β2
+¯ ď 1. (18)
+21
+
+Zeroth-Order Optimization at the Edge of Stability
+By definition, the mean-square critical step size η‹ ms is therefore the unique ηą 0 satisfying
+ηλmaxpHqă 1´ β2 and
+dÿ
+i“1
+ηλi
+2p1´ βq
+´
+1´ ηλi 1´β2
+¯ “ 1. (19)
+Moreover, η‹ ms obeys the bounds
+2p1´ βq
+TrpHq` 2λmax pHq 1`β ď η‹ ms ď 2p1´ βq TrpHq . (20)
+Proof of Theorem 2. Without loss of generality, we assume x‹ “ 0 and diagonalize the Hessian as H “ Λ “
+diagpλ1, . . . , λdq with λ1 ě¨¨¨ě λd ě 0.
+By Lemma 1, the covariance blocks evolve according to TpW1,t, . . . , Wd,tq“pW1,t`1, . . . , Wd,t`1q, and
+E}xt}2 “
+dÿ
+i“1
+pWi,tq11.
+Thus mean-square linear stability is equivalent to uniform boundedness of řd i“1pWi,tq11 over time, for every initialization.
+Reduction to strictly positive eigenvalues. Let P :“ti : λi ą 0u and Z :“ti : λi “ 0u. The coordinates indexed by P
+form an autonomous subsystem. Define the restricted operator TP :pS2q|P| ÑpS2q|P| by
+pTP pWqqi “ AiWiAJ i ` η2
+´
+λ2 i pWiq11 ` ÿ
+jPP
+λ2 j pWj q11
+¯
+Q, iP P. (21)
+Since all λi ą 0 for iP P , Theorem 4 applies directly to TP . In particular,
+ρpTP qă 1 ðñ ηλmaxpHqă 1´ β2 and ÿ
+iPP
+ηλi
+2p1´ βq
+´
+1´ ηλi 1´β2
+¯ ă 1,
+with the corresponding statement for ρpTP qď 1.
+It therefore suffices to relate ρpTP q to uniform boundedness of řd i“1pWi,tq11 over time, for every initialization. In particular,
+it suffices to prove that:
+ρpTP qă 1 ùñ sup
+tě0
+dÿ
+i“1
+pWi,tq11 ă8 for every initialization,
+and
+sup
+tě0
+dÿ
+i“1
+pWi,tq11 ă8 for every initialization ùñ ρpTP qď 1 .
+(i) Proof of psuptě0
+řd
+i“1pWi,tq11 ă8 for every initializationñ ρpTP qď 1q. We prove the contrapositive: if ρpTP qą 1,
+then there exists an initialization for which řd i“1pWi,tq11 is unbounded. Assume ρpTP qą 1 and set r :“ ρpTP q. Recall
+that by Theorem 4(a), there exists W ‹ P KP zt0u such that
+TP pW ‹q“ rW ‹ and ÿ
+iPP
+pW ‹ i q11 ą 0 . (22)
+Extend W ‹ to ĎW ‹ P K by setting pĎW ‹qi “ W ‹ i for i P P and pĎW ‹qi “ 0 for i P Z. Since the P -subsystem is
+autonomous, by (22) it holds that
+pT tpĎW ‹qqi “ rt W ‹ i
+22
+
+Zeroth-Order Optimization at the Edge of Stability
+for all tě 0 and coordinate iP P . Consequently, we have
+T tpĎW ‹q ľ rt ĎW ‹ (23)
+for all tě 0.
+Initialize m0 “ 0 and x0 “px0,0, x1,0, . . . , xd,0qP Rd such that
+Wi,0 “
+„x2 i,0 0
+0 0
+ȷ
+, x2 i,0 :“pĎW ‹ i q11.
+Denote s0 :“ řd i“1 η2λ2 i pWi,0q11 “ ř iPP η2λ2 i pW ‹ i q11. Note that s0 ą 0 by (22). Moreover, it holds that
+Wi,1 “ AiWi,0AJ i ` η2λ2 i pWi,0q11Q` s0Q ľ s0Q, i“ 1, . . . , d.
+Equivalently,
+W1 ľ s0 sQ, sQ :“pQ, . . . , QqP K. (24)
+Since ĎW ‹ P K and each block Q is positive definite on its support, there exists αą 0 such that
+α ĎW ‹ ĺ sQ. (25)
+Combining (24) and (25), we have
+W1 ľ s0α ĎW ‹.
+Applying T t´1 and using positivity and linearity of T with (23), we obtain for all tě 1,
+Wt “ T t´1pW1q ľ s0α T t´1pĎW ‹q ľ s0α rt´1 ĎW ‹.
+Define ℓpWq :“ řd i“1pWiq11, which is monotone on K. Applying ℓ gives
+dÿ
+i“1
+pWi,tq11 ě s0α rt´1
+dÿ
+i“1
+pĎW ‹ i q11 ÝÝÝÑ tÑ8 8,
+since rą 1. Thus, when ρpTP qą 1, boundedness of řd i“1pWi,tq11 fails for the constructed initialization. This proves the
+contrapositive, and therefore ρpTP qď 1 whenever řd i“1pWi,tq11 is bounded for all initializations.
+(ii) Proof of pρpTP q ă 1 ñ suptě0
+řd
+i“1pWi,tq11 ă 8 for every initializationq. Assume ρpTP q ă 1. Fix any initial
+conditionpWi,0qiPrds P K and letpWi,tqiPrds :“ T tpW1,0, . . . , Wd,0q. Define the coupling scalar
+st :“
+dÿ
+j“1
+λ2 j pWj,tq11 “ ÿ
+jPP
+λ2 j pWj,tq11.
+Then the P -coordinates evolve autonomously according to (21) with initial conditionpWi,0qiPP , hence
+pWi,tqiPP “ T t P ` pWi,0qiPP ˘ .
+Since ρpTP qă 1, there exist Că8 and ρPp0, 1q such that
+ÿ
+iPP
+}Wi,t}ď Cρt ÿ
+iPP
+}Wi,0}, @ tě 0, (26)
+and in particular st ď λ2 max ř iPP }Wi,t} is summable:
+8ÿ
+t“0
+st ă8. (27)
+23
+
+Zeroth-Order Optimization at the Edge of Stability
+For iP Z, we have λi “ 0 and Ai “ A0 :“
+„
+1 ´β
+0 β
+ȷ
+, so
+Wi,t`1 “ A0Wi,tAJ 0 ` η2stQ.
+Unrolling gives
+Wi,t “ At 0Wi,0pAJ 0 qt ` η2
+t´1ÿ
+k“0
+At´1´k 0 pskQqpAJ 0 qt´1´k. (28)
+Since βPr0, 1q, suptě0 }At 0}ă8 and suprě0 }Ar 0QpAJ 0 qr }ă8. Combining these bounds with (27) and (28) yields
+suptě0 }Wi,t}ă8 for each iP Z. Together with (26) and finiteness of Z, we obtain suptě0 }T tpW1,0, . . . , Wd,0q}ă8
+for every initial condition. Therefore, suptě0
+řd
+i“1pWi,tq11 is bounded for all initializations.
+This proves the explicit mean-square stability conditions (17) and (18).
+Critical step size and bounds. Define
+Spη, βq :“
+dÿ
+i“1
+ηλi
+2p1´ βq
+´
+1´ ηλi 1´β2
+¯ .
+On ηP
+´
+0, 1´β2 λmax pHq ¯ , each summand is strictly increasing in η, hence so is Spη, βq. Therefore η‹ ms is the unique ηą 0
+satisfying (19).
+For the upper bound in (20), using 1´ η‹ ms λi 1´β2 ď 1 gives
+1“
+dÿ
+i“1
+η‹ msλi
+2p1´ βq
+´
+1´ η‹ms λi 1´β2
+¯ ě
+dÿ
+i“1
+η‹ msλi
+2p1´ βq “ η‹ ms TrpHq 2p1´ βq ,
+so η‹ ms ď 2p1´βq TrpHq .
+For the lower bound, since λi ď λmaxpHq,
+1´ η‹ msλi
+1´ β2 ě 1´ η‹ msλmaxpHq 1´ β2 ,
+and hence
+1“
+dÿ
+i“1
+η‹ msλi
+2p1´ βq
+´
+1´ η‹ms λi 1´β2
+¯ ď η‹ ms TrpHq
+2p1´ βq
+´
+1´ η‹ms λmax pHq 1´β2
+¯ .
+Rearranging, we obtain
+η‹ ms ě 2p1´ βq TrpHq` 2λmax pHq 1`β ,
+which completes the proof.
+A.4. Proof of Theorem 3
+We prove Theorem 3 by characterizing mean-square linear stability of the linearized Frozen ZO-Adam dynamics. Specifically,
+if We prove the following implication for mean-square stability: if
+ηλmaxpP ´1Hqă 1` β1 and
+dÿ
+i“1
+η˜λi
+2
+´
+1´ η˜λi 1`β1
+¯ ă 1,
+24
+
+Zeroth-Order Optimization at the Edge of Stability
+then the linearized dynamics of frozen ZO-Adam is mean-square linearly stable. Conversely, if the linearized dynamics is
+mean-square linearly stable, then
+ηλmaxpP ´1Hqă 1` β1 and
+dÿ
+i“1
+η˜λi
+2
+´
+1´ η˜λi 1`β1
+¯ ď 1.
+By definition of the mean-square critical step size η‹ ms, it follows that η‹ ms is the unique ηą 0 satisfying
+ηλmaxpP ´1Hqă 1` β1 and
+dÿ
+i“1
+η˜λi
+2
+´
+1´ η˜λi 1`β1
+¯ “ 1.
+Moreover, η‹ ms satisfies
+2
+TrpP ´1Hq` 2λmax pP ´1 Hq 1`β1 ď η‹ ms ď 2 TrpP ´1Hq .
+Why the commutativity assumption P H“ HP is needed. The mean-square analysis for ZO methods closes on the
+coordinatewise 2ˆ 2 covariance blocks only after rotating to a basis where the quadratic is diagonal: the global coupling
+term is TrpHXtHq“ ř i λ2 i pXtqii, and this structure is what yields the rank-one coupling operator in Theorem 4. For
+frozen ZO-Adam, the update involves both H and the fixed preconditioner P ´1; to reduce the dynamics to independent
+eigencoordinates with a single scalar coupling, we need a basis that diagonalizes H and P simultaneously. The condition
+P H“ HP (with P ą 0 and H ľ 0) guarantees such a simultaneous orthogonal diagonalization, so that the recursion
+depends only on the eigenvalues t˜λiu of P ´1H and matches the ZO-GDM covariance-operator form after a change of
+variables. Without commutativity, P ´1{2HP ´1{2 need not be diagonalizable in the same basis as the random rank-one
+factor, and the diagonal-block closure used in Theorem 4 generally fails.
+Proof of Theorem 3. We assume x‹ “ 0 without loss of generality, so fpxq“ 1 2 xJHx and p∇fpxtq“ utuJ t Hxt with
+ut „ Np0, Iq i.i.d. Frozen ZO-Adam is
+mt`1 “ β1mt `p1´ β1q utuJ t Hxt, (29)
+xt`1 “ xt ´ η P ´1mt`1. (30)
+Preconditioned coordinates. Define ˜η :“p1´ β1qη and the change of variables
+˜xt :“ P 1{2xt, ˜mt :“ P ´1{2mt, ˜H :“ P ´1{2HP ´1{2.
+Multiplying (29) by P ´1{2 and (30) by P 1{2 gives
+˜mt`1 “ β1 ˜mt `p1´ β1q P ´1{2utuJ t P 1{2 ˜H ˜xt,
+˜xt`1 “ ˜xt ´ η ˜mt`1 “ ˜xt ´ ˜η ˆmt`1,
+where we introduced the scaled momentum ˆmt :“ ˜mt{p1´ β1q, so that
+ˆmt`1 “ β1 ˆmt ` P ´1{2utuJ t P 1{2 ˜H ˜xt, ˜xt`1 “ ˜xt ´ ˜η ˆmt`1. (31)
+The linear mappxt, mtqØp ˜xt, ˆmtq is invertible, hence supt E}xt}2 ă8 is equivalent to supt E} ˜xt}2 ă8.
+Simultaneous diagonalization. Since P H“ HP with P ą 0 and H ľ 0 symmetric, there exists an orthogonal U and
+diagonal matrices Σ“ diagpσ1, . . . , σdq with σi ą 0 and Λ“ diagpλ1, . . . , λdq with λi ě 0 such that
+P “ U ΣU J, H“ U ΛU J.
+Consequently,
+˜H“ P ´1{2HP ´1{2 “ U diag ´ λ1 σ1 , . . . , λd σd ¯ U J “: U ˜ΛU J,
+so ˜λi :“ λi{σi are the eigenvalues of P ´1H.
+Let ¯xt :“ U J ˜xt, ¯mt :“ U J ˆmt, and ¯ut :“ U Jut. Then ¯ut „ Np0, Iq i.i.d., and (31) becomes
+¯mt`1 “ β1 ¯mt ` Σ´1{2 ¯ut ¯uJ t Σ1{2 ˜Λ ¯xt, ¯xt`1 “ ¯xt ´ ˜η ¯mt`1.
+Since} ˜xt}“} ¯xt} and E}xt}2 ď λminpPq´1E} ˜xt}2, it suffices to analyze mean-square boundedness of ¯xt.
+25
+
+Zeroth-Order Optimization at the Edge of Stability
+Second-moment recursion and covariance operator. Define
+Xt :“ Er ¯xt ¯xJ t s, Yt :“ Er˜η 2 ¯mt ¯mJ t s, Ct :“ Er˜η ¯xt ¯mJ t s.
+Applying Lemma 5 with P “ Σ and using independence of ¯ut from p ¯xt, ¯mtq yields a closed recursion on the diagonal
+entries. Equivalently, for each i, define the diagonal 2ˆ 2 covariance block
+Wi,t :“
+„
+pXtqii pCtqii
+pCtqii pYtqii
+ȷ
+P S2 `.
+Let X :“pS2qd and K :“pS2 `qd. Then there exists a linear operator Tadam : X Ñ X such that
+pW1,t`1, . . . , Wd,t`1q“ TadampW1,t, . . . , Wd,tq,
+and Tadam is exactly the operator in Theorem 5, i.e., for W “pW1, . . . , WdqP X ,
+pTadampWqqi “ AiWiAJ i ` ˜η 2
+˜
+˜λ2 i pWiq11 ` σ´1 i
+dÿ
+j“1
+σj ˜λ2 j pWj q11
+¸
+Q,
+where
+Ai :“
+„
+1´ ˜η ˜λi ´β1
+˜η ˜λi β1
+ȷ
+, Q :“
+„
+1 ´1
+´1 1
+ȷ
+.
+Moreover,
+E} ¯xt}2 “ TrpXtq“
+dÿ
+i“1
+pWi,tq11,
+so mean-square stability reduces to boundedness of ř ipWi,tq11.
+In Theorem 5, we show that the analogous statement to Theorem 4 also holds for Tadam. Hence, the remainder of the proof
+follows by the same argument as Theorem 2. After reduction to strictly positive eigenvalues as in as Theorem 2 and applying
+Theorem 5, we obtain that: if
+ηλmaxpP ´1Hqă 1` β1 and
+dÿ
+i“1
+η˜λi
+2
+´
+1´ η˜λi 1`β1
+¯ ă 1,
+then the linearized dynamics of frozen ZO-Adam is mean-square linearly stable. Conversely, if the linearized dynamics is
+mean-square linearly stable, then
+ηλmaxpP ´1Hqă 1` β1 and
+dÿ
+i“1
+η˜λi
+2
+´
+1´ η˜λi 1`β1
+¯ ď 1.
+Hence, the mean-square critical step size η‹ ms is the unique ηą 0 satisfying
+η ˜λmax ă 1` β1,
+dÿ
+i“1
+η˜λi
+2
+´
+1´ η˜λi 1`β1
+¯ “ 1,
+since the left-hand side is strictly increasing in η on
+´
+0, 1`β1 ˜λmax
+¯
+.
+Bounds on η‹ ms. At η“ η‹ ms,
+1“
+dÿ
+i“1
+η‹ ms ˜λi
+2
+´
+1´ η‹ ms ˜λi 1`β1
+¯ ě
+dÿ
+i“1
+η‹ ms ˜λi
+2 “ η‹ ms TrpP ´1Hq 2 ,
+26
+
+Zeroth-Order Optimization at the Edge of Stability
+which gives η‹ ms ď 2 TrpP ´1 Hq. For the lower bound, use ˜λi ď ˜λmax to get
+1´ η‹ ms ˜λi
+1` β1
+ě 1´ η‹ ms ˜λmax
+1` β1
+,
+hence
+1“
+dÿ
+i“1
+η‹ ms ˜λi
+2
+´
+1´ η‹ms ˜λi 1`β1
+¯ ď η‹ ms TrpP ´1Hq
+2
+´
+1´ η‹ms ˜λmax 1`β1
+¯ .
+Rearranging, we obtain
+η‹ ms ě 2 TrpP ´1Hq` 2˜λmax 1`β1 .
+A.5. Spectral analysis of Frozen ZO-Adam covariance operator
+Theorem 5 (Spectral characterization of the frozen ZO-Adam covariance operator). Assume P ą 0 and H ľ 0 are
+symmetric and commute: P H “ HP . Let ˜λ1 ě ¨¨¨ ě ˜λd ą 0 be the eigenvalues of P ´1H. Fix η ą 0 and
+β1 P r0, 1q, and define ˜η :“ p1´ β1qη. Let X :“ pS2qd and K :“ pS2 `qd. In the simultaneous diagonalization basis
+P “ diagpσ1, . . . , σdq and ˜H“ P ´1{2HP ´1{2 “ diagp˜λ1, . . . , ˜λdq, define Tadam : X Ñ X blockwise by
+pTadampWqqi “ AiWiAJ i ` ˜η 2
+˜
+˜λ2 i pWiq11 ` σ´1 i
+dÿ
+j“1
+σj ˜λ2 j pWj q11
+¸
+Q, i“ 1, . . . , d, (32)
+Ai :“
+„
+1´ ˜η ˜λi ´β1
+˜η ˜λi β1
+ȷ
+, Q :“
+„
+1 ´1
+´1 1
+ȷ
+.
+Define
+Sadampη, β1q :“
+dÿ
+i“1
+η ˜λi
+2
+´
+1´ η ˜λi 1`β1
+¯ .
+Then Tadam satisfies:
+(a) (Leading eigenvalue in the cone) TadampKq Ď K. Moreover, Tadam has an eigenvalue equal to its spectral radius
+ρpTadamq, with an associated eigenvector W ‹ P Kzt0u satisfying
+ρpTadamqě ˜η 2
+dÿ
+i“1
+˜λ2 i ą 0 and
+dÿ
+i“1
+pW ‹ i q11 ą 0.
+(b) (Critical case)
+ρpTadamq“ 1 ðñ η ˜λ1 ă 1` β1 and Sadampη, β1q“ 1.
+(c) (Subcritical case)
+ρpTadamqă 1 ðñ η ˜λ1 ă 1` β1 and Sadampη, β1qă 1.
+Proof. We work on X “pS2qd with cone K“pS2 `qd and order ĺ.
+27
+
+Zeroth-Order Optimization at the Edge of Stability
+Proof of (a). If W P K, then AiWiAJ i ľ 0, pWiq11 ě 0, and σ´1 i ř j σj ˜λ2 j pWj q11 ě 0. Since Q ľ 0, (32) implies
+pTadampWqqi ľ 0 for all i, hence TadampKqĎ K.
+Since X is finite dimensional and K is a closed, convex, pointed cone with nonempty interior, the Krein–Rutman theorem
+implies that Tadam admits an eigenvalue equal to ρpTadamq with an eigenvector W ‹ P Kzt0u.
+To lower bound ρpTadamq, define sQΣ :“pσ´1 1 Q, . . . , σ´1 d QqP Kzt0u. For each i,
+pTadampsQΣqqi “ Aipσ´1 i QqAJ i ` ˜η 2
+˜
+˜λ2 i pσ´1 i Qq11 ` σ´1 i
+dÿ
+j“1
+σj ˜λ2 j pσ´1 j Qq11
+¸
+Q
+ľ ˜η 2
+˜
+σ´1 i
+dÿ
+j“1
+˜λ2 j
+¸
+Q“ cpsQΣqi,
+where c :“ ˜η 2 řd j“1 ˜λ2 j . Thus TadampsQΣq ľ c sQΣ, so T t adampsQΣq ľ ct sQΣ for all t ě 1. By Gelfand’s formula,
+ρpTadamqě c.
+Finally, if pW ‹ i q11 “ 0 for all i, then each W ‹ i “ “ 0 0 0 yi ‰ with yi ě 0. In (32), the coupling term vanishes, and
+pTadampW ‹qqi “ AiW ‹ i AJ i has p1, 1q-entry equal to β2 1 yi. Since ρpTadamqą 0 and TadampW ‹q“ ρpTadamqW ‹, we
+get β2 1 yi “ 0 for all i, hence yi “ 0 and W ‹ “ 0, a contradiction. Therefore ř ipW ‹ i q11 ą 0.
+Local–global decomposition. For each i, define Mi : S2 Ñ S2 by
+MipXq :“ AiXAJ i ` ˜η 2 ˜λ2 i pXq11Q,
+and define the block-diagonal map M : X Ñ X by pMpWqqi :“ MipWiq. Define the nonnegative linear functional
+sΣ : X Ñ R and the injection direction sQΣ P K by
+sΣpWq :“
+dÿ
+j“1
+σj ˜λ2 j pWj q11, sQΣ :“pσ´1 1 Q, . . . , σ´1 d Qq.
+Then (32) is equivalently
+TadampWq“ MpWq` ˜η 2 sΣpWq sQΣ. (33)
+Key local facts. All statements below use the ZO-GDM local lemmas with the substitutionspη, β, λiqÐp˜η, β1, ˜λiq:
+• Lemma 2(a): ρpMiqă 1 if and only if ˜η ˜λi ă 1´ β2 1 .
+• Lemma 2(b),(c): Under ˜η ˜λi ă 1´ β2 1 ,pId´ Miq´1 exists, is S2 `-preserving, and Yi :“pId´ Miq´1Q ľ 0 satisfies
+γi :“pYiq11 “ 1` β1
+2˜η ˜λip1´ β2 1 ´ ˜η ˜λiq . (34)
+• Lemma 3: For any cą 0, if ρpcMiqě 1, then for any αą 0 there is no W ľ 0 withpId´ cMiqpWq ľ αQ.
+Proof of (b). (ñ) Assume ρpTadamq“ 1. Let W ‹ P Kzt0u satisfy TadampW ‹q“ W ‹, and set s‹ :“ sΣpW ‹qą 0.
+From (33), for each i,
+pId´ MiqpW ‹ i q“ ˜η 2 s‹ σi Q.
+Since ˜η 2s‹{σi ą 0, Lemma 3 forces ρpMiqă 1 for all i and hence ˜η ˜λ1 ă 1´ β2 1 , i.e. η ˜λ1 ă 1` β1.
+Moreover, W ‹ i “ ˜η 2ps‹{σiqYi, sopW ‹ i q11 “ ˜η 2ps‹{σiqγi. Plugging into s‹ “ sΣpW ‹q yields
+s‹ “
+dÿ
+i“1
+σi ˜λ2 i pW ‹ i q11 “ ˜η 2s‹
+dÿ
+i“1
+˜λ2 i γi,
+28
+
+Zeroth-Order Optimization at the Edge of Stability
+and cancelling s‹ ą 0 gives
+1“ ˜η 2
+dÿ
+i“1
+˜λ2 i γi. (35)
+Using (34),
+˜η 2 ˜λ2 i γi “ ˜η ˜λi
+2p1´ β1q
+´
+1´ ˜η ˜λi 1´β2 1
+¯ .
+Since ˜η“p1´ β1qη and 1´ β2 1 “p1´ β1qp1` β1q, the right-hand side becomes η˜λi
+2
+ˆ
+1´ η˜λi 1`β1 ˙. Thus (35) is equivalent to
+Sadampη, β1q“ 1.
+(ð) Assume η ˜λ1 ă 1` β1 and Sadampη, β1q “ 1. Equivalently, ˜η ˜λ1 ă 1´ β2 1 and ř i ˜η 2 ˜λ2 i γi “ 1. Define Yi :“
+pId´ Miq´1Q ľ 0 and set sY :“pY1{σ1, . . . , Yd{σdqP Kzt0u. Then
+pTadampsYqqi “ MipYi{σiq` ˜η 2sΣpsYqσ´1 i Q.
+But
+sΣpsYq“
+dÿ
+i“1
+σi ˜λ2 i σ´1 i pYiq11 “
+dÿ
+i“1
+˜λ2 i γi, and ˜η 2
+dÿ
+i“1
+˜λ2 i γi “ 1,
+so that ˜η 2sΣpsYq“ 1. Also, by definition, MipYi{σiq“ σ´1 i pYi ´ Qq. Hence pTadampsYqqi “pYi ´ Qq{σi ` σ´1 i Q“
+Yi{σi “ sYi, i.e. TadampsYq“ ¯Y . Therefore 1 is an eigenvalue, so ρpTadamqě 1.
+To show ρpTadamqď 1, let r :“ ρpTadamqě 1 and take W ‹ P Kzt0u with TadampW ‹q“ rW ‹ and s‹ :“ sΣpW ‹qą 0.
+From (33), ´
+Id´ 1 r M ¯ W ‹ “ ˜η 2 s‹ r sQΣ.
+Since ˜η ˜λ1 ă 1´ β2 1 , we have ρpMqă 1, hence Id´ 1 r M is invertible and
+W ‹ “ ˜η 2 s‹ r ´ Id´ 1 r M ¯´1 sQΣ.
+Applying sΣp¨q and cancelling s‹ ą 0 gives the fixed-point identity
+r“ ˜η 2 sΣ
+ˆ´
+Id´ 1 r M ¯´1 sQΣ ˙ . (36)
+Using the Neumann series and rě 1,
+sΣ
+ˆ´
+Id´ 1 r M ¯´1 sQΣ ˙ “ 8ÿ
+k“0
+r´k sΣpMkpsQΣqqď
+8ÿ
+k“0
+sΣpMkpsQΣqq“ sΣ ` pId´ Mq´1 sQΣ ˘ .
+BecausepId´ Mq´1 is block-diagonal with blockspId´ Miq´1 andpsQΣqi “ σ´1 i Q, we have
+`
+pId´ Mq´1 sQΣ ˘ i “ σ´1 i pId´ Miq´1Q“ σ´1 i Yi,
+and therefore
+sΣ
+`
+pId´ Mq´1 sQΣ ˘ “ dÿ
+i“1
+σi ˜λ2 i pσ´1 i Yiq11 “
+dÿ
+i“1
+˜λ2 i γi.
+Plugging into (36) yields
+rď ˜η 2
+dÿ
+i“1
+˜λ2 i γi “ 1,
+so rď 1 and hence ρpTadamq“ 1.
+29
+
+Zeroth-Order Optimization at the Edge of Stability
+Proof of (c). (ñ) Assume ρpTadamqă 1 and set r :“ ρpTadamq. Let W ‹ P Kzt0u satisfy TadampW ‹q“ rW ‹, and set
+s‹ :“ sΣpW ‹qą 0. From (33), for each i,
+´
+Id´ 1 r Mi
+¯
+pW ‹ i q“ ˜η 2 s‹ rσi Q.
+Since ˜η 2s‹{prσiqą 0 and W ‹ i ľ 0, Lemma 3 with c“ 1 r implies ρp 1 r Miqă 1 for all i. Thus ρpMiqă r ă 1, and
+Lemma 2(a) gives ˜η ˜λ1 ă 1´ β2 1 . The bounds ρp 1 r Miqă 1 imply ρp 1 r Mqă 1, so Id´ 1 r M is invertible by the Neumann
+series and
+W ‹ “ ˜η 2 s‹ r ´ Id´ 1 r M ¯´1 sQΣ.
+Applying sΣp¨q and cancelling s‹ ą 0 gives
+r“ ˜η 2 sΣ
+ˆ´
+Id´ 1 r M ¯´1 sQΣ ˙ .
+Using the Neumann series and ră 1,
+˜η 2 sΣ
+ˆ´
+Id´ 1 r M ¯´1 sQΣ ˙ ě ˜η 2 sΣ ` pId´ Mq´1 sQΣ ˘ “ ˜η 2 dÿ
+i“1
+˜λ2 i γi “ Sadampη, β1q.
+Hence Sadampη, β1qď ră 1.
+(ð) Assume ˜η ˜λ1 ă 1´ β2 1 and Sadampη, β1q ă 1. Suppose for contradiction that r :“ ρpTadamq ě 1, and take
+W ‹ P Kzt0u with TadampW ‹q“ rW ‹ and s‹ :“ sΣpW ‹qą 0. Since ˜η ˜λ1 ă 1´ β2 1 , Lemma 2(a) gives ρpMqă 1, and
+therefore Id´ 1 r M is invertible. As above,
+r“ ˜η 2 sΣ
+ˆ´
+Id´ 1 r M ¯´1 sQΣ ˙ .
+Using the Neumann series and rě 1,
+rď ˜η 2 sΣ ` pId´ Mq´1 sQΣ ˘ “ ˜η 2 dÿ
+i“1
+˜λ2 i γi “ Sadampη, β1qă 1,
+which contradicts rě 1. Therefore ρpTadamqă 1. This completes (c) and the proof.
+A.6. Technical Lemmas
+Lemma 4. Let u„ Np0, Iq. Then, the following identities hold by the Isserlis’ Theorem.
+(a) EruuJs“ I.
+(b) EruuJAuuJs“ A` AJ` TrpAqI for any matrix A.
+Proof. Let u“pu1, . . . , udqJ „ Np0, Iq.
+(a) Let rds :“ t1, 2, . . . , du. For i, j P rds, Eruiuj s “ δij since the coordinates are centered, independent, and
+Varpuiq“ 1. Thus EruuJs“ I.
+(b) Let AP Rdˆd be arbitrary. For p, qPrds, thepp, qq-entry of EruuJAuuJs equals
+E
+“
+up puJAuq uq ‰ “ dÿ
+i,j“1
+Aij Erupuiuj uq s.
+By the Isserlis’ Theorem (Wick’s formula) for centered Gaussians,
+Erupuiuj uq s“ ErupuisEruj uq s` Erupuj sEruiuq s` Erupuq sEruiuj s“ δpiδjq ` δpj δiq ` δpq δij .
+30
+
+Zeroth-Order Optimization at the Edge of Stability
+Substituting back gives
+ÿ
+i,j
+Aij δpiδjq “ Apq ,
+ÿ
+i,j
+Aij δpj δiq “ Aqp,
+ÿ
+i,j
+Aij δpq δij “ δpq TrpAq.
+Hence, `
+EruuJAuuJs ˘ pq “ Apq ` Aqp ` TrpAqδpq ,
+which is exactly A` AJ` TrpAqI.
+Lemma 5. Let Σ ą 0 be a fixed diagonal matrix and let u„ Np0, Iq. Then, the following identities hold by the Isserlis’
+Theorem.
+(a) ErΣ´1{2uuJΣ1{2s“ I.
+(b) ErΣ´1{2uuJΣ1{2AΣ1{2uuJΣ´1{2s“ A` AJ` TrpΣAqΣ´1 for any matrix A.
+Proof. Let u„ Np0, Iq and let Σ ą 0 be diagonal. Write D :“ Σ1{2, so D is invertible and Σ´1{2 “ D´1.
+(a) We have
+ErΣ´1{2uuJΣ1{2s“ D´1 EruuJs D“ D´1ID“ I,
+where we used Lemma 4(a).
+(b) Let A be arbitrary and define rA :“ DAD. Then
+Σ´1{2uuJΣ1{2AΣ1{2uuJΣ´1{2 “ D´1 uuJ rA uuJ D´1.
+Taking expectation and applying Lemma 4(b) to rA yields
+EruuJ rA uuJs“ rA` rAJ` Trp rAqI.
+Therefore,
+ErD´1uuJ rA uuJD´1s“ D´1 rAD´1 ` D´1 rAJD´1 ` Trp rAq D´1ID´1.
+Using D´1 rAD´1 “ A, D´1 rAJD´1 “ AJ, and
+Trp rAq“ TrpDADq“ TrpAD2q“ TrpAΣq, D´1ID´1 “ D´2 “ Σ´1,
+we conclude that
+ErΣ´1{2uuJΣ1{2AΣ1{2uuJΣ´1{2s“ A` AJ` TrpAΣq Σ´1.
+Lemma 6 (The Krein–Rutman Theorem (Krein & Rutman, 1948); see also Theorem 19.2 in Deimling (1985)). Let X be a
+finite-dimensional vector space and KĂ X be a closed, convex, pointed cone with nonempty interior. Let T : X Ñ X be a
+linear opearator with TpKqĎ K. Then, there exists xP Kzt0u such that
+Tpxq “ ρpTq x .
+This is a standard corollary of the Krein–Rutman Theorem in finite dimension.
+31
+
+Zeroth-Order Optimization at the Edge of Stability
+B. Effect of the gradient estimator
+Our main analysis studies the Gaussian symmetric two-point estimator
+p∇fpx; uq :“ fpx` µuq´ fpx´ µuq 2µ u, u„ Np0, Iq,
+which is widely used in practice, including in MeZO-style methods for large language model fine-tuning (Malladi et al.,
+2023). In this section, we explain how the same mean-square linear-stability framework changes under other estimator
+choices. For clarity, we focus on ZO-GD applied to the centered quadratic loss
+fpxq“ 1 2 xJHx, H ą 0.
+For the symmetric two-point estimator, the quadratic update is
+xt`1 “pI´ ηutuJ t Hqxt.
+Defining the second moment Σt :“ ErxtxJ t s, we obtain the linear covariance recursion
+Σt`1 “ TH pΣtq,
+where
+TH pΣq :“ Eu
+“
+pI´ ηuuJHqΣpI´ ηHuuJq ‰
+“ Σ´ ηpHΣ` ΣHq` η2p2HΣH` TrpHΣHqIq .
+Thus, mean-square linear stability is governed by the spectral radius of the covariance operator: stability holds when
+ρpTH qă 1, and the corresponding mean-square stability boundary is ρpTH q“ 1.
+B.1. Forward finite-difference estimator
+Consider the one-sided forward estimator
+p∇fpx; uq :“ fpx` µuq´ fpxq µ u, u„ Np0, Iq.
+Under the same quadratic loss,
+p∇fpx; uq“ uuJHx` µ 2 puJHuqu,
+and therefore
+xt`1 “pI´ ηutuJ t Hqxt ´ ηµ 2 puJ t Hutqut.
+The second term is independent of xt and has zero mean. Since the Gaussian direction distribution is symmetric, the cross
+terms in the second-moment recursion vanish, yielding
+Σt`1 “ TH pΣtq` η2µ2QH , QH :“ 1 4 Eu “ puJHuq2uuJ‰ .
+Hence the homogeneous stability boundary is unchanged: it is still determined by ρpTH q“ 1. What changes is the behavior
+inside the stable regime. When ρpTH qă 1, the covariance converges to a nonzero fixed point
+Σ8 “pId´ TH q´1pη2µ2QH q.
+Thus the forward estimator has the same linear homogeneous stability threshold as the symmetric two-point estimator, but
+it introduces a finite-µ covariance floor of order Opµ2q. The symmetric two-point estimator avoids this effect on exact
+quadratics because it has no additive term at the minimizer.
+32
+
+Zeroth-Order Optimization at the Edge of Stability
+B.2. Non-Gaussian search directions
+Next suppose the symmetric two-point estimator uses a search direction u„ P with finite fourth moments and
+EruuJs“ I.
+The quadratic update remains
+xt`1 “pI´ ηutuJ t Hqxt,
+but the covariance operator becomes
+Σt`1 “ T P H pΣtq,
+where
+T P H pΣq :“ Σ´ ηpHΣ` ΣHq` η2Eu„P “ uuJHΣHuuJ‰ .
+Accordingly, the mean-square stability boundary is ρpT P H q“ 1. This makes explicit that changing the direction distribution
+changes the fourth-moment term in the covariance recursion, and hence can change the mean-square critical step size.
+As a concrete example, let P be the uniform distribution on the sphere of radius
+?
+d. Then EruuJs “ I, and the
+fourth-moment identity for the sphere gives
+T P H pΣq“ Σ´ ηpHΣ` ΣHq` η2 d d` 2 p2HΣH` TrpHΣHqIq .
+Compared with the Gaussian case, the stochastic quadratic term is multiplied by d{pd` 2q ă 1, which weakens the
+mean-square noise amplification and enlarges the corresponding mean-square stable region.
+B.3. Multiple Gaussian queries per iteration
+Finally, consider averaging n independent Gaussian two-point estimates:
+p∇fnpxq :“ 1 n nÿ k“1 fpx` µukq´ fpx´ µukq 2µ uk, uk i.i.d.„ Np0, Iq.
+Under the quadratic loss,
+p∇fnpxq“ SnHx, Sn :“ 1 n nÿ k“1 ukuJ k ,
+so the update is xt`1 “pI´ ηSnHqxt and
+Σt`1 “ T pnq H pΣtq, T pnq H pΣq :“ ErpI´ ηSnHqΣpI´ ηHSnqs .
+For Gaussian directions and any symmetric matrix A,
+ErSnASns“
+ˆ
+1` 1 n ˙ A` 1 n TrpAqI.
+Applying this identity with A“ HΣH yields
+T pnq H pΣq“ Σ´ ηpHΣ` ΣHq` η2
+„ˆ
+1` 1 n ˙ HΣH` 1 n TrpHΣHqI ȷ .
+Thus the mean-square stability boundary becomes ρpT pnq H q“ 1. Increasing n weakens the stochastic coupling terms in the
+covariance recursion. In the limit nÑ8,
+T pnq H pΣqÑpI´ ηHqΣpI´ ηHq,
+which is exactly the deterministic first-order GD covariance operator. Consequently, the mean-square critical step size
+approaches the first-order threshold 2{λmaxpHq as nÑ8.
+33
+
+Zeroth-Order Optimization at the Edge of Stability
+C. Experimental details
+In this section, we provide additional experimental details. Our dataset construction, preprocessing, and model architectures
+follow the setup of Cohen et al. (2025).
+Dataset. We train on a subset of CIFAR-10 consisting of 1,000 training examples drawn from the first four CIFAR-10
+classes. We apply standard preprocessing by subtracting the dataset-wide channel-wise mean and dividing by the dataset-
+wide channel-wise standard deviation. For the squared-loss objective, we use one-hot targets: the ground-truth class is
+encoded as 1 and the remaining classes are encoded as 0.
+Architectures. We evaluate three representative vision architectures:
+• CNN. A four-layer convolutional network with initial channel width 32 and 3ˆ 3 convolutional kernels. We use GeLU
+activations, average pooling, and a linear readout layer.
+• ResNet. A 20-layer ResNet (He et al., 2016) with GeLU activations and GroupNorm (Wu & He, 2018).
+• Vision Transformer (ViT). A Vision Transformer (Dosovitskiy et al., 2021) with depth 3, embedding dimension 64, 8
+attention heads, MLP dimension 256, and patch size 4.
+Top eigenvalue and trace estimation. During training, we log curvature statistics every 1,000 iterations. Specifically,
+we compute the largest eigenvalue and trace of the Hessian (or the preconditioned Hessian P ´1 t Ht for ZO-Adam) using
+matrix-free procedures, without explicitly forming the Hessian. We estimate the top eigenvalue via power iteration with 50
+iterations, and estimate the trace via Hutchinson’s method with 500 probe vectors. Both computations rely on Hessian–vector
+products.
+Compute. All experiments are run on a single NVIDIA H100 GPU.
+Sequence sorting experiments. For the sequence experiments in Appendix D.1, we use the synthetic sorting task described
+in Karpathy (2020) and follow the setup of Cohen et al. (2025, Appendix B.3). The network is fed a sequence of numbers
+and trained with a language-modeling loss to return the numbers in sorted order. We use numbers 1 through 4 and sequences
+of length 8, with 1,000 training examples for LSTM and 250 training examples for Mamba. We train under the same
+full-batch ZO protocol used in the vision experiments and track the same mean-square stability quantities for ZO-GD,
+ZO-GDM, and ZO-Adam.
+D. Additional experiments
+D.1. Sequence sorting tasks
+To test whether mean-square EoS is specific to vision architectures, we run additional full-batch ZO experiments on the
+synthetic sorting task described in Karpathy (2020), using the setup adopted in Cohen et al. (2025, Appendix B.3). Figures 8
+and 9 show the stability-band curves for LSTM and Mamba sequence models. Across ZO-GD, ZO-GDM, and ZO-Adam,
+the trace-based curvature terms again stabilize near the predicted mean-square stability thresholds, matching the qualitative
+behavior observed on the CIFAR-10 vision tasks.
+D.2. Effect of β1 in ZO-Adam
+Figure 10 reports full-batch ZO-Adam training of a CNN on CIFAR-10 while sweeping both β1 and the step size η with
+fixed β2 “ 0.999. Across β1 Pt0.1, 0.5, 0.9u, we observe that the preconditioned trace TrpP ´1 t Htq stabilizes near the
+stability threshold 2{η, suggesting that the effective stability boundary is primarily controlled by η and is largely insensitive
+to β1.
+D.3. Empirical verification of the commutativity approximation in ZO-Adam
+We empirically assess the commutativity approximation PtHt « HtPt used in Theorem 3.
+34
+
+Zeroth-Order Optimization at the Edge of Stability
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000Hessian Trace
+ 2/ = 3000
+ 2/ = 2000
+ 2/ = 1000
+ZO-GD (varying )
+= 2/3000 : Tr(Ht)
+= 2/2000 : Tr(Ht)
+= 2/1000 : Tr(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+= 2/2000 : Tr(Ht) + 2 max(Ht)
+= 2/1000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000Hessian Trace
+ 2(1 )/ = 3000
+ 2(1 )/ = 2000
+ 2(1 )/ = 1000
+ZO-GDM (fixed , varying )
+= 0.85 : Tr(Ht)
+= 0.9 : Tr(Ht)
+= 0.95 : Tr(Ht)
+= 0.85 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.9 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.95 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000
+8000Preconditioned Hessian Trace
+ 2/ = 4000
+ 2/ = 3000
+ 2/ = 2000
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/4000 : Tr(P 1 t Ht)
+= 2/3000 : Tr(P 1 t Ht)
+= 2/2000 : Tr(P 1 t Ht)
+= 2/4000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/3000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/2000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 8. Mean-square EoS on a synthetic sorting task with an LSTM. On the synthetic sorting task described in Karpathy (2020),
+using the setup adopted by Cohen et al. (2025, Appendix B.3), we train full-batch ZO-GD, ZO-GDM, and ZO-Adam and track the
+corresponding mean-square stability quantities. The trace-based curvature terms stabilize near the predicted thresholds, mirroring the
+behavior observed in the vision experiments.
+0 100000 200000 300000 400000 500000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000
+12000
+14000Hessian Trace
+ 2/ = 10000
+ 2/ = 6000
+ 2/ = 4000
+ZO-GD (varying )
+= 2/10000 : Tr(Ht)
+= 2/6000 : Tr(Ht)
+= 2/4000 : Tr(Ht)
+= 2/10000 : Tr(Ht) + 2 max(Ht)
+= 2/6000 : Tr(Ht) + 2 max(Ht)
+= 2/4000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000
+12000
+14000Hessian Trace
+ 2(1 )/ = 8000
+ 2(1 )/ = 6000
+ 2(1 )/ = 4000
+ZO-GDM (fixed , varying )
+= 0.6 : Tr(Ht)
+= 0.7 : Tr(Ht)
+= 0.8 : Tr(Ht)
+= 0.6 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.7 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+5000
+10000
+15000
+20000
+25000
+30000Preconditioned Hessian Trace
+ 2/ = 20000
+ 2/ = 10000
+ 2/ = 5000
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/5000 : Tr(P 1 t Ht)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/5000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 9. Mean-square EoS on a synthetic sorting task with Mamba. On the synthetic sorting task described in Karpathy (2020),
+using the setup adopted by Cohen et al. (2025, Appendix B.3), we train full-batch ZO-GD, ZO-GDM, and ZO-Adam and track the
+corresponding mean-square stability quantities. The trace-based curvature terms stabilize near the predicted thresholds, mirroring the
+behavior observed in the vision experiments.
+35
+
+Zeroth-Order Optimization at the Edge of Stability
+Metric and estimator. We measure the relative commutator Frobenius norm
+RelCommF pPt, Htq :“ }rPt, Hts}F }PtHt}F , rPt, Hts“ PtHt ´ HtPt.
+Using the identity }A}2 F “ E}Az}2 2 for z with i.i.d. Rademacher entries, we estimate both }rPt, Hts}F and }PtHt}F
+via Hutchinson probes using only Hessian–vector products. Each probe requires two HVPs, namely Htz and HtpPtzq,
+together with a diagonal scaling by Pt.
+Setup. We use the same CNN and CIFAR-10 setup as in Figure 10 and log RelCommF pPt, Htq at the same frequency as
+the curvature statistics. We use 50 probes per checkpoint.
+Results. Across all tested pβ1, ηq, RelCommF pPt, Htq decreases rapidly from the value 0.8–0.9 at initialization to below
+0.05 and remains below 0.05 throughout training (bottom row of Figure 10), supporting PtHt « HtPt as a reasonable
+approximation in this setting.
+Why do Pt and Ht approximately commute in deep learning? For ZO-Adam, Pt is diagonal in the parameter basis.
+Writing entries explicitly,
+prPt, Htsqij “ppt,i ´ pt,j qpHtqij ,
+so non-commutativity is driven by off-diagonal Hessian couplings between coordinates that receive different preconditioning.
+Consequently, Pt and Ht are expected to approximately commute when (i) Ht is close to block-diagonal under a natural
+parameter partition (e.g., by layer blocks), so cross-block couplings are small, and (ii) the preconditioner varies primarily
+across such blocks (or is slowly varying within blocks). This heuristic is consistent with empirical observations that neural
+network Hessians exhibit a near-block-diagonal structure, and with blockwise second-moment approximations studied in
+recent work (e.g., Zhang et al. (2025b)).
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training Loss
+ZO-Adam ( 1 = 0.1)
+= 2/40000
+= 2/20000
+= 2/10000
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training Loss
+ZO-Adam ( 1 = 0.5)
+= 2/40000
+= 2/20000
+= 2/10000
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training Loss
+ZO-Adam ( 1 = 0.9)
+= 2/40000
+= 2/20000
+= 2/10000
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+0 100000 200000 300000 400000 500000
+Iteration
+0.00
+0.20
+0.40
+0.60
+0.80
+1.00
+0.05Relative Commutator Ratio
+= 2/40000
+= 2/20000
+= 2/10000
+0 100000 200000 300000 400000 500000
+Iteration
+0.00
+0.20
+0.40
+0.60
+0.80
+1.00
+0.05Relative Commutator Ratio
+= 2/40000
+= 2/20000
+= 2/10000
+0 100000 200000 300000 400000 500000
+Iteration
+0.00
+0.20
+0.40
+0.60
+0.80
+1.00
+0.05Relative Commutator Ratio
+= 2/40000
+= 2/20000
+= 2/10000
+Figure 10. ZO-Adam sweep over β1 and η. Full-batch ZO-Adam on a CNN trained on CIFAR-10 with β1 P t0.1, 0.5, 0.9u (left
+to right) and multiple step sizes η per setting. Top: training loss. Middle: preconditioned curvature statistics TrpP ´1 t Htq and
+TrpP ´1 t Htq` 2 1`β1 λmaxpP ´1 t Htq. Bottom: relative commutator ratio}rPt, Hts}F {}PtHt}F (cf. Appendix D.3).
+36
+
+Zeroth-Order Optimization at the Edge of Stability
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training Loss
+ZO-GD (varying )
+= 2/5000
+= 2/4000
+= 2/3000
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training loss
+ZO-GDM (fixed , varying )
+= 0.8
+= 0.85
+= 0.9
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training loss
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/40000
+= 2/20000
+= 2/10000
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000Hessian Trace
+ 2/ = 5000
+ 2/ = 4000
+ 2/ = 3000
+= 2/5000 : Tr(Ht)
+= 2/4000 : Tr(Ht)
+= 2/3000 : Tr(Ht)
+= 2/5000 : Tr(Ht) + 2 max(Ht)
+= 2/4000 : Tr(Ht) + 2 max(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000Hessian Trace
+ 2(1 )/ = 4000
+ 2(1 )/ = 3000
+ 2(1 )/ = 2000
+= 0.8 : Tr(Ht)
+= 0.85 : Tr(Ht)
+= 0.9 : Tr(Ht)
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.85 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.9 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+10000
+20000
+30000
+40000
+50000Preconditioned Hessian Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 11. CNN: same experiments as Figure 2, with training loss. Top: training loss. Bottom: the stability-band plots from Figure 2
+for ZO-GD (left), ZO-GDM (middle), and ZO-Adam (right).
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training Loss
+ZO-GD (varying )
+= 2/5000
+= 2/4000
+= 2/3000
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+ZO-GDM (fixed , varying )
+= 0.7
+= 0.75
+= 0.8
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/40000
+= 2/20000
+= 2/10000
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000Hessian Trace
+ 2/ = 5000
+ 2/ = 4000
+ 2/ = 3000
+= 2/5000 : Tr(Ht)
+= 2/4000 : Tr(Ht)
+= 2/3000 : Tr(Ht)
+= 2/5000 : Tr(Ht) + 2 max(Ht)
+= 2/4000 : Tr(Ht) + 2 max(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+1000
+2000
+3000
+4000
+5000
+6000
+7000
+8000Hessian Trace
+ 2(1 )/ = 6000
+ 2(1 )/ = 5000
+ 2(1 )/ = 4000
+= 0.7 : Tr(Ht)
+= 0.75 : Tr(Ht)
+= 0.8 : Tr(Ht)
+= 0.7 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.75 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Hessian Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 12. ResNet: same experiments as Figure 6, with training loss. Top: training loss. Bottom: the stability-band plots from Figure 6
+for ZO-GD (left), ZO-GDM (middle), and ZO-Adam (right).
+37
+
+Zeroth-Order Optimization at the Edge of Stability
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5Training Loss
+ZO-GD (varying )
+= 2/10000
+= 2/6000
+= 2/3000
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+ZO-GDM (fixed , varying )
+= 0.6
+= 0.7
+= 0.8
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+ZO-Adam (fixed ( 1, 2), varying )
+= 2/40000
+= 2/20000
+= 2/10000
+0 100000 200000 300000 400000 500000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000
+12000
+14000Hessian Trace
+ 2/ = 10000
+ 2/ = 6000
+ 2/ = 3000
+= 2/10000 : Tr(Ht)
+= 2/6000 : Tr(Ht)
+= 2/3000 : Tr(Ht)
+= 2/10000 : Tr(Ht) + 2 max(Ht)
+= 2/6000 : Tr(Ht) + 2 max(Ht)
+= 2/3000 : Tr(Ht) + 2 max(Ht)
+0 100000 200000 300000 400000 500000
+Iteration
+0
+2000
+4000
+6000
+8000
+10000
+12000Hessian Trace
+ 2(1 )/ = 8000
+ 2(1 )/ = 6000
+ 2(1 )/ = 4000
+= 0.6 : Tr(Ht)
+= 0.7 : Tr(Ht)
+= 0.8 : Tr(Ht)
+= 0.6 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.7 : Tr(Ht) + 2 max(Ht)/(1 + )
+= 0.8 : Tr(Ht) + 2 max(Ht)/(1 + )
+0 100000 200000 300000 400000 500000
+Iteration
+0
+10000
+20000
+30000
+40000
+50000
+60000Preconditioned Hessian Trace
+ 2/ = 40000
+ 2/ = 20000
+ 2/ = 10000
+= 2/40000 : Tr(P 1 t Ht)
+= 2/20000 : Tr(P 1 t Ht)
+= 2/10000 : Tr(P 1 t Ht)
+= 2/40000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/20000 : Tr( ) + 2 max( )/(1 + 1)
+= 2/10000 : Tr( ) + 2 max( )/(1 + 1)
+Figure 13. Vision Transformer: same experiments as Figure 7, with training loss. Top: training loss. Bottom: the stability-band plots
+from Figure 7 for ZO-GD (left), ZO-GDM (middle), and ZO-Adam (right).
+38

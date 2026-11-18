@@ -1,0 +1,22 @@
+[s-100m-k2] start eval 8.4714
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[s-100m-k2] it 1 t    0.8s tok   0.004M eval 8.0228 up/step 6.291MB {'loss0': 8.4637, 'loss1': 8.4838, 'tau0': 1.0, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 2 t    1.1s tok   0.008M eval 7.4857 up/step 6.291MB {'loss0': 8.0587, 'loss1': 8.0396, 'tau0': 0.999, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 3 t    1.5s tok   0.012M eval 7.3442 up/step 6.291MB {'loss0': 7.7833, 'loss1': 7.5346, 'tau0': 0.999, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 5 t    2.3s tok   0.020M eval 7.1040 up/step 6.291MB {'loss0': 7.6124, 'loss1': 7.0989, 'tau0': 0.999, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 13 t    5.6s tok   0.053M eval 7.1078 up/step 6.291MB {'loss0': 7.5582, 'loss1': 7.1438, 'tau0': 1.006, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 25 t   10.5s tok   0.102M eval 7.0058 up/step 6.291MB {'loss0': 6.9546, 'loss1': 6.936, 'tau0': 1.016, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 49 t   20.4s tok   0.201M eval 6.6859 up/step 6.291MB {'loss0': 6.7365, 'loss1': 6.7052, 'tau0': 1.011, 'cos0': 0.5621, 'cos1': 1.0, 'cosIt': 0}
+[s-100m-k2] it 123 t   51.8s tok   0.504M eval 6.1354 up/step 6.291MB {'loss0': 6.2197, 'loss1': 6.2147, 'tau0': 0.979, 'cos0': 0.9286, 'cos1': 1.0, 'cosIt': 100}
+[s-100m-k2] it 145 t   60.9s tok   0.594M eval 6.0483 up/step 6.291MB {'loss0': 6.0168, 'loss1': 6.0108, 'tau0': 0.968, 'cos0': 0.9286, 'cos1': 1.0, 'cosIt': 100}
+[s-100m-k2] it 245 t  103.2s tok   1.004M eval 5.7970 up/step 6.291MB {'loss0': 5.8932, 'loss1': 5.8811, 'tau0': 0.925, 'cos0': 0.9812, 'cos1': 1.0, 'cosIt': 200}
+[s-100m-k2] it 287 t  121.0s tok   1.176M eval 5.7218 up/step 6.291MB {'loss0': 5.7189, 'loss1': 5.7195, 'tau0': 0.915, 'cos0': 0.9751, 'cos1': 1.0, 'cosIt': 250}
+[s-100m-k2] it 429 t  181.0s tok   1.757M eval 5.5402 up/step 6.291MB {'loss0': 5.4789, 'loss1': 5.4884, 'tau0': 0.89, 'cos0': 0.9763, 'cos1': 1.0, 'cosIt': 400}
+[s-100m-k2] it 489 t  206.4s tok   2.003M eval 5.4501 up/step 6.291MB {'loss0': 5.3819, 'loss1': 5.3922, 'tau0': 0.884, 'cos0': 0.9537, 'cos1': 1.0, 'cosIt': 450}
+[s-100m-k2] it 571 t  241.4s tok   2.339M eval 5.3717 up/step 6.291MB {'loss0': 5.471, 'loss1': 5.4772, 'tau0': 0.87, 'cos0': 0.9453, 'cos1': 1.0, 'cosIt': 550}
+[s-100m-k2] it 713 t  301.8s tok   2.920M eval 5.2735 up/step 6.291MB {'loss0': 5.1812, 'loss1': 5.1771, 'tau0': 0.851, 'cos0': 0.9347, 'cos1': 1.0, 'cosIt': 700}
+[s-100m-k2] it 858 t  361.9s tok   3.514M eval 5.1878 up/step 6.291MB {'loss0': 5.2523, 'loss1': 5.2638, 'tau0': 0.831, 'cos0': 0.8826, 'cos1': 1.0, 'cosIt': 850}
+[s-100m-k2] it 977 t  411.6s tok   4.002M eval 5.1432 up/step 6.291MB {'loss0': 5.1761, 'loss1': 5.1864, 'tau0': 0.814, 'cos0': 0.8645, 'cos1': 1.0, 'cosIt': 950}
+{"label": "s-100m-k2", "steps": 977, "startLoss": 8.471426725387573, "finalLoss": 5.143224000930786, "bestLoss": 5.143224000930786, "diverged": false, "upBytesPerStep": 6291456.0, "tokens": 4001792}

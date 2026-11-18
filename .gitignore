@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+v15_state/
+runs/
+checkpoints/
+*.safetensors
+.venv/
+.ruff_cache/
+.DS_Store
+# Nested upstream clones (re-clonable; see README.md)
+/CrowdGPT/
+/CrowdGPT-Server/
+/archived/crowdgpt-v2/reference/

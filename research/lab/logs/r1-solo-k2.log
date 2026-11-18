@@ -1,0 +1,29 @@
+[r1-solo-k2] start eval 8.3665
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[r1-solo-k2] it 1 t    0.1s tok   0.001M eval 8.2058 up/step 0.524MB {'loss0': 8.3417, 'loss1': 8.35, 'tau0': 1.0, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 2 t    0.1s tok   0.002M eval 7.7115 up/step 0.524MB {'loss0': 8.1817, 'loss1': 8.177, 'tau0': 0.997, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 5 t    0.1s tok   0.005M eval 7.1987 up/step 0.524MB {'loss0': 8.0829, 'loss1': 7.3313, 'tau0': 1.002, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 10 t    0.2s tok   0.010M eval 7.2048 up/step 0.524MB {'loss0': 8.0666, 'loss1': 7.1192, 'tau0': 1.016, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 20 t    0.3s tok   0.020M eval 7.1141 up/step 0.524MB {'loss0': 7.9823, 'loss1': 7.0088, 'tau0': 1.046, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 49 t    0.7s tok   0.050M eval 6.9823 up/step 0.524MB {'loss0': 6.9213, 'loss1': 6.941, 'tau0': 1.016, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 98 t    1.3s tok   0.100M eval 6.7129 up/step 0.524MB {'loss0': 6.7737, 'loss1': 6.7665, 'tau0': 0.935, 'cos0': 0.466, 'cos1': 1.0, 'cosIt': 0}
+[r1-solo-k2] it 196 t    2.6s tok   0.201M eval 6.4106 up/step 0.524MB {'loss0': 6.3224, 'loss1': 6.3273, 'tau0': 0.81, 'cos0': 0.8037, 'cos1': 1.0, 'cosIt': 100}
+[r1-solo-k2] it 489 t    6.3s tok   0.501M eval 6.1717 up/step 0.524MB {'loss0': 6.0929, 'loss1': 6.0753, 'tau0': 0.655, 'cos0': 0.9645, 'cos1': 1.0, 'cosIt': 400}
+[r1-solo-k2] it 769 t   10.1s tok   0.787M eval 6.0278 up/step 0.524MB {'loss0': 6.0197, 'loss1': 6.0297, 'tau0': 0.602, 'cos0': 0.9037, 'cos1': 1.0, 'cosIt': 700}
+[r1-solo-k2] it 977 t   12.9s tok   1.000M eval 5.9549 up/step 0.524MB {'loss0': 5.9235, 'loss1': 5.9264, 'tau0': 0.598, 'cos0': 0.8577, 'cos1': 1.0, 'cosIt': 900}
+[r1-solo-k2] it 1510 t   20.1s tok   1.546M eval 5.8351 up/step 0.524MB {'loss0': 5.822, 'loss1': 5.8201, 'tau0': 0.624, 'cos0': 0.8976, 'cos1': 1.0, 'cosIt': 1500}
+[r1-solo-k2] it 1954 t   26.0s tok   2.001M eval 5.7727 up/step 0.524MB {'loss0': 6.0608, 'loss1': 6.0663, 'tau0': 0.643, 'cos0': 0.7671, 'cos1': 1.0, 'cosIt': 1900}
+[r1-solo-k2] it 2258 t   30.1s tok   2.312M eval 5.7121 up/step 0.524MB {'loss0': 5.803, 'loss1': 5.7972, 'tau0': 0.648, 'cos0': 0.738, 'cos1': 1.0, 'cosIt': 2200}
+[r1-solo-k2] it 3006 t   40.1s tok   3.078M eval 5.6031 up/step 0.524MB {'loss0': 5.6333, 'loss1': 5.6115, 'tau0': 0.686, 'cos0': 0.7802, 'cos1': 1.0, 'cosIt': 3000}
+[r1-solo-k2] it 3756 t   50.1s tok   3.846M eval 5.5287 up/step 0.524MB {'loss0': 5.6468, 'loss1': 5.6357, 'tau0': 0.727, 'cos0': 0.2579, 'cos1': 1.0, 'cosIt': 3700}
+[r1-solo-k2] it 4504 t   60.1s tok   4.612M eval 5.4209 up/step 0.524MB {'loss0': 5.5098, 'loss1': 5.4681, 'tau0': 0.757, 'cos0': 0.5458, 'cos1': 1.0, 'cosIt': 4500}
+[r1-solo-k2] it 4883 t   65.2s tok   5.000M eval 5.3529 up/step 0.524MB {'loss0': 5.5294, 'loss1': 5.4989, 'tau0': 0.767, 'cos0': 0.4364, 'cos1': 1.0, 'cosIt': 4800}
+[r1-solo-k2] it 5248 t   70.1s tok   5.374M eval 5.2923 up/step 0.524MB {'loss0': 5.598, 'loss1': 5.581, 'tau0': 0.768, 'cos0': 0.8356, 'cos1': 1.0, 'cosIt': 5200}
+[r1-solo-k2] it 5997 t   80.1s tok   6.141M eval 5.2273 up/step 0.524MB {'loss0': 5.307, 'loss1': 5.3007, 'tau0': 0.771, 'cos0': 0.9027, 'cos1': 1.0, 'cosIt': 5900}
+[r1-solo-k2] it 6746 t   90.1s tok   6.908M eval 5.1620 up/step 0.524MB {'loss0': 5.4776, 'loss1': 5.4288, 'tau0': 0.785, 'cos0': 0.403, 'cos1': 1.0, 'cosIt': 6700}
+[r1-solo-k2] it 7495 t  100.1s tok   7.675M eval 5.1714 up/step 0.524MB {'loss0': 5.4205, 'loss1': 5.3883, 'tau0': 0.787, 'cos0': 0.4524, 'cos1': 1.0, 'cosIt': 7400}
+[r1-solo-k2] it 8244 t  110.1s tok   8.442M eval 5.1170 up/step 0.524MB {'loss0': 5.2926, 'loss1': 5.2485, 'tau0': 0.789, 'cos0': 0.4835, 'cos1': 1.0, 'cosIt': 8200}
+[r1-solo-k2] it 8982 t  120.0s tok   9.198M eval 5.1122 up/step 0.524MB {'loss0': 5.039, 'loss1': 4.993, 'tau0': 0.782, 'cos0': 0.0571, 'cos1': 1.0, 'cosIt': 8900}
+{"label": "r1-solo-k2", "steps": 8982, "startLoss": 8.366497993469238, "finalLoss": 5.1122376918792725, "bestLoss": 5.1122376918792725, "diverged": false, "upBytesPerStep": 524288.0, "tokens": 9197568}

@@ -1,0 +1,735 @@
+What Matters for NVFP4 Training?
+A Comparative Study of Low-Precision Pretraining Recipes
+Anjulie Agrusa 1 Andrei Panferov 2 Elizabeth Wei 1 Keith Wyss 1 Paul Gibbons 1 Erik Schultheis 2
+Jinhang Choi 1 Frank Sun 1 Tijmen Blankevoort 1 Dan Alistarh 2 3
+Abstract
+Training large language models directly in 4-bit
+floating-point (FP) formats promises substantial
+improvements in throughput and energy efficiency.
+While some recipe design choices have been val-
+idated at scale, many promising approaches re-
+main untested beyond small models and short
+token horizons, leaving open the question of
+which trends will hold. We present a systematic
+comparison of recent NVFP4 recipes at medium
+model scale, evaluating dense 8B and 30B-A3B
+MoE models trained for up to 1T tokens, with
+a focus on which ingredients are necessary for
+accuracy recovery. We propose a final recipe
+grounded in the principles behind established
+stable NVFP4 training at scale, incorporating
+state-of-the-art techniques such as unbiased gradi-
+ent estimation with lower quantization error than
+stochastic rounding. To the best of our knowledge,
+this is the strongest FP4 training result demon-
+strated at this scale to date in loss gap to BF16.
+Through ablation studies, we find that: (i) each
+technique in the optimized recipe measurably im-
+proves loss trajectory, (ii) selective high-precision
+layers are necessary for recovering accuracy at
+scale, (iii) not all tensors in the backward pass
+benefit equally from de-biasing, leaving room to
+apply complementary error-reduction techniques
+to the remaining tensors.
+1. Introduction
+The computational cost of training state-of-the-art founda-
+tion models has been increasing rapidly (Amodei & Hernan-
+dez, 2018; Sevilla et al., 2022). Since pretraining modern
+Transformer-based models is dominated by dense matrix
+1NVIDIA 2Institute of Science and Technology Aus-
+tria 3Red Hat AI. Correspondence to: Dan Alistarh
+<dan.alistarh@ist.ac.at>.
+Accepted at the ICML 2026 Workshop on Resource-Adaptive Foun-
+dation Model Inference (AdaptFM), Seoul, South Korea.
+multiplications, reducing the precision of these operations
+is one of the most direct levers for improving training effi-
+ciency. This has motivated a progression from FP16/BF16 to
+FP8 training (Micikevicius et al., 2022), and, more recently,
+to hardware-supported 4-bit block scale formats (Rouhani
+et al., 2023) such as MXFP4 and NVFP4 on NVIDIA Black-
+well GPUs (NVIDIA, 2025; Alvarez et al., 2025; Devleker
+& Ghodsian, 2025).
+Yet, quantized training introduces noise, and in the 4-bit
+regime this noise could affect convergence, even when oper-
+ations may appear accurate. A recent line of work has there-
+fore focused on recipes that recover most of the accuracy of
+FP8 or BF16 training while preserving the speedups of 4-bit
+tensor-core execution. Examples include the NVIDIA ’25
+NVFP4 recipe (NVIDIA et al., 2025a), backward-pass FP4
+training (Tseng et al., 2025), fully quantized FP4 training
+(Chmiel et al., 2025), TetraJet (Chen et al., 2025a), TetraJet-
+v2 (Chen et al., 2025b), Four Over Six (Cook et al., 2025),
+Quartet (Castro et al., 2025), and Quartet II (Panferov et al.,
+2026). Despite this rapid progress, it is fair to say that
+there is still no definitive solution: low-precision training
+can still induce small but persistent accuracy degradation,
+and existing methods disagree about which techniques are
+essential.
+At the same time, some principles are starting to emerge. On
+the forward pass, multiple methods implicitly or explicitly
+optimize representation quality, for instance by substituting
+the NVIDIA ’25 NVFP4 recipe’s two-dimensional weight
+quantization (NVIDIA et al., 2025a) with one-dimensional
+quantization for finer-grained scaling or by reducing quanti-
+zation error for weights and activations through improved
+scale selection (Chen et al., 2025a; Castro et al., 2025; Chen
+et al., 2025b; Cook et al., 2025; Panferov et al., 2026). On
+the backward pass, a line of evidence suggests that bias in
+the gradient estimator can accumulate over long training
+horizons, making unbiased or carefully controlled quantiza-
+tion important for stable convergence (Chmiel et al., 2023;
+Tseng et al., 2025; Chen et al., 2025a; Chmiel et al., 2025;
+NVIDIA et al., 2025a; Chen et al., 2025b; Panferov et al.,
+2026). The difficulty is that these principles are not always
+clearly compatible. For instance, the NVIDIA ’25 NVFP4
+1
+arXiv:2610.24343v1  [cs.CL]  17 Oct 2026
+What Matters for NVFP4 Training?
+recipe uses two-dimensional quantization of weights to
+maintain consistency between forward and backward quan-
+tized weight representations (NVIDIA et al., 2025a). By
+contrast, Quartet II introduces a technique to address bias
+in the backward pass that relies on random rotations ap-
+plied along the inner dimension of both backward GEMMs;
+those rotations, in turn, are most naturally paired with one-
+dimensional quantization (Panferov et al., 2026; Tseng et al.,
+2025; Chen et al., 2025b). To approximate consistency with
+the forward-pass weight representation, one-dimensional
+schemes often dequantize the forward-quantized weights
+and re-quantize them along the backward contraction di-
+mension rather than directly quantizing the high-precision
+weights during the backward pass (Chen et al., 2025a; Cas-
+tro et al., 2025; Chen et al., 2025b; Panferov et al., 2026).
+This creates a practical question: which ingredients are non-
+negotiable, and which ones are merely useful at a given
+scale? The key problem we aim to address here is that the
+“right” answer is hard to infer from short ablations. Many
+accuracy effects in low-precision training only become vis-
+ible late in training, or only after increasing model scale
+and token budget. As a result, as we show, recipes can ap-
+pear close early on while diverging later, in ways that are
+expensive to diagnose.
+In this paper, we aim to isolate a set of principles that matter
+for NVFP4 training by systematically comparing variants
+of existing recipes at medium scale. We evaluate dense
+8B and 30B-A3B mixture-of-experts (MoE) models from
+the Nemotron model family, trained up to 1T tokens. We
+organize our comparison around the major design axes that
+separate current methods: whether to use selective high-
+precision layers, how to select scales in the forward and
+backward pass, whether to quantize weights in one or two
+dimensions, strategies to mitigate bias in the backward pass,
+and how these choices interact.
+Contributions. Our main finding is that the current recipes
+capture complementary pieces of the problem, and we pro-
+pose a “Mosaic” approach that blends the best qualities of
+each. In more detail:
+1. We perform the first detailed and unified ablation of
+NVFP4 training techniques, examining how each tech-
+nique reduces the model-quality gap relative to BF16
+training.
+2. We show that keeping selected layers in higher preci-
+sion is necessary for full accuracy recovery in NVFP4
+training, even with an optimized recipe. Omitting this
+can cause training instabilities at larger model sizes
+and medium-scale token horizons.
+3. We find that selectively applying the MS-EDEN (Pan-
+ferov et al., 2026) unbiased estimator to gradients and
+Four Over Six (Cook et al., 2025) scale selection to the
+remaining backward tensors yields the lowest observed
+loss gap among the tested backward-pass configura-
+tions when all layers are quantized.
+4. Based on these observations, we develop a com-
+bined NVFP4 training recipe, which we call “Mosaic
+NVFP4,” with selective high-precision layers, Random
+Hadamard Transforms on both backward GEMMs, un-
+biased gradients via MS-EDEN, proposed by Quartet
+II, and Four Over Six scale selection on remaining
+forward and backward tensors. To the best of our
+knowledge, this is the strongest FP4 training result
+demonstrated at this scale in loss gap to BF16. This
+scheme remains compatible with efficient kernels.
+2. Related Work
+Low-Precision training. Low-precision training has a long
+history, including early work on reduced-precision and inte-
+ger training for smaller neural networks (Courbariaux et al.,
+2015; Banner et al., 2018; Wang et al., 2018). For Trans-
+former models, 8-bit training has become increasingly prac-
+tical through INT8 methods such as SwitchBack and JetFire,
+FP8 training systems, and 8-bit LLM fine-tuning methods
+such as HALO (Wortsman et al., 2023; Xi et al., 2024; Mi-
+cikevicius et al., 2022; DeepSeek-AI et al., 2025; Mishra
+et al., 2025; Ashkboos et al., 2025). These methods high-
+lighted several recurring themes: the need for fine-grained
+scaling, special treatment of outlier values, and careful han-
+dling of the backward pass.
+Training in FP4 formats. The introduction of hardware-
+supported FP4 microscaling formats has renewed interest
+in end-to-end 4-bit training. Early FP4 and INT4 work
+demonstrated that 4-bit arithmetic could be incorporated
+into training (Xi et al., 2023; Chmiel et al., 2023; Wang
+et al., 2025; Zhou et al., 2025). More recent work targets
+hardware-supported MXFP4 and NVFP4 training. Tseng
+et al. (2025) studied backward-pass quantization to FP4
+using Hadamard rotations and stochastic rounding. The
+TetraJet series combined one-dimensional weight quantiza-
+tion with re-quantization in the backward pass and stochastic
+rounding, and developed methods for oscillation suppres-
+sion; TetraJet-v2 extended the approach to NVFP4 LLM
+training, adding double-block quantization, rotations to both
+backward GEMMs, and an outlier control mechanism (Chen
+et al., 2025a;b). Chmiel et al. (2025) studied fully quan-
+tized FP4 training with NVFP4-style scaling and identified
+stochastic rounding as important for the backward and up-
+date passes. NVIDIA et al. (2025a) introduced a large-scale
+NVFP4 recipe based on Random Hadamard transforms,
+two-dimensional weight quantization, stochastic rounding,
+and selective high-precision layers. Four Over Six (Cook
+et al., 2025) improved NVFP4 quantization accuracy by
+2
+What Matters for NVFP4 Training?
+adaptively choosing between two scale factors.
+Quartet and unbiased gradient estimation. Quartet (Cas-
+tro et al., 2025) studied MXFP4 training through the lens
+of “low-precision scaling laws,” linking forward compres-
+sion error to parameter efficiency and backward-pass bias
+to data efficiency. Historically, methods addressing bias in
+quantized gradient estimates have generally relied on ele-
+mentwise stochastic rounding (Chmiel et al., 2023; Tseng
+et al., 2025; Chen et al., 2025a; Chmiel et al., 2025; NVIDIA
+et al., 2025a; Chen et al., 2025b). Quartet II (Panferov et al.,
+2026) extended the Quartet line of work to NVFP4 and intro-
+duced MS-EDEN, which instead combines random rotations
+with a per-block corrective rescaling to produce lower-error
+unbiased estimates than standard FP4 stochastic rounding.
+Our work is closest in spirit to these studies, but asks which
+ingredients of existing FP4 training recipes matter most,
+and how they should be combined, when evaluated under a
+common implementation and training budget.
+3. Experimental Setup
+All NVFP4 variants are implemented in a common training
+stack and trained on the same GPU architecture.
+Models and data. We evaluate both dense and sparse hy-
+brid Mamba-Transformer architectures. The dense setting
+uses the 8B variant of the NVIDIA Nemotron-H Family
+of Hybrid Mamba-Transformer Models (NVIDIA et al.,
+2025c). This model has 24 Mamba-2 layers, 4 Attention
+layers, and 24 FFN layers. We train on the same data dis-
+tribution as NVIDIA et al. (2025c), following their phased
+data-blending approach (Feng et al., 2024) with diverse data
+for the first 600B tokens and high-quality data for the re-
+mainder of the 1T token horizon. We additionally validated
+NVFP4 pretraining recipes on the Nemotron 3 Nano hybrid
+Mamba-Transformer MoE architecture (30B-A3B), using
+the first 1T tokens from the Phase 1 data mixture of the
+25T-token pretraining curriculum described by NVIDIA
+et al. (2025b;d). Like Nemotron-H, this model has a high
+ratio of Mamba-2 to attention layers. Each MoE layer con-
+tains 128 routed experts, with top-6 routing and 2 shared
+experts. We report training and validation loss alongside
+downstream evaluations spanning knowledge, reasoning,
+math, and coding benchmarks.
+Quantization method terminology. Quantization is ap-
+plied to the network’s linear layers and grouped linear layers.
+To describe quantization recipes, we refer to three general
+matrix-matrix multiplication (GEMM) operations and the
+quantized operands to these products. Assuming GEMM
+contracts along the last dimension of the two inputs, we
+formalize them as follows:
+1. Y=GEMM(X, W) — the product between the input,
+X, and the weight, W.
+2. DGRAD=GEMM(G, W.T) — the product between
+the gradient, G with respect to Y, and the transposed
+weight, W.T.
+3. WGRAD=GEMM(G.T, X.T) — the product between
+the transposed gradient, G.T, and the transposed input,
+X.T.
+When both operands of a GEMM are quantized to NVFP4
+along their last dimension, the multiplication can be per-
+formed using specialized Tensor Cores on Blackwell GPUs.
+As all operands across the three GEMMs are unique, we
+will use the notation above to discriminate between each
+tensor in a computation scheme.
+Compared techniques. We instantiate the main design
+choices from prior recipes in a common framework:
+• NVIDIA ’25 NVFP4: two-dimensional weight quanti-
+zation, stochastic rounding on gradients, static Random
+Hadamard Transforms (RHTs) on WGRAD, and selec-
+tive high-precision layers (NVIDIA et al., 2025a).
+• Quartet-II-style backward pass: constructed through
+three cumulative updates (Panferov et al., 2026):
+– One-dimensional weight quantization with back-
+ward re-quantization (Chen et al., 2025a; Castro
+et al., 2025; Chen et al., 2025b);
+– Random Hadamard Transforms on both backward
+GEMMs (Tseng et al., 2025; Castro et al., 2025;
+Chen et al., 2025b); and
+– MS-EDEN applied to backward tensors (Panferov
+et al., 2026).
+Since the first two components have been studied
+as design choices in existing low-precision training
+recipes, we ablate them separately to measure their
+individual contributions to model quality. MS-EDEN
+adapts EDEN’s randomized-rotation and corrective-
+rescaling framework to microscaling formats (Var-
+gaftik et al., 2022; Panferov et al., 2026). To instantiate
+these randomized rotations, we replace the baseline
+recipe’s static RHT sign vectors with resampled vec-
+tors throughout training.
+• Four Over Six: adaptive block-scale selection applied
+selectively (Cook et al., 2025).
+Questions. Our experiments are organized around the fol-
+lowing questions:
+• Do these new recipe techniques provide incremental
+benefits to model quality at scale?
+3
+What Matters for NVFP4 Training?
+Figure 1. Left: Relative train loss difference between each NVFP4 recipe and BF16 (lower is better), trained with NVIDIA ’25 NVFP4
+and Mosaic NVFP4 recipes to 1T tokens on Nemotron 3 Nano. Right: Cumulative recipe updates, each adding one Mosaic NVFP4
+component, trained to 400B tokens on Nemotron 3 Nano. All recipes keep the last 15% of layers in BF16. Recipe updates are described
+in Table 1.
+Table 1. Recipe improvements over the prior state of the art at this model and token scale. All recipes keep the last 15% of layers in BF16
+unless otherwise noted.
+Recipe Weight
+Quant
+Weight
+Re-
+Quant
+Tiled Random Hadamard
+Transforms
+Random
+Sign
+Vectors
+Technique to
+Address Bias
+in Gradients
+Four Over
+Six Tensors
+NVIDIA
+’25 NVFP4
+2D No Dim-16 WGRAD Static SR None
+Update 1 1D Yes Dim-16 WGRAD Static SR None
+Update 2 1D Yes Dim-128 WGRAD, DGRAD Resampled SR None
+Update 3 1D Yes Dim-128 WGRAD, DGRAD Resampled MS-EDEN W.T, X.T
+Mosaic
+NVFP4
+1D Yes Dim-128 WGRAD, DGRAD Resampled MS-EDEN W, X, W.T,
+X.T
+• Are selective high-precision layers necessary for long-
+horizon accuracy?
+• How do the benefits of unbiased quantization vary
+across backward-pass tensors?
+• Do trends with NVFP4 quantization reproduce across
+dense and MoE architectures?
+4. Experimental Results
+4.1. Ablation Studies on Recipe Modifications
+We ablate each recipe modification on Nemotron 3 Nano,
+starting from the NVIDIA et al. (2025a) recipe and stack-
+ing techniques sequentially (Table 1). We refer to the final
+stacked recipe as Mosaic NVFP4. The first update replaces
+two-dimensional weight quantization with one-dimensional
+quantization, re-quantizing in the backward pass. The sec-
+ond adds a dimension-128 tiled Random Hadamard Trans-
+form to DGRAD and updates the WGRAD transform to use
+a consistent tile shape and a resampled sign vector through-
+out training. The third applies MS-EDEN to gradient ten-
+sors in place of stochastic rounding and adds Four Over
+Six scale selection to the remaining backward-pass tensors.
+The fourth adds Four Over Six to the forward-pass tensors.
+Each modification improves training loss (Figure 1), yield-
+ing a 0.36 pp total improvement once fully stacked. The
+largest single gain comes from replacing stochastic rounding
+with MS-EDEN and adding Four Over Six on the backward
+tensors, which we attribute largely to MS-EDEN’s ability
+to achieve unbiasedness at lower quantization-error cost
+4
+What Matters for NVFP4 Training?
+than stochastic rounding (Panferov et al., 2026). When run-
+ning additional ablations with the MS-EDEN technique, we
+found that resampling the stochastic-rounding pattern for
+corrected scale factors, rather than reusing a fixed pattern,
+and independently randomizing the DGRAD RHT sign vec-
+tor for each data-parallel replica, rather than once per global
+batch, yielded an additional 0.028 pp improvement in loss
+gap on the 30B-A3B model with a different optimizer con-
+figuration. The results in this work were obtained without
+these extra sources of stochasticity, suggesting improve-
+ments reported here are likely conservative, and we leave
+studying impacts of extra stochasticity as a subject of future
+work.
+Figure 2. Stability study of the Mosaic NVFP4 recipe with the last
+15% of the network kept in BF16 vs. all layers quantized on the
+Nemotron-H 8B model.
+4.2. Selective High-Precision Layers are Required
+Figure 2 shows that the Mosaic NVFP4 recipe diverges on
+the Nemotron-H 8B model past 300B tokens when all layers
+are quantized to NVFP4.
+4.3. Benefits of Backward-Pass Unbiasedness
+We studied backward pass quantization strategies on
+Nemotron 3 Nano. Recipes in this set of ablations informed
+Update 3 of Table 1. Each uses 1D weight quantization with
+re-quantization in the backward pass and dimension-128
+tiled Random Hadamard Transforms on both WGRAD and
+DGRAD. We vary the use of MS-EDEN and Four Over
+Six on backward tensors, applying: i) MS-EDEN on all
+backward tensors, ii) MS-EDEN on gradients only, iii) Four
+Over Six on all backward tensors, and iv) MS-EDEN on
+gradients and Four Over Six on the remaining backward
+tensors (X.T, W.T). These recipes are tested with and with-
+out the last 15% of the network kept in BF16. As shown
+in Figure 3, applying MS-EDEN to all tensors in backward
+GEMMs provides no clear benefit over applying MS-EDEN
+only to gradients. When all layers are quantized, the recipe
+applying MS-EDEN to G and G.T and Four Over Six to
+X.T and W.T yields the lowest observed loss gap among
+the tested recipes, although the separation is small. This
+may indicate that bias correction is most important for the
+gradient tensors, supporting results from (NVIDIA et al.,
+2025a).
+4.4. The Best Stacked Recipe
+Both the Mosaic NVFP4 and NVIDIA ’25 NVFP4 recipes
+were used to train Nemotron 3 Nano (30B-A3B) (Figure 1)
+and Nemotron-H 8B (Figure 4) to 1T tokens, keeping the last
+15% of the network in BF16 for the entirety of training. On
+the dense model, the version trained with the Mosaic NVFP4
+recipe finishes training with less than a 1.2% relative train
+loss gap from BF16 and improves upon the previous loss gap
+by 0.24 percentage points. The benefit of Mosaic NVFP4
+is most pronounced in the beginning of training and then
+during the annealing stage. Train and validation loss gap
+dynamics differ slightly due to dataset differences, but the
+gap between recipes is consistent across both. The switch
+from Phase 1 to Phase 2 data introduces a transiently higher
+loss gap for the Mosaic NVFP4 recipe, though sustained
+improvements are visible again after training has progressed
+in Phase 2. Both recipes show an increased loss gap from
+BF16 during the learning rate annealing phase. On the
+MoE model, the Mosaic NVFP4 recipe shows sustained
+improvement throughout the token horizon, starting after
+the first 75B tokens (Figure 1). The model trained with
+the Mosaic NVFP4 recipe finishes training with less than
+a 0.81% relative train loss gap from BF16 and improves
+upon the previous loss gap by 0.36 percentage points. The
+training curriculum is restricted to a single phase of data
+so the only change in loss gap trajectory occurs during
+the learning rate annealing, which impacts both recipes
+equally (Figure 1). These differences exceed the run-to-
+run variability observed across three repeated runs at the
+1T-token horizon (Appendix A.2.1).
+5. Discussion
+Prior work has shown that a close variant of the Mosaic
+NVFP4 recipe can converge on small models over short
+token horizons without keeping any layers in high preci-
+sion (Panferov et al., 2026). However, at scale these NVFP4
+recipes still require high-precision layers, suggesting a repre-
+sentation failure that the error-reduction techniques studied
+in this work cannot address. This is shown most directly on
+the 8B parameter model trained to 300B tokens in Figure 2,
+and further supported by Figure 3, where all recipes, regard-
+less of the backward-tensor technique used, show a loss gap
+that grows throughout training.
+Figure 1 shows that the relative ranking of recipes does
+not stabilize until well past 150B tokens of training. No-
+tably, weaker recipes often initially appear better than the
+5
+What Matters for NVFP4 Training?
+Figure 3. Different backward-quantization schemes on Nemotron 3 Nano, with all layers quantized (left) or the last 15% of layers kept in
+BF16 (right). With all layers quantized, the configuration applying MS-EDEN to gradient tensors and Four Over Six scale selection to the
+remaining backward tensors, X.T and W.T, yields the lowest observed loss gap. At this model size and token horizon, the backward-pass
+techniques show no clear separation when the last 15% of layers are kept in BF16.
+Figure 4. Percent relative train (left) and validation (right) loss difference compared to BF16 (lower is better) evaluated on the Nemotron-H
+8B model to 1T tokens. The Mosaic NVFP4 recipe has improved training and validation loss over most of the token horizon.
+strongest ones. These early changes in ordering can be at-
+tributed to differences in the randomly sampled sign vectors
+used by the Random Hadamard Transforms, noise in train-
+ing, or convergence properties of individual recipes. Only
+after enough tokens have been seen do the rankings settle.
+This view suggests that short NVFP4 pretraining ablations
+are useful for detecting catastrophic instability, but they
+are unfortunately not sufficient for deciding whether a new
+training algorithm will preserve accuracy at scale. For FP4
+pretraining methods, where the intended benefit is to make
+long training runs cheaper, this late-emerging failure mode
+is especially important.
+The separation between techniques applied to backward ten-
+sors is more visible in a less stable training regime. Figure 3
+shows a slight separation when all layers are quantized, but
+indistinguishable curves once the last 15% of the network is
+kept in BF16. For our full training runs, we adopted a recipe
+that addresses bias in the gradients and reduces quantization
+error in the subsequent backward tensors, applying targeted
+interventions to each tensor type. A pragmatic alternative
+entails applying MS-EDEN to gradients without additional
+techniques on X.T and W.T, likely without significant cost
+to model quality in the stable regime, as Figure 3 suggests.
+The Mosaic NVFP4 recipe incrementally improves upon
+the NVIDIA ’25 NVFP4 recipe, remains robust across the
+two model sizes, datasets, and architectures explored in this
+work, and partially closes the training-loss gap to BF16 at
+both scales.
+6
+What Matters for NVFP4 Training?
+6. Limitations
+This paper focuses on medium-scale dense and MoE lan-
+guage models and on NVFP4 training. We do not yet es-
+tablish whether the same conclusions hold for even larger
+production runs, other modalities, post-training, or other
+FP4 formats. We leave this as future work.
+References
+Alvarez, E., Almog, O., Chung, E., Layton, S., Stosic, D.,
+Krashinsky, R., and Aubrey, K. Introducing NVFP4 for
+efficient and accurate low-precision inference. NVIDIA
+Technical Blog, June 2025. URL https://develo
+per.nvidia.com/blog/introducing-nvfp4
+-for-efficient-and-accurate-low-preci
+sion-inference/.
+Amodei, D. and Hernandez, D. AI and compute. OpenAI,
+2018. URL https://openai.com/index/ai-a
+nd-compute/.
+Ashkboos, S., Nikdan, M., Tabesh, S., Castro, R. L., Hoefler,
+T., and Alistarh, D. HALO: Hadamard-assisted lower-
+precision optimization for LLMs. In Advances in Neural
+Information Processing Systems, volume 38, 2025. URL
+https://proceedings.neurips.cc/paper
+_files/paper/2025/hash/ac58b418745b3
+e5f10c80110c963969f-Abstract-Confere
+nce.html.
+Banner, R., Hubara, I., Hoffer, E., and Soudry, D. Scalable
+methods for 8-bit training of neural networks. In Ad-
+vances in Neural Information Processing Systems, 2018.
+Castro, R. L., Panferov, A., Tabesh, S., Sieberling, O., Chen,
+J., Nikdan, M., Ashkboos, S., and Alistarh, D. Quartet:
+Native FP4 training can be optimal for large language
+models. In Advances in Neural Information Processing
+Systems, volume 38, 2025. URL https://papers.n
+ips.cc/paper_files/paper/2025/file/3
+e11872d3bc9bfba34e1752fef87639c-Paper
+-Conference.pdf.
+Chen, Y., Xi, H., Zhu, J., and Chen, J. Oscillation-reduced
+MXFP4 training for vision transformers. In Proceed-
+ings of the 42nd International Conference on Machine
+Learning, volume 267 of Proceedings of Machine Learn-
+ing Research, pp. 9400–9414. PMLR, 2025a. URL
+https://proceedings.mlr.press/v267/c
+hen25bu.html.
+Chen, Y., Xu, X., Zhang, P., Beyer, M., Rapp, M., Zhu, J.,
+and Chen, J. TetraJet-v2: Accurate NVFP4 training for
+large language models with oscillation suppression and
+outlier control, 2025b. URL https://arxiv.org/
+abs/2510.27527.
+Chmiel, B., Banner, R., Hoffer, E., Ben Yaacov, H., and
+Soudry, D. Accurate neural training with 4-bit matrix mul-
+tiplications at standard formats. In International Confer-
+ence on Learning Representations, 2023. URL https:
+//openreview.net/forum?id=yTbNYYcopd.
+Chmiel, B., Fishman, M., Banner, R., and Soudry, D. FP4
+all the way: Fully quantized training of LLMs, 2025.
+URL https://arxiv.org/abs/2505.19115.
+Cook, J., Guo, J., Xiao, G., Lin, Y., Wyss, K., Nazemi, M.,
+Mishra, A., del Mundo, C., Blankevoort, T., and Han, S.
+Four over six: More accurate NVFP4 quantization with
+adaptive block scaling, 2025. URL https://arxiv.
+org/abs/2512.02010.
+Courbariaux, M., Bengio, Y., and David, J.-P. BinaryCon-
+nect: Training deep neural networks with binary weights
+during propagations. In Advances in Neural Information
+Processing Systems, 2015.
+DeepSeek-AI et al. DeepSeek-V3 technical report, 2025.
+URL https://arxiv.org/abs/2412.19437.
+Devleker, K. and Ghodsian, F. NVFP4 trains with precision
+of 16-bit and speed and efficiency of 4-bit. NVIDIA
+Technical Blog, August 2025. URL https://deve
+loper.nvidia.com/blog/nvfp4-trains-w
+ith-precision-of-16-bit-and-speed-a
+nd-efficiency-of-4-bit/.
+Feng, S., Prabhumoye, S., Kong, K., Su, D., Patwary, M.,
+Shoeybi, M., and Catanzaro, B. Maximize your data’s
+potential: Enhancing LLM accuracy with two-phase pre-
+training, 2024. URL https://arxiv.org/abs/
+2412.15285.
+Micikevicius, P., Stosic, D., Burgess, N., Cornea, M., Dubey,
+P., Grisenthwaite, R., Ha, S., Heinecke, A., Judd, P.,
+Kamalu, J., Mellempudi, N., Oberman, S., Shoeybi, M.,
+Siu, M., and Wu, H. FP8 formats for deep learning, 2022.
+URL https://arxiv.org/abs/2209.05433.
+Mishra, A., Stosic, D., Layton, S., and Micikevicius, P.
+Recipes for pre-training LLMs with MXFP8, 2025. URL
+https://arxiv.org/abs/2506.08027.
+NVIDIA. NVIDIA Blackwell architecture technical brief.
+Technical brief, 2025. URL https://www.nvidia
+.com/en-us/data-center/technologies/b
+lackwell-architecture/.
+NVIDIA, Abecassis, F., Agrusa, A., Ahn, D., Alben, J., et al.
+Pretraining large language models with NVFP4, 2025a.
+URL https://arxiv.org/abs/2509.25149.
+NVIDIA et al. Nemotron 3 Nano: Open, efficient mixture-
+of-experts hybrid Mamba-Transformer model for agentic
+7
+What Matters for NVFP4 Training?
+reasoning, 2025b. URL https://arxiv.org/ab
+s/2512.20848.
+NVIDIA et al. Nemotron-H: A family of accurate and
+efficient hybrid mamba-transformer models, 2025c. URL
+https://arxiv.org/abs/2504.03624.
+NVIDIA et al. NVIDIA Nemotron 3: Efficient and open
+intelligence, 2025d. URL https://arxiv.org/ab
+s/2512.20856.
+Panferov, A., Schultheis, E., Tabesh, S., and Alistarh, D.
+Quartet II: Accurate LLM pre-training in NVFP4 by im-
+proved unbiased gradient estimation. In Proceedings of
+the 43rd International Conference on Machine Learning,
+2026. URL https://arxiv.org/abs/2601.2
+2813.
+Rouhani, B. D., Zhao, R., More, A., Hall, M., Khodamoradi,
+A., et al. Microscaling data formats for deep learning,
+2023. URL https://arxiv.org/abs/2310.1
+0537.
+Sevilla, J., Heim, L., Ho, A., Besiroglu, T., Hobbhahn, M.,
+and Villalobos, P. Compute trends across three eras of
+machine learning. In 2022 International Joint Conference
+on Neural Networks (IJCNN), pp. 1–8, 2022. doi: 10.110
+9/IJCNN55064.2022.9891914.
+Tseng, A., Yu, T., and Park, Y. Training LLMs with MXFP4,
+2025. URL https://arxiv.org/abs/2502.2
+0586.
+Vargaftik, S., Ben Basat, R., Portnoy, A., Mendelson,
+G., Ben-Itzhak, Y., and Mitzenmacher, M. EDEN:
+Communication-efficient and robust distributed mean
+estimation for federated learning. In Proceedings of
+the 39th International Conference on Machine Learn-
+ing, volume 162 of Proceedings of Machine Learn-
+ing Research, pp. 21984–22014. PMLR, 2022. URL
+https://proceedings.mlr.press/v162/v
+argaftik22a.html.
+Wang, N., Choi, J., Brand, D., Chen, C.-Y., and Gopalakr-
+ishnan, K. Training deep neural networks with 8-bit
+floating point numbers. In Advances in Neural Infor-
+mation Processing Systems, volume 31, 2018. URL
+https://proceedings.neurips.cc/paper
+/2018/hash/335d3d1cd7ef05ec77714a215
+134914c-Abstract.html.
+Wang, R., Gong, Y., Liu, X., Zhao, G., Yang, Z., Guo, B.,
+Zha, Z., and Cheng, P. Optimizing large language model
+training using FP4 quantization, 2025. URL https:
+//arxiv.org/abs/2501.17116.
+Wortsman, M., Dettmers, T., Zettlemoyer, L., Morcos, A.,
+Farhadi, A., and Schmidt, L. Stable and low-precision
+training for large-scale vision-language models. In Ad-
+vances in Neural Information Processing Systems, vol-
+ume 36, 2023. URL https://proceedings.neur
+ips.cc/paper_files/paper/2023/file/2
+0bd42d82998bc61732c00452228e814-Paper
+-Conference.pdf.
+Xi, H., Li, C., Chen, J., and Zhu, J. Training transformers
+with 4-bit integers. In Advances in Neural Information
+Processing Systems, volume 36, 2023. URL https:
+//proceedings.nips.cc/paper_files/pa
+per/2023/hash/99fc8bc48b917c301a80cb
+74d91c0c06-Abstract-Conference.html.
+Xi, H., Chen, Y., Zhao, K., Teh, K. J., Chen, J., and Zhu,
+J. Jetfire: Efficient and accurate transformer pretraining
+with INT8 data flow and per-block quantization. In Pro-
+ceedings of the 41st International Conference on Machine
+Learning, volume 235 of Proceedings of Machine Learn-
+ing Research, pp. 54049–54063. PMLR, 2024. URL
+https://proceedings.mlr.press/v235/x
+i24b.html.
+Zhou, J., Tang, D., Fu, R., Hu, B., Xu, H., Wang, Y., Pei,
+Z., Su, Z., Liu, L., Zhang, X., and Zhang, W. Towards
+efficient pre-training: Exploring FP4 precision in large
+language models, 2025. URL https://arxiv.org/
+abs/2502.11458.
+8
+What Matters for NVFP4 Training?
+A. Appendix
+A.1. Model and Training Parameters
+Model and training parameters are summarized in Tables 2 and 3. In our experiments, both models were trained using
+AdamW with the Warmup-Stable-Decay learning-rate schedule, with annealing over the final 20% of the token horizon
+for Nemotron 3 Nano and the final 15% for Nemotron-H 8B. Each model was trained to a maximum of 1T tokens; some
+ablations were stopped early in the schedule. Weight decay of 0.1 was used for all models. Attention layers used Grouped
+Query Attention. All models have a sequence length of 8192.
+Table 2. Model parameters for each experimental setup. Active parameter counts exclude embeddings. † Nemotron 3 Nano uses MoE
+layers.
+Model No. Mamba-2 Layers No. Attention Layers
+No. FFN/MoE†
+Layers No. KV Heads
+Active/ Total
+Parameters
+Nemotron 3 Nano 23 6 23 2 3.2B / 31.6B
+Nemotron-H 24 4 24 8 8B
+Table 3. Training parameters for each experimental setup.
+Model Batch Size Min LR LR
+Nemotron 3 Nano 3072 1e-5 1e-3
+Nemotron-H 768 8e-6 8e-4
+A.2. Downstream Task Accuracy and Run-to-Run Variability
+To determine whether differences in training and validation loss gaps and downstream task accuracy exceed expected
+run-to-run variability, we trained the NVIDIA ’25 NVFP4 recipe three times and evaluated each resulting model on the
+same downstream tasks.
+A.2.1. LOSS GAP VARIABILITY
+We measure run-to-run loss variability as maxa̸=b |La − Lb|/Lb across the three repeated runs, where L is the loss measured
+at the 1T-token horizon. For the Nemotron 3 Nano model, this variability is approximately 0.06% in training loss and 0.04%
+in validation loss; for the Nemotron-H 8B model, it is 0.027% and 0.064%, respectively. Loss differences substantially
+exceeding these ranges are unlikely to be explained by run-to-run variability alone.
+A.2.2. DOWNSTREAM TASK ACCURACY
+For model m and task t, we estimate the relative noise tolerance as
+ϵm,t = maxi sm,t,i − mini sm,t,i maxi sm,t,i , (1)
+where sm,t,i is the score from repeated run i. We then calculate the relative difference between Mosaic NVFP4 and the
+NVIDIA ’25 NVFP4 baseline:
+∆m,t = sMosaic m,t − sNV25 m,t
+sNV25 m,t . (2)
+A positive ∆m,t indicates that Mosaic NVFP4 improves accuracy. Differences with |∆m,t| > ϵm,t are considered outside
+the corresponding noise reference. Because this estimate is based on only three runs, the measured range may understate the
+true run-to-run variability.
+For each aggregate category C, we report the mean of its constituent task scores and compute the relative difference between
+the resulting NVIDIA ’25 NVFP4 and Mosaic NVFP4 category scores. This aggregate relative difference can equivalently
+be written as a weighted average of the task-level relative differences:
+∆m,C =
+X
+t∈C
+wm,t∆m,t =
+¯s Mosaic m,C − ¯s NV25 m,C
+¯s NV25 m,C , wm,t = sNV25 m,tP j∈C sNV25 m,j .
+9
+What Matters for NVFP4 Training?
+Here, wm,t is the normalized contribution of task t to the aggregate NVIDIA ’25 NVFP4 score. We use the same weights to
+combine the task-level noise tolerances:
+eϵm,C =
+X
+t∈C
+wm,tϵm,t.
+We use eϵm,C as a score-aligned aggregate noise reference.
+Table 4. Downstream-task scores and measured run-to-run variability. For individual tasks, the noise reference is the relative range across
+three repeated runs. For aggregate rows, it is an average weighted by the NVIDIA ’25 NVFP4 task scores. Boldface denotes differences
+outside the corresponding noise reference.
+Task
+NVIDIA ’25
+NVFP4 (0–100)
+Mosaic
+NVFP4 (0–100)
+Noise
+Reference (%) ∆ (%)
+Nemotron 3 Nano (30B-A3B)
+General Knowledge
+MMLU, 5-shot 67.5 68.4 0.9 +1.3
+MMLU-Pro, 5-shot CoT 45.0 47.1 6.3 +4.7
+Math Average 79.4 79.2 4.6 -0.3
+(Math 500, 4-shot; GSM8K, 8-shot CoT)
+Common Sense Average 77.6 77.1 1.4 -0.6
+(ARC Challenge, 25-shot; WinoGrande, 0-shot; HellaSwag, 0-shot)
+Code Average 57.1 56.6 6.8 -0.9
+(HumanEval, average Pass@1; MBPP Sanitized, 3-shot)
+Reading Comprehension
+RACE, 0-shot 80.8 81.1 0.7 +0.4
+Nemotron-H 8B
+General Knowledge
+MMLU, 5-shot 61.0 60.3 2.2 -1.1
+MMLU-Pro, 5-shot CoT 29.7 27.6 9.8 -7.1
+Math Average 51.3 52.3 4.6 +1.9
+(Math 500, 4-shot; GSM8K, 8-shot CoT)
+Common Sense Average 76.5 75.9 1.1 -0.8
+(ARC Challenge, 25-shot; WinoGrande, 0-shot; HellaSwag, 0-shot)
+Code Average 43.4 43.0 5.6 -0.9
+(HumanEval, average Pass@1; MBPP Sanitized, 3-shot)
+Reading Comprehension
+RACE, 0-shot 77.7 78.8 1.1 +1.4
+10

@@ -1,0 +1,27 @@
+[r1-mezo] start eval 8.3665
+[r1-mezo] it 1 t    0.0s tok   0.001M eval 8.3666 up/step 0.000MB {'projGrad': 1.2274}
+[r1-mezo] it 2 t    0.0s tok   0.002M eval 8.3665 up/step 0.000MB {'projGrad': -0.833}
+[r1-mezo] it 5 t    0.1s tok   0.005M eval 8.3667 up/step 0.000MB {'projGrad': -1.101}
+[r1-mezo] it 10 t    0.1s tok   0.010M eval 8.3669 up/step 0.000MB {'projGrad': -0.2413}
+[r1-mezo] it 20 t    0.2s tok   0.020M eval 8.3668 up/step 0.000MB {'projGrad': -0.1326}
+[r1-mezo] it 49 t    0.4s tok   0.050M eval 8.3650 up/step 0.000MB {'projGrad': 2.9726}
+[r1-mezo] it 98 t    0.7s tok   0.100M eval 8.3639 up/step 0.000MB {'projGrad': 0.2928}
+[r1-mezo] it 196 t    1.4s tok   0.201M eval 8.3555 up/step 0.000MB {'projGrad': -2.5454}
+[r1-mezo] it 489 t    3.7s tok   0.501M eval 8.3468 up/step 0.000MB {'projGrad': -2.0266}
+[r1-mezo] it 977 t    7.6s tok   1.000M eval 8.3291 up/step 0.000MB {'projGrad': 2.0103}
+[r1-mezo] it 1289 t   10.0s tok   1.320M eval 8.3178 up/step 0.000MB {'projGrad': 0.3891}
+[r1-mezo] it 1954 t   15.2s tok   2.001M eval 8.2800 up/step 0.000MB {'projGrad': -0.0043}
+[r1-mezo] it 2559 t   20.0s tok   2.620M eval 8.2426 up/step 0.000MB {'projGrad': 0.3471}
+[r1-mezo] it 3829 t   30.0s tok   3.921M eval 8.0842 up/step 0.000MB {'projGrad': -6.053}
+[r1-mezo] it 4883 t   38.3s tok   5.000M eval 7.9554 up/step 0.000MB {'projGrad': 2.1925}
+[r1-mezo] it 5100 t   40.0s tok   5.222M eval 7.9378 up/step 0.000MB {'projGrad': -3.7384}
+[r1-mezo] it 6370 t   50.0s tok   6.523M eval 7.8190 up/step 0.000MB {'projGrad': 3.397}
+[r1-mezo] it 7642 t   60.0s tok   7.825M eval 7.7424 up/step 0.000MB {'projGrad': -0.8154}
+[r1-mezo] it 8915 t   70.0s tok   9.129M eval 7.6777 up/step 0.000MB {'projGrad': 0.2267}
+[r1-mezo] it 9766 t   76.7s tok  10.000M eval 7.6507 up/step 0.000MB {'projGrad': -0.4542}
+[r1-mezo] it 10192 t   80.1s tok  10.437M eval 7.6347 up/step 0.000MB {'projGrad': 0.1111}
+[r1-mezo] it 11469 t   90.1s tok  11.744M eval 7.5965 up/step 0.000MB {'projGrad': -2.5482}
+[r1-mezo] it 12750 t  100.1s tok  13.056M eval 7.5646 up/step 0.000MB {'projGrad': 0.2275}
+[r1-mezo] it 14034 t  110.1s tok  14.371M eval 7.5411 up/step 0.000MB {'projGrad': -0.6218}
+[r1-mezo] it 15310 t  120.0s tok  15.677M eval 7.5181 up/step 0.000MB {'projGrad': -1.4493}
+{"label": "r1-mezo", "steps": 15310, "startLoss": 8.366497993469238, "finalLoss": 7.518051981925964, "bestLoss": 7.518051981925964, "diverged": false, "upBytesPerStep": 12.0, "tokens": 15677440}

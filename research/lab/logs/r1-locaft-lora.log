@@ -1,0 +1,30 @@
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/locaft.py:51: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  self.best = float(loss_fn(model, *self.sel))
+[r1-locaft-lora] start eval 5.5977
+[r1-locaft-lora] it 1 t    0.0s tok   0.001M eval 5.5981 up/step 0.197MB {'loss': 5.7058}
+[r1-locaft-lora] it 2 t    0.0s tok   0.002M eval 5.6011 up/step 0.197MB {'loss': 5.7353}
+[r1-locaft-lora] it 5 t    0.1s tok   0.005M eval 5.6054 up/step 0.197MB {'loss': 5.7981}
+[r1-locaft-lora] it 10 t    0.1s tok   0.010M eval 5.6103 up/step 0.197MB {'loss': 5.5126}
+[r1-locaft-lora] it 20 t    0.2s tok   0.020M eval 5.5965 up/step 0.197MB {'loss': 5.798}
+[r1-locaft-lora] it 49 t    0.3s tok   0.050M eval 5.5806 up/step 0.197MB {'loss': 5.5844}
+[r1-locaft-lora] it 98 t    0.6s tok   0.100M eval 5.5695 up/step 0.197MB {'loss': 5.6267}
+[r1-locaft-lora] it 196 t    1.2s tok   0.201M eval 5.5661 up/step 0.197MB {'loss': 5.5958}
+[r1-locaft-lora] it 489 t    3.0s tok   0.501M eval 5.5451 up/step 0.197MB {'loss': 5.7915}
+[r1-locaft-lora] it 977 t    6.1s tok   1.000M eval 5.5361 up/step 0.197MB {'loss': 5.382}
+[r1-locaft-lora] it 1614 t   10.0s tok   1.653M eval 5.5327 up/step 0.197MB {'loss': 5.554}
+[r1-locaft-lora] it 1954 t   12.2s tok   2.001M eval 5.5331 up/step 0.197MB {'loss': 5.5102}
+[r1-locaft-lora] it 3219 t   20.0s tok   3.296M eval 5.5253 up/step 0.197MB {'loss': 5.5732}
+[r1-locaft-lora] it 4824 t   30.1s tok   4.940M eval 5.5227 up/step 0.197MB {'loss': 5.8142}
+[r1-locaft-lora] it 4883 t   30.4s tok   5.000M eval 5.5238 up/step 0.197MB {'loss': 5.7351}
+[r1-locaft-lora] it 6427 t   40.1s tok   6.581M eval 5.5202 up/step 0.197MB {'loss': 5.5565}
+[r1-locaft-lora] it 8027 t   50.1s tok   8.220M eval 5.5138 up/step 0.197MB {'loss': 5.5045}
+[r1-locaft-lora] it 9623 t   60.1s tok   9.854M eval 5.5218 up/step 0.197MB {'loss': 5.5178}
+[r1-locaft-lora] it 9766 t   61.0s tok  10.000M eval 5.5122 up/step 0.197MB {'loss': 5.6367}
+[r1-locaft-lora] it 11217 t   70.1s tok  11.486M eval 5.5125 up/step 0.197MB {'loss': 5.6434}
+[r1-locaft-lora] it 12805 t   80.1s tok  13.112M eval 5.5040 up/step 0.197MB {'loss': 5.5544}
+[r1-locaft-lora] it 14391 t   90.1s tok  14.736M eval 5.5024 up/step 0.197MB {'loss': 5.5337}
+[r1-locaft-lora] it 15974 t  100.1s tok  16.357M eval 5.5015 up/step 0.197MB {'loss': 5.5598}
+[r1-locaft-lora] it 17552 t  110.1s tok  17.973M eval 5.4983 up/step 0.197MB {'loss': 5.5471}
+[r1-locaft-lora] it 19114 t  120.0s tok  19.573M eval 5.5038 up/step 0.197MB {'loss': 5.4136}
+{"label": "r1-locaft-lora", "steps": 19114, "startLoss": 5.597691893577576, "finalLoss": 5.503785610198975, "bestLoss": 5.498272180557251, "diverged": false, "upBytesPerStep": 196608.0, "tokens": 19572736}

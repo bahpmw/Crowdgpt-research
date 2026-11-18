@@ -1,0 +1,1969 @@
+Preprint. Under review.
+EGGROLL, UNROLLED:
+UNDERSTANDING AND IMPROVING LOW-RANK
+EVOLUTION STRATEGIES AT SCALE
+Ege C. Kaya, Abolfazl Hashemi
+Elmore Family School of Electrical and Computer Engineering
+Purdue University
+West Lafayette, IN 47907, USA
+{kayae,abolfazl}@purdue.edu
+ABSTRACT
+EGGROLL (Sarkar et al., 2026) makes evolution strategies (ES) practical for LLMs
+by replacing dense Gaussian weight perturbations with low-rank Gaussian products,
+often of rank one. This choice is computationally attractive but geometrically se-
+vere: Each rank-one perturbation lies in a zero-volume subset of the ambient matrix
+space, despite having identity covariance. We characterize the EGGROLL update
+mean field at finite rank and nonzero perturbation radius as a resolvent applied
+to the gradient of the perturbation-smoothed objective. This transformation can
+make the mean field nonconservative and reverse the local stability of an optimum.
+EGGROLL nevertheless recovers the gradient exactly on quadratic objectives at
+every rank and radius. In finite populations, the additional sampling variance of
+rank-one perturbations relative to dense Gaussian ES decays inversely with matrix
+width under a local affine model, and is only 0.098% at width 4096. Finally, we
+introduce LOO-ROLL, a leave-one-out estimator that replaces EGGROLL’s two
+antithetic evaluations per direction by one. At equal evaluation cost, LOO-ROLL
+halves estimator MSE in transformer blocks. Across fourteen post-training settings
+up to 14B parameters, matched-time comparisons with EGGROLL yield eleven
+improvements in individual paired tests and no significant loss. At 1.7B, 8B, and
+14B parameters, matched-time gains are 2.9, 14.1, and 7.9 percentage points on
+GSM8K and 12.2, 8.4, and 8.1 points on MATH-500.
+1 INTRODUCTION
+Evolution strategies (ES) (Schwefel, 1977; Rechenberg, 1978; Beyer & Schwefel, 2002; Salimans
+et al., 2017) optimize a scalar fitness using perturbed function evaluations. Their forward-only
+computation has motivated memory-efficient language-model fine-tuning (Malladi et al., 2023;
+Gautam et al., 2024; Zhao et al., 2025), while their parallel populations support scalable post-training
+(Sarkar et al., 2026; Hoy et al., 2026; Xu et al., 2026). A remaining difficulty is moving a large
+population of independently perturbed parameter settings through the network efficiently. Modern
+accelerators obtain high throughput when arithmetic reuses data already brought into fast memory
+(Williams et al., 2009; Dao et al., 2022). Giving each member a dense perturbation requires generating
+or reading another mn numbers per weight matrix, making memory traffic grow with the population.
+EGGROLL (Sarkar et al., 2026) perturbs each weight matrix with a rank-r Gaussian product,
+Er = 1√r AB⊤ = 1√r
+rX
+s=1
+asb⊤ s , as ∼ N (0, Im), bs ∼ N (0, In), (1)
+which permits the evaluation of very large populations at near-inference throughput. The normaliza-
+tion by 1/√r gives E[vec(Er ) vec(Er )⊤] = Imn like in dense Gaussian ES, yet each realization has
+rank at most r. When r < min(m, n), the possible realizations occupy zero volume in the ambient
+matrix space (Absil et al., 2008). For an activation x, the perturbed computation is
+(W + σEr )x = W x + σ√r A(B⊤x). (2)
+1
+arXiv:2609.10980v2  [cs.LG]  25 Sep 2026
+
+Preprint. Under review.
+The population shares the base weights W , while each member receives a correction through two thin
+multiplications with A and B⊤. These require O(r(m + n)) additional storage and arithmetic rather
+than the O(mn) of dense Gaussian ES. Low-rank adapters are already widely used in LLM training
+(Hu et al., 2022; Dettmers et al., 2023; Zhang et al., 2023; Liu et al., 2024). EGGROLL adopts this
+representation to estimate an update to network weights without backpropagation.
+EGGROLL performs well in LLM post-training even in the seemingly prohibitive regime of r = 1.
+The original analysis provides asymptotic guarantees, but does not identify the field at the finite ranks
+and radii used in practice. We ask: (i) what mean field does EGGROLL follow, (ii) how accurately
+does a finite population estimate it, and (iii) what improvements does our analysis suggest?
+Our answers reveal the mean dynamics of EGGROLL and the sampling accuracy of a finite population.
+The mean field is a resolvent-filtered gradient, which can be nonconservative and can make a local
+optimum repelling. The discrepancy vanishes on quadratics, and the first local finite-rank correction
+is proportional to σ2/r. The sampling cost is milder: rank-r perturbations add 2(m + n + 1)/r to
+the dense-Gaussian variance factor mn + 1. Rank one therefore retains nearly all of the sampling
+efficiency of dense Gaussian ES for wide matrices. We then introduce LOO-ROLL. The released
+EGGROLL implementation uses two antithetic fitness evaluations per direction. LOO-ROLL uses the
+other population members as leave-one-out baselines, requiring one evaluation per direction while
+preserving EGGROLL’s expected update. The saving can then be used on additional directions or
+optimization steps. Across fourteen settings, two model families, and models up to 14B, eleven
+matched-time gains are individually significant and nine survive Holm-Bonferroni correction (Holm,
+1979). The analysis also suggests rank extrapolation to mitigate the bias introduced by finite rank
+and control variates to mitigate the high variance caused by ES. However, in tested LLM runs, the
+additional cost of these modifications do not justify their usage, hence we treat them in Appendix E.1.
+We summarize our contributions as follows.
+• We derive the exact finite-rank EGGROLL population field as a resolvent-filtered gradient and
+show that it can be nonconservative and locally destabilize an optimum.
+• We prove exactness on quadratics, identify the leading finite-rank correction, and show that the
+surplus finite-population variance relative to dense Gaussian ES decays with matrix width.
+• We introduce LOO-ROLL, replacing antithetic pairs with one-evaluation leave-one-out directions
+while preserving the mean EGGROLL field. Across fourteen LLM post-training settings up to 14B
+parameters, eleven matched-time gains are individually significant, nine survive Holm–Bonferroni
+correction, and none significantly favors EGGROLL.
+Related work. Random-direction finite differences and simultaneous perturbation are classical
+zeroth-order methods (Spall, 1992; Nesterov & Spokoiny, 2017; Duchi et al., 2015). MeZO fine-tunes
+LLMs with inference-level memory, and subsequent work adds variance reduction (Malladi et al.,
+2023; Gautam et al., 2024). Baselines reduce variance in score-function estimators (Williams, 1992;
+Wierstra et al., 2014), with REINFORCE leave-one-out applied to LLM response groups (Ahmadian
+et al., 2024) and curvature-aware zeroth-order tuning (Seung et al., 2026). LOO-ROLL applies this
+principle to EGGROLL’s Gaussian-product population. Scalar product-normal Stein identities are
+established (Gaunt, 2018b;a). Our matrix operator retains the shared row and column factors and
+connects their geometry to optimization dynamics. Extended comparisons appear in Appendix A.
+2 THE FINITE-RANK MEAN FIELD
+We start our inquiry by asking what finite-rank EGGROLL updates follow in expectation. We consider
+one parameter matrix W ∈ Rm×n. Appendix E combines independent perturbations across the
+matrix blocks of a network. Let f : Rm×n → R be the fitness to maximize, and use the Frobenius
+inner product ⟨A, B⟩F = tr(A⊤B). Sampling perturbed weights produces the smoothed objective
+Fr,σ (W ) = E[f (W + σEr )], (3)
+where σ > 0 is the perturbation radius. EGGROLL weights each perturbation by its observed fitness.
+Averaging this update gives the mean field
+gf r,σ (W ) = 1 σ E[Er f (W + σEr )]. (4)
+2
+
+Preprint. Under review.
+This is the infinite-population update that we will later approximate with a finite population. We write
+E∞ for a dense standard Gaussian matrix, corresponding to the r → ∞ limit of the Gaussian-product
+law. For a perturbation density p, the score is ∇ log p. A dense standard Gaussian matrix E∞ has
+score −E∞. Under the usual regularity conditions, Stein’s Gaussian identity (Stein, 1981) gives
+1
+σ E[E∞f (W + σE∞)] = E[∇f (W + σE∞)] = ∇F∞,σ (W ). (5)
+The same identity does not automatically hold for the Gaussian-product law, since at finite rank, −Er
+is not its exact score.
+The reported experiments, fitness shaping, and released LLM implementation of Sarkar et al. (2026)
+use paired antithetic perturbations +Er and −Er :
+bgr,σ,N (W ) = 1 N
+NX
+s=1
+E(s) r f (W + σE(s) r ) − f (W − σE(s) r ) 2σ . (6)
+Here N is the number of independent directions, each evaluated with both signs. The symmetry of
+Er makes bgr,σ,N an unbiased estimator of the mean field. Evaluating both signs on the same prompt
+batch also isolates the effect of the perturbation. Any fitness component shared by the pair, such as
+the difficulty of the prompts in that batch, cancels when the two evaluations are subtracted. For a
+smooth objective, a Taylor expansion around W makes this explicit:
+f (W + σEr ) − f (W − σEr )
+2σ = ⟨∇f (W ), Er ⟩F + O(σ2∥Er ∥3 F ), (7)
+where the constant and other even-order terms cancel. EGGROLL normally also centers and stan-
+dardizes fitness values across the population. Our main analysis studies the raw, unstandardized field
+in Equation (4). Appendix G treats the standardization and quantifies its difference from the raw field.
+The definitions above lead to two deterministic questions. First, how does the EGGROLL mean field
+gf r,σ differ from the gradient ∇Fr,σ of the objective smoothed by the same perturbations? Second,
+when they differ, is gf r,σ still conservative, meaning that it is the gradient of some scalar objective?
+Sampling with Er smooths f into Fr,σ , while weighting those samples by the dense-Gaussian score
+produces the mean field. We first characterize the discrepancy between these two fields and then
+determine when the EGGROLL field remains conservative.
+Both Fr,σ and gf r,σ can be written as convolutions. The smoothed objective Fr,σ convolves f with the
+Gaussian-product law, while each component of the mean field gf r,σ convolves f with the same law
+weighted by the corresponding entry of Er /σ. Hence, a Fourier frequency analysis lets us compare
+the smoothed gradient and the EGGROLL mean field. Letting Φr (T ) = E[ei⟨T,Er ⟩F ] denote the
+characteristic function of the perturbation law, we have the following result.
+Theorem 2.1 (Exact Gaussian-product law). For T ∈ Rm×n,
+Φr (T ) = det
+
+Im + T T ⊤ r −r/2 , ∇T Φr (T ) = −Φr (T )  Im + T T ⊤ r −1 T. (8)
+The proof is given in Appendix B. For the Fourier mode fT (W ) = ei⟨T,W ⟩F , this gives
+gfT r,σ (W ) = iΦr (σT )
+
+Im + σ2T T ⊤ r −1 T ei⟨T,W ⟩F . (9)
+For the same mode, direct substitution into Equation (3) gives
+Fr,σ (W ) = Φr (σT )ei⟨T,W ⟩F , ∇Fr,σ (W ) = iΦr (σT )T ei⟨T,W ⟩F . (10)
+Comparing this expression with Equation (9), smoothing contributes the common scalar factor
+Φr (σT ), while the score mismatch tilts the gradient direction T to
+J (T ) =
+
+Im + σ2T T ⊤ r −1 T. (11)
+Figure 1 visualizes this transformation on the diagonal subspace T = diag(t1, t2).
+3
+
+Preprint. Under review.
+−2 −1 0 1 2
+diagonal mode t1
+−2
+−1
+0
+1
+2
+diagonal mode t2 T and J(T) coincide
+radial contours
+no directional tilt
+A. Dense Gaussian
+−2 −1 0 1 2
+diagonal mode t1
+finite-rank geometry
+tilts the mode
+B. r = 1, σ = 1
+−2 −1 0 1 2
+diagonal mode t1
+smaller radius
+reduces the tilt
+C. r = 1, σ = 0.5
+−2 −1 0 1 2
+diagonal mode t1
+higher rank
+reduces the tilt
+D. r = 8, σ = 1
+original mode T filtered mode J(T)
+Figure 1: Geometry on the diagonal subspace T = diag(t1, t2). Darker contours denote weaker
+attenuation. Blue arrow gives the gradient-mode direction T , and orange arrow gives the population-
+mode direction J (T ). A: A dense Gaussian has radial contours and does not tilt the mode. B: The
+rank-one product law is nonradial and tilts J (T ) away from T . C: Decreasing σ reduces attenuation
+and tilt. D: Increasing rank moves the geometry toward the dense-Gaussian limit.
+To translate the frequency-wise multiplier back into weight space, define the differential operator
+(LV )ij = −
+mX
+k=1
+nX
+ℓ=1
+∂iℓ∂kℓVkj , (12)
+where ∂ab differentiates with respect to Wab. On a mode Cei⟨T,W ⟩F , L multiplies C by T T ⊤.
+Combining these frequency-wise transformations recovers the relationship between the complete
+mean field and smoothed gradient.
+Theorem 2.2 (The finite-rank resolvent). If f is locally integrable and of at most polynomial growth,
+gf r,σ =
+
+I + σ2
+r L
+−1
+∇Fr,σ . (13)
+The equality holds in the sense of tempered distributions. It holds pointwise if f (W ) =R
+ei⟨T,W ⟩F µf (dT ) with R (1 + ∥T ∥3 F )|µf |(dT ) < ∞.
+The inverse (I + σ2L/r)−1 is the resolvent of the positive operator σ2L/r (Bauschke & Combettes,
+2020). Thus, the mean field is obtained by spectrally damping the smoothed gradient rather than
+merely rescaling it. The distributional statement covers polynomially growing objectives such as
+quadratics, while the stronger Fourier condition gives an ordinary pointwise equality. Appendix B
+gives the proof and regularity details. If T has singular values sj , the resolvent scales its corresponding
+directions by (1 + σ2s2 j /r)−1. Larger singular values are thus attenuated more strongly, and the
+unequal factors can rotate the mode direction despite identity covariance.
+The resolvent identity also quantifies how far the EGGROLL mean field can depart from the gradient
+of the correspondingly smoothed objective.
+Corollary 2.3 (Exact score-mismatch control). Let Jr,σ = (I + σ2L/r)−1. If ∇Fr,σ belongs to the
+domain of L, then
+gf r,σ − ∇Fr,σ = − σ2 r Jr,σ L∇Fr,σ , ∥gf r,σ − ∇Fr,σ ∥L2 ≤ σ2 r ∥L∇Fr,σ ∥L2 . (14)
+Thus the departure from the smoothed gradient is controlled by its variation in the matrix-coupled
+directions measured by L, and vanishes linearly with σ2/r. The proof appears in Appendix B.
+3 WHEN DOES FINITE RANK CHANGE THE DYNAMICS?
+The resolvent characterizes the EGGROLL mean field, but does not guarantee that it optimizes any
+scalar objective. We therefore ask which perturbation laws always produce a conservative field,
+4
+
+Preprint. Under review.
+max Re(λ) = − 0.007  stable
+True smoothed gradient
+max Re(λ) = + 0.029  unstable
+Rank one
+max Re(λ) = − 0.004  stable
+Rank two
+max Re(λ) = − 0.005  stable
+Rank extrapolation
+Local linearized ascent near the same strict optimum
+Figure 2: Local linearized dynamics for the cosine objective in Equation (17). Curves solve ˙δ = Aδ,
+where A is each field’s Jacobian at the origin, and are shown in the same plane. The origin is a strict
+local maximum of both f and F1,1. Rank-one EGGROLL repels along one direction, while rank two
+is locally attracting. The rank-extrapolation comparison is developed in Appendix E.1.
+equivalently, one with a symmetric Jacobian (Spivak, 1965). Real trigonometric polynomials suffice
+as a test class because their finite Fourier sums can isolate arbitrary frequencies. Failure on this class
+rules out a universal guarantee for any broader class containing it.
+Theorem 3.1 (Universal conservativity). Let d ≥ 2 and let Z ∈ Rd be centered with E[∥Z∥] < ∞.
+The field
+x 7→ 1 σ E[Zf (x + σZ)] (15)
+is conservative for every real trigonometric polynomial f and every σ > 0 if and only if the law of Z
+is spherically symmetric.
+Spherical symmetry makes the characteristic function Φ(t) radial, so ∇Φ(t) is parallel to the fre-
+quency t. Every Fourier mode of the mean field then remains aligned with the corresponding gradient
+mode. Conversely, if ∇Φ(t) is not parallel to t at some frequency, a real trigonometric objective
+can combine such modes to produce a nonsymmetric Jacobian. The Gaussian-product characteristic
+function depends on the individual singular values of its matrix argument rather than only on its
+Frobenius norm. Its law is therefore not spherically symmetric at finite rank, and the EGGROLL mean
+field need not be conservative. The proof and an explicit cosine example appear in Appendix B.4.
+Nonconservativity alone does not necessarily show that the altered field harms optimization. The
+following construction shows that finite rank can change even the local stability of a strict optimum.
+Proposition 3.2 (An optimum can become repelling). Set r = σ = 1, ε = 0.01, and
+T1 =
+
+−2 −2
+−2 −1
+
+, T2 =
+
+−2 2
+2 −1
+
+. (16)
+Define
+f (W ) = cos⟨T1, W ⟩F + 1 4 cos⟨T2, W ⟩F + ε X i,j cos Wij . (17)
+Then zero is a strict local maximum of both f and F1,1, but the Jacobian of gf 1,1 at zero has a positive
+eigenvalue λ+ ≈ 0.02925.
+The construction and its trajectories are detailed in Appendix B.4 and Figure 2.
+The counterexample establishes that finite rank can change the dynamics, but not which properties of
+the objective permit this change. Quadratic objectives provide a dividing line. For any quadratic f
+and any realization of Er , the antithetic difference equals the directional derivative:
+f (W + σEr ) − f (W − σEr )
+2σ = ⟨∇f (W ), Er ⟩F . (18)
+Multiplying by Er and taking expectations recovers ∇f (W ) by identity covariance.
+Proposition 3.3 (Exactness on quadratic objectives). For f (W ) = 1 2 ⟨W, HW ⟩F + ⟨C, W ⟩F + c
+with self-adjoint H, gf r,σ (W ) = ∇f (W ) for every r ≥ 1 and σ > 0.
+5
+
+Preprint. Under review.
+Quadratic exactness clarifies the source of the instability in Theorem 3.2. The objective and its
+quadratic Taylor approximation have the same value, gradient, and Hessian at the origin, but
+EGGROLL evaluates the objective at finite perturbations around that point. At σ = 1, these
+evaluations reach regions where the cosine terms are poorly quadratically approximated. The stability
+reversal therefore comes from higher-order variation over the perturbation scale. For a general smooth
+objective, the following result identifies the first such departure from quadratic behavior.
+Proposition 3.4 (Small-radius expansion). Fix m, n, r. If f ∈ C 5 and M5 = supW ∥D5f (W )∥op <
+∞, then, uniformly in W as σ → 0,
+gf r,σ = ∇f + σ2 2 ∇∆f + σ2 r Df + Rr,σ , sup W ∥Rr,σ (W )∥F ≤ σ4M5 120 E[∥Er ∥6 F ], (19)
+where ∆f = P k,ℓ ∂2 kℓf and (Df )ij = P k,ℓ ∂iℓ∂kℓ∂kj f.
+The proof is given in Appendices B.5 and E.3. The gradient-Laplacian term is the ordinary cost of
+dense Gaussian smoothing. The additional third-derivative term is specific to finite rank and need not
+be a gradient field. Both vanish on quadratics. The expansion concerns the complete displacement
+σEr , whose root-mean-square Frobenius norm is σ√mn, so its accuracy depends on dimension and
+derivative bounds as well as radius. Proofs and nonasymptotic bounds under standard smoothness
+appear in Appendix B.5. Conventional convergence consequences are collected in Appendix E.2.
+4 THE SAMPLING COST OF FINITE RANK
+The preceding sections determine the mean update averaged over the perturbation law. An actual
+EGGROLL step replaces this expectation with an average over finitely many directions. We now ask
+how accurately that population estimates its mean. To isolate this sampling variability, we condition on
+any randomness in fitness evaluation and use the local affine model f (W +σE) = f (W )+σ⟨G, E⟩F ,
+where G = ∇f (W ). One antithetic direction then gives X = Er ⟨Er , G⟩F , with E[X] = G. Because
+X is unbiased, its total variance, the trace of its covariance, equals E[∥X − G∥2 F ].
+Theorem 4.1 (Finite-population variance). For independent X1, . . . , XN and bGN = N −1 P s Xs,
+E[∥ bGN − G∥2 F ] = κr N ∥G∥2 F , κr := mn + 1 + 2(m + n + 1) r . (20)
+The full covariance and proof appear in Appendix B.6. Dense Gaussian directions share the factor
+mn + 1, while finite rank adds 2(m + n + 1)/r. For a square matrix of width w, the relative variance
+increase over dense Gaussian ES is therefore 2(2w + 1)/[r(w2 + 1)] = O(1/(rw)). To give an
+LLM-scale example, at w = 4096, as in Qwen3-8B, the rank-one increase is only 0.098%. Rank one
+can therefore estimate its mean field almost as efficiently as dense Gaussian ES estimates its own.
+A complementary question is how the mean field itself changes with rank. For ∥u∥∞,p :=
+supW ∥u(W )∥F /(1 + ∥W ∥F )p, the kernel expansion in Appendix B.7 gives a uniform statement.
+Theorem 4.2 (Fixed-radius rank expansion). If |f (W )| ≤ Cf (1 + ∥W ∥p F ), then for every fixed
+σ > 0 there exist Rσ,p < ∞ and r0 such that, for r ≥ r0, gf r,σ − gf ∞,σ − 1 r Bσ f  ∞,p ≤ Rσ,p r2 . (21)
+If Bσ f is nonzero, the 1/r rate is tight in this norm.
+The coefficient Bσ f identifies the leading finite-rank error, motivating Richardson extrapolation using
+ranks r and αr. However, each estimate retains the dense-Gaussian variance coefficient mn + 1.
+Extrapolation therefore improves the bias order while requiring more evaluations and amplifying
+sampling noise. Appendices B.7 and E.1 gives the proof and develops this tradeoff.
+5 EGGROLL LEADS TO LOO-ROLL
+The preceding analysis identifies finite-rank bias and the large directional variance already present in
+dense Gaussian ES. The antithetic implementation adds a third cost: two evaluations per direction.
+6
+
+Preprint. Under review.
+LOO-ROLL reduces this cost by using the rest of the population to construct a leave-one-out baseline.
+At iteration t, sample N ≥ 2 independent directions and write Ft,s = f (Wt + σEt,s). Define
+bgLOO t = 1 N σ
+NX
+s=1
+Et,s(Ft,s − F t,−s), F t,−s = 1 N − 1 X j̸=s Ft,j . (22)
+Since Ft,s − F t,−s = N (Ft,s − F t)/(N − 1), the baseline requires only the population mean and
+no additional evaluations.
+Proposition 5.1 (Unbiasedness of LOO-ROLL). Let Ft denote the sigma-field generated by the
+optimization history before iteration t. Conditional on Ft, suppose that N ≥ 2 and Et,1, . . . , Et,N
+are independent, centered, and have distribution Law(Er ). Assume that Ft,s and ∥Et,s∥F Ft,s are
+conditionally integrable. Then,
+E
+
+bgLOO t | Ft  = gf r,σ (Wt). (23)
+This unbiasedness statement holds before population score standardization. The practical imple-
+mentation retains EGGROLL’s standardization, whose effect on the expected update is treated in
+Appendix G. To compare variances, we use the same affine model as in Section 4. Write bgLOO(W ; N )
+and bganti(W ; N ) for the estimators formed from N directions, and let d = mn.
+Proposition 5.2 (Variance of LOO-ROLL in the affine model). Suppose f (W + σE) = f (W ) +
+σ⟨G, E⟩F and write d = mn, with κr as defined in Equation (20). For N ≥ 2 independent directions,
+the LOO-ROLL estimator satisfies
+E
+
+∥bgLOO(W ; N ) − G∥2 F  =  κr N + d + 1 N (N − 1)  ∥G∥2 F . (24)
+For G ̸= 0, comparing the variance of 2N LOO-ROLL directions with N antithetic directions at
+equal evaluation cost gives
+E[∥bgLOO(W ; 2N ) − G∥2 F ]
+E[∥bganti(W ; N ) − G∥2 F ] = 1 2 + d + 1 2κr (2N − 1) . (25)
+Proofs of both propositions are given in Appendix C. Antithetic sampling and baseline subtraction
+are both established ways to reduce the variance of score-function estimators (Salimans et al., 2017;
+Williams, 1992; Wierstra et al., 2014). EGGROLL spends two evaluations on each independent
+direction and subtracts their fitnesses, canceling reward components shared by the pair. LOO-ROLL
+instead removes the population reward offset with a leave-one-out baseline, allowing every evaluation
+to use a new independent direction. At fixed N , estimating the baseline adds only an order-N −2
+term to the order-N −1 directional variance. With 2N evaluations, LOO-ROLL uses twice as many
+independent directions and its variance approaches one half of EGGROLL’s.
+LOO-ROLL preserves EGGROLL’s computational structure. Each evaluation uses a low-rank pertur-
+bation and the same shared base weights and batched forward computations. The implementation
+retains seed-based reconstruction, layerwise updates, and weight synchronization. The baseline
+requires neither additional model-sized state nor communication rounds. Evaluations previously
+spent on antithetic partners can therefore fund more directions or further updates.
+6 EXPERIMENTS
+We begin by testing the theoretical predictions before examining their consequences for LLM post-
+training and LOO-ROLL. Complete protocols, additional figures, and numerical aggregates appear in
+Appendices D and F.
+Sampling variance and stability follow the predictions. Monte Carlo variance agrees to within
+0.9% at every tested rank with the exact finite-population prediction κr ∥G∥2 F /N from Equation (20)
+and Table 16. The nonquadratic counterexample reproduces the predicted Jacobian eigenvalue
+0.02925 at rank one and −0.00444 at rank two (Figure 2). Cubic and Fourier objectives recover
+the σ2/r and fixed-radius 1/r corrections. On a quadratic objective, the finite-population formula
+predicts both the one-step change and the 25-step trajectories from the objective, step size, rank,
+7
+
+Preprint. Under review.
+and population size (Figure 5). At step size 0.3 and N = 16, expected loss grows at rank one
+but decreases at rank eight and under dense Gaussian ES. Here, the instability arises entirely from
+sampling variance, since the mean fields agree. Appendix F.4 gives the full experiments.
+Transformer blocks recover the finite-rank surcharge. We perturb 16 × 16 attention and MLP
+sub-blocks of Qwen3-0.6B, evaluating next-token prediction loss on a fixed minibatch. With 8,192
+directions and three perturbation seeds, attention-block MSE ratios relative to dense Gaussian ES are
+1.264, 1.127, 1.089, 1.028 at ranks 1, 2, 4, 8, close to the affine predictions 1.257, 1.128, 1.064, 1.032
+(Figure 3). Across ranks, the cosine similarity between the Monte Carlo estimate of the EGGROLL
+mean field and the backpropagated block gradient remains between 0.980 and 0.984. Thus the
+experiment resolves the predicted rank-dependent variance while finding little rank dependence in
+the mean direction at the tested radii. In a separate audit at N = 128, the mean updates obtained with
+and without population score standardization have cosine similarity 0.99970 at rank one (Table 17).
+1 2 4 8
+Perturbation rank
+1.00
+1.05
+1.10
+1.15
+1.20
+1.25
+1.30
+1.35Variance relative to dense Gaussian ES
+Variance surcharge
+Affine theory
+Dense Gaussian ES
+MLP block
+Attention block
+1 2 4 8
+Perturbation rank
+0.9700
+0.9725
+0.9750
+0.9775
+0.9800
+0.9825
+0.9850
+0.9875
+0.9900Cosine with backpropagated gradient
+Mean-direction alignment
+MLP block
+Attention block
+Figure 3: Finite-rank audit of two Qwen3-0.6B blocks. Left: single-direction MSE relative to
+dense Gaussian ES. The dashed curve is the exact affine prediction [257 + 66/r]/257 for a 16 × 16
+block. Right: the mean of 8,192 antithetic directions remains aligned with the backpropagated block
+gradient. Points average four radii within each seed, and bars are standard errors over three seeds.
+Increasing rank does not yield a reproducible reward advantage. Across Countdown and GSM8K
+comparisons, rank-eight minus rank-one intervals contain zero, while rank eight increases iteration
+time by 12–25% (Table 4). Raising σ from 10−3 to 4×10−3 reduces mean reward by 70–100% in the
+0.6B and 1.7B studies (Figure 4 and Table 11). These results show that performance is substantially
+more sensitive to radius than rank in these settings.
+Having validated the mean-field and variance predictions, we now evaluate LOO-ROLL in complete
+LLM post-training runs and ask whether its saved evaluations translate into better performance at
+equal wall time. We compare Qwen3 models from 0.6B to 14B (Yang et al., 2025) and SmolLM2-
+1.7B (Allal et al., 2025) over five paired training seeds per setting. Both methods start from the
+same pretrained checkpoint and retain the same learning rate, rank, radius, prompt batches, and
+score processing. Equal-iteration runs use the same direction count. Equal-evaluation runs double
+LOO-ROLL’s directions. Equal-time runs continue LOO-ROLL to the paired EGGROLL runtime.
+Timing includes model loading and checkpoint writing, and accumulates all resumed training.
+GSM8K (Cobbe et al., 2021) uses all 1,319 test questions and MATH-500 uses all 500 problems.
+MATH training excludes MATH-500. Countdown and next-token prediction use 256 shared validation
+examples. Checkpoints are selected by update count or stopping budget, without choosing the best test
+score. Table 8 provides exact hardware, direction counts, batches, updates, and measured runtimes.
+At equal evaluation cost, update MSE is approximately halved. Across two transformer blocks,
+two radii, and three seeds, using the same number of directions increases MSE by at most 5.2%,
+falling to 0.8% at N = 128. Doubling the directions at equal evaluation cost reduces MSE by
+49.0–50.1% across N = 16, 32, 64, 128 (Table 1), agreeing with Equation (25).
+Additional updates yield gains across scale and task. Tables 2 and 6 report paired mean changes
+and sample standard deviations. At matched time, GSM8K accuracy rises from 38.10% ± 2.03 to
+63.00% ± 0.80 at 0.6B, from 65.87% ± 0.78 to 80.00% ± 0.78 at 8B, and from 71.22% ± 0.67 to
+8
+
+Preprint. Under review.
+Table 1: Signed percentage change in LOO-ROLL MSE relative to antithetic EGGROLL. Positive
+values mean higher MSE. The equal-direction comparison uses N directions for both estimators,
+while the equal-evaluation comparison uses 2N LOO-ROLL directions against N antithetic directions.
+Values average two transformer blocks, two radii, and three seeds.
+Antithetic directions N Equal directions Equal evaluations
+16 +5.2% −49.1%
+32 +2.5% −49.0%
+64 +1.2% −50.1%
+128 +0.8% −49.5%
+Table 2: LOO-ROLL minus antithetic EGGROLL reward. GSM8K and MATH-500 results use the
+full test sets, while Countdown uses 256 shared examples. Values are mean ± standard deviation of
+five paired training-seed differences, in percentage points. Bold marks positive mean improvements.
+Model Task Equal iterations Equal evaluations Equal wall time
+SmolLM2-1.7B Countdown −0.20% ± 0.22 −0.08% ± 0.34 −0.10% ± 0.46
+SmolLM2-1.7B GSM8K +0.50% ± 0.64 +0.23% ± 0.74 +4.18% ± 1.54
+Qwen3-0.6B Countdown −4.09% ± 3.97 −1.05% ± 1.49 −0.62% ± 3.46
+Qwen3-0.6B GSM8K +5.35% ± 1.76 −4.82% ± 4.87 +24.90% ± 2.38
+Qwen3-1.7B Countdown −3.89% ± 1.22 −0.31% ± 1.56 +1.68% ± 1.03
+Qwen3-1.7B GSM8K 0.00% ± 1.01 −0.26% ± 0.81 +2.85% ± 0.83
+Qwen3-1.7B MATH-500 +0.56% ± 1.17 −0.08% ± 1.25 +12.20% ± 1.56
+Qwen3-8B GSM8K +0.85% ± 0.66 −1.08% ± 1.21 +14.13% ± 0.88
+Qwen3-8B MATH-500 +0.24% ± 1.36 +0.60% ± 1.65 +8.36% ± 1.68
+Qwen3-14B GSM8K +0.41% ± 0.89 −0.08% ± 0.79 +7.85% ± 1.35
+Qwen3-14B MATH-500 +1.12% ± 0.70 +0.60% ± 0.47 +8.08% ± 1.23
+79.08% ± 0.92 at 14B. On SmolLM2-1.7B, accuracy rises from 18.54% ± 0.51 to 22.73% ± 1.15.
+MATH-500 gains are 12.20, 8.36, and 8.08 percentage points at 1.7B, 8B, and 14B. At 14B, accuracy
+rises from 44.68% ± 0.72 to 52.76% ± 1.13, with every seed improving. LOO-ROLL completes
+522.8 updates on average against EGGROLL’s 200 in the same approximately 29-hour budget.
+Next-token prediction loss in Table 6 also falls at equal time, by 1.20% and 2.16% relative to the
+EGGROLL baselines at 1.7B and 8B. The corresponding differences at equal evaluations are small,
+so the improvement follows from the additional updates that the saved computation permits. Across
+the fourteen primary settings, eleven gains are significant in individual paired tests, nine survive
+Holm correction, and none significantly favors EGGROLL (Table 10). The average paired time ratio
+is approximately 1.001. At equal evaluations, thirteen differences are unresolved, with a smaller
+0.60-point gain on 14B MATH-500 (p = 0.0459). The improvements use the EGGROLL learning
+rate and perturbation radius, without separate tuning for LOO-ROLL. At a fixed direction count,
+the gap narrows as the population grows. The practical advantage comes from spending the saved
+evaluations on more directions or updates.
+7 CONCLUSION
+We showed that finite-rank EGGROLL follows a resolvent-filtered smoothed gradient that can be
+nonconservative and destabilize an optimum, yet is exact on quadratics and adds little sampling
+variance for wide matrices. We proposed LOO-ROLL, which replaces antithetic evaluations with
+leave-one-out baselines while retaining EGGROLL’s low-rank, batched, forward-only computation.
+At equal evaluation cost it approximately halves update MSE, and across fourteen LLM post-training
+settings with up to 14B parameters, eleven matched-time gains are individually significant and none
+significantly favors EGGROLL. The main theory is limited to the unstandardized field and a local
+affine variance model, and the experiments to two model families and three tasks. Future work should
+treat adaptive score processing and dynamic allocation of rank, radius, and population.
+9
+
+Preprint. Under review.
+AI USE STATEMENT
+Generative AI tools assisted with literature discovery, experimental orchestration, and language and
+formatting revisions. The authors independently checked all citations. The authors made all final
+scientific and editorial decisions and take responsibility for the complete contents of the submission.
+ETHICS STATEMENT
+This work studies optimization methods using publicly available pretrained models and benchmark
+datasets. It involves no human subjects, private data, or deployment, and raises no ethical concerns
+beyond those generally associated with language-model research.
+REPRODUCIBILITY STATEMENT
+All theorem assumptions are stated in the main text, and complete proofs are provided in the
+appendix. The supplementary material includes the complete training and evaluation code, experiment
+configurations, and analysis scripts. LOO-ROLL is implemented as a 37-line patch to the EGGROLL
+vLLM code at commit bcc215e8784f5f44d24985145c0a71e74283cf1f, comprising 15
+insertions and 22 deletions in one file. The algorithmic patch is provided separately from the shared
+model-compatibility changes so that the modification can be inspected and reproduced directly.
+Reward-based runs use rank one, σ = 10−3, and learning rate 2 × 10−4. Next-token prediction uses
+32 directions and σ = 10−2 at 0.6B and 1.7B or 3 × 10−3 at 8B, with learning rate 4 × 10−4 only for
+the 8B setting. Equal-evaluation comparisons double the LOO-ROLL direction count. Experiments
+use one NVIDIA H100 80GB GPU and 14 CPU cores, except 14B MATH training, which uses
+two H100 GPUs and 28 CPU cores for both methods. Paired comparisons begin from the same
+pretrained checkpoint and share seeds, prompt batches, learning rates, ranks, perturbation radii, and
+score processing. Timing includes model loading, updates, and checkpoint writing, with elapsed time
+accumulated across resumed runs. Checkpoints are fixed by update count or stopping budget rather
+than test performance. GSM8K and MATH-500 use their complete 1,319- and 500-example test
+sets, with MATH-500 excluded from training. Countdown and next-token prediction use 256 shared
+validation examples. Table 8 reports direction counts, batch sizes, update budgets, and measured
+runtimes for every primary comparison.
+10
+
+Preprint. Under review.
+REFERENCES
+P-A Absil, Robert Mahony, and Rodolphe Sepulchre. Optimization algorithms on matrix manifolds.
+Princeton University Press, 2008.
+Arash Ahmadian, Chris Cremer, Matthias Gallé, Marzieh Fadaee, Julia Kreutzer, Olivier Pietquin,
+Ahmet Üstün, and Sara Hooker. Back to basics: Revisiting REINFORCE-style optimization
+for learning from human feedback in LLMs. In Proceedings of the 62nd Annual Meeting of the
+Association for Computational Linguistics (Volume 1: Long Papers), pp. 12248–12267, 2024.
+Loubna Ben Allal, Anton Lozhkov, Elie Bakouch, Gabriel Martín Blázquez, Guilherme Penedo,
+Lewis Tunstall, Andrés Marafioti, Hynek Kydlíˇcek, Agustín Piqueres Lajarín, Vaibhav Srivastav,
+et al. SmolLM2: When smol goes big–data-centric training of a small language model. arXiv
+preprint arXiv:2502.02737, 2025.
+Krishnakumar Balasubramanian and Saeed Ghadimi. Zeroth-order nonconvex stochastic optimization:
+Handling constraints, high dimensionality, and saddle points. Foundations of Computational
+Mathematics, 22(1):35–76, 2022.
+Heinz H Bauschke and Patrick L Combettes. Correction to: convex analysis and monotone operator
+theory in Hilbert spaces. In Convex analysis and monotone operator theory in Hilbert spaces, pp.
+C1–C4. Springer, 2020.
+Hans-Georg Beyer and Hans-Paul Schwefel. Evolution strategies–a comprehensive introduction.
+Natural computing, 1(1):3–52, 2002.
+Krzysztof Choromanski, Mark Rowland, Vikas Sindhwani, Richard Turner, and Adrian Weller.
+Structured evolution with compact architectures for scalable policy optimization. In International
+Conference on Machine Learning, pp. 970–978. PMLR, 2018.
+Krzysztof M Choromanski, Aldo Pacchiano, Jack Parker-Holder, Yunhao Tang, and Vikas Sindhwani.
+From complexity to simplicity: Adaptive ES-active subspaces for blackbox optimization. Advances
+in Neural Information Processing Systems, 32, 2019.
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve
+math word problems. arXiv preprint arXiv:2110.14168, 2021.
+Tri Dao, Dan Fu, Stefano Ermon, Atri Rudra, and Christopher Ré. Flashattention: Fast and memory-
+efficient exact attention with IO-awareness. Advances in neural information processing systems,
+35:16344–16359, 2022.
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. QLoRA: Efficient finetuning
+of quantized LLMs. Advances in neural information processing systems, 36:10088–10115, 2023.
+John C Duchi, Michael I Jordan, Martin J Wainwright, and Andre Wibisono. Optimal rates for
+zero-order convex optimization: The power of two function evaluations. IEEE Transactions on
+Information Theory, 61(5):2788–2806, 2015.
+Gerald B Folland. Real analysis: modern techniques and their applications. John Wiley & Sons,
+1999.
+Robert Gaunt. Products of normal, beta and gamma random variables: Stein operators and distribu-
+tional theory. Brazilian Journal of Probability and Statistics, 32(2):437–466, April 2018a. doi:
+10.1214/16-BJPS349.
+Robert E. Gaunt. On Stein’s method for products of normal random variables and zero bias couplings.
+Bernoulli, 23(4B):3311–3345, 2018b. ISSN 13507265. URL http://www.jstor.org/
+stable/26491760.
+Tanmay Gautam, Youngsuk Park, Hao Zhou, Parameswaran Raman, and Wooseok Ha. Variance-
+reduced zeroth-order methods for fine-tuning language models. In Ruslan Salakhutdinov, Zico
+Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp
+(eds.), Proceedings of the 41st International Conference on Machine Learning, volume 235 of
+11
+
+Preprint. Under review.
+Proceedings of Machine Learning Research, pp. 15180–15208. PMLR, 21–27 Jul 2024. URL
+https://proceedings.mlr.press/v235/gautam24a.html.
+Nikolaus Hansen. The CMA evolution strategy: A tutorial. arXiv preprint arXiv:1604.00772, 2016.
+Nicholas J Higham. Functions of matrices: theory and computation. SIAM, 2008.
+Sture Holm. A simple sequentially rejective multiple test procedure. Scandinavian journal of
+statistics, pp. 65–70, 1979.
+William Hoy, Binxu Wang, and Xu Pan. Matching accuracy, different geometry: Evolution strategies
+vs GRPO in LLM post-training. In Third Conference on Language Modeling, 2026. URL
+https://openreview.net/forum?id=HsyvUQdeGS.
+Edward J Hu, yelong shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. LoRA: Low-rank adaptation of large language models. In International
+Conference on Learning Representations, 2022. URL https://openreview.net/forum?
+id=nZeVKeeFYf9.
+Leon Isserlis. On a formula for the product-moment coefficient of any order of a normal frequency
+distribution in any number of variables. Biometrika, 12(1/2):134–139, 1918.
+Jake Levi, Seth Nabarro, and Mark van der Wilk. On the scalability of forward gradients, evolution
+strategies, and control variates. Transactions on Machine Learning Research, 2026. ISSN 2835-
+8856. URL https://openreview.net/forum?id=s6g8yZimHE.
+Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, Kwang-
+Ting Cheng, and Min-Hung Chen. DoRA: Weight-decomposed low-rank adaptation. In Ruslan
+Salakhutdinov, Zico Kolter, Katherine Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and
+Felix Berkenkamp (eds.), Proceedings of the 41st International Conference on Machine Learning,
+volume 235 of Proceedings of Machine Learning Research, pp. 32100–32121. PMLR, 21–27 Jul
+2024. URL https://proceedings.mlr.press/v235/liu24bn.html.
+Niru Maheswaranathan, Luke Metz, George Tucker, Dami Choi, and Jascha Sohl-Dickstein. Guided
+evolutionary strategies: Augmenting random search with surrogate gradients. In International
+Conference on Machine Learning, pp. 4264–4273. PMLR, 2019.
+Sadhika Malladi, Tianyu Gao, Eshaan Nichani, Alex Damian, Jason D Lee, Danqi Chen, and Sanjeev
+Arora. Fine-tuning language models with just forward passes. Advances in Neural Information
+Processing Systems, 36:53038–53075, 2023.
+Robb J Muirhead. Aspects of multivariate statistical theory. John Wiley & Sons, 2009.
+Yurii Nesterov and Vladimir Spokoiny. Random gradient-free minimization of convex functions.
+Foundations of Computational Mathematics, 17(2):527–566, 2017.
+Ingo Rechenberg. Evolutionsstrategien. In Simulationsmethoden in der Medizin und Biologie:
+Workshop, Hannover, 29. Sept.–1. Okt. 1977, pp. 83–114. Springer, 1978.
+Tim Salimans, Jonathan Ho, Xi Chen, Szymon Sidor, and Ilya Sutskever. Evolution strategies as a
+scalable alternative to reinforcement learning. arXiv preprint arXiv:1703.03864, 2017.
+Bidipta Sarkar, Mattie Fellows, Juan Agustin Duque, Alistair Letcher, Antonio León Villares, Anya
+Sims, Clarisse Wibault, Dmitry Samsonov, Dylan Cope, Jarek Luca Liesen, Kang Li, Lukas
+Seier, Theo Wolf, Uljad Berdica, Valentin Mohl, Alexander David Goldie, Aaron Courville,
+Karin Sevegnani, Shimon Whiteson, and Jakob Nicolaus Foerster. Evolution strategies at the
+hyperscale. In Forty-third International Conference on Machine Learning, 2026. URL https:
+//openreview.net/forum?id=bfVJ4GsHrO.
+Hans-Paul Schwefel. Numerische Optimierung von Computer-Modellen mittels der Evolutionsstrate-
+gie: mit einer vergleichenden Einführung in die Hill-Climbing-und Zufallsstrategie, volume 57.
+Springer, 1977.
+12
+
+Preprint. Under review.
+Hyunseok Seung, Jaewoo Lee, and Hyunsuk Ko. Low-rank curvature for zeroth-order optimization
+in LLM fine-tuning. In Proceedings of the AAAI Conference on Artificial Intelligence, volume 40,
+pp. 25235–25242, 2026.
+James C Spall. Multivariate stochastic approximation using a simultaneous perturbation gradient
+approximation. IEEE transactions on automatic control, 37(3):332–341, 1992.
+Michael Spivak. Calculus on manifolds: a modern approach to classical theorems of advanced
+calculus. Westview Press, 1965.
+Charles M Stein. Estimation of the mean of a multivariate normal distribution. The annals of Statistics,
+pp. 1135–1151, 1981.
+Yunhao Tang, Krzysztof Choromanski, and Alp Kucukelbir. Variance reduction for evolution
+strategies via structured control variates. In International Conference on Artificial Intelligence and
+Statistics, pp. 646–656. PMLR, 2020.
+Sharan Vaswani, Francis Bach, and Mark Schmidt. Fast and faster convergence of SGD for over-
+parameterized models and an accelerated perceptron. In The 22nd international conference on
+artificial intelligence and statistics, pp. 1195–1204. PMLR, 2019.
+Jun-Kun Wang, Xiaoyun Li, and Ping Li. Zeroth order optimization by a mixture of evolution
+strategies, 2020. URL https://openreview.net/forum?id=SklE_CNFPr.
+Zhongruo Wang, Krishnakumar Balasubramanian, Shiqian Ma, and Meisam Razaviyayn. Zeroth-
+order algorithms for nonconvex–strongly-concave minimax problems with improved complexities.
+Journal of Global Optimization, 87(2):709–740, 2023.
+Daan Wierstra, Tom Schaul, Tobias Glasmachers, Yi Sun, Jan Peters, and Jürgen Schmidhuber.
+Natural evolution strategies. The Journal of Machine Learning Research, 15(1):949–980, 2014.
+Ronald J Williams. Simple statistical gradient-following algorithms for connectionist reinforcement
+learning. Machine learning, 8(3):229–256, 1992.
+Samuel Williams, Andrew Waterman, and David Patterson. Roofline: an insightful visual performance
+model for multicore architectures. Communications of the ACM, 52(4):65–76, 2009.
+Yinggan Xu, Kajetan Schweighofer, Risto Miikkulainen, and Xin Qiu. Quantized evolution strate-
+gies: High-precision fine-tuning of quantized LLMs at low-precision cost. arXiv preprint
+arXiv:2602.03120, 2026.
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang
+Gao, Chengen Huang, Chenxu Lv, et al. Qwen3 technical report. arXiv preprint arXiv:2505.09388,
+2025.
+Qingru Zhang, Minshuo Chen, Alexander Bukharin, Pengcheng He, Yu Cheng, Weizhu Chen, and Tuo
+Zhao. Adaptive budget allocation for parameter-efficient fine-tuning. In The Eleventh International
+Conference on Learning Representations, 2023. URL https://openreview.net/forum?
+id=lq62uWRJjiY.
+Yan Zhang, Yi Zhou, Kaiyi Ji, Yi Shen, and Michael M Zavlanos. Boosting one-point derivative-
+free online optimization via residual feedback. IEEE Transactions on Automatic Control, 69(9):
+6309–6316, 2024.
+Yanjun Zhao, Sizhe Dang, Haishan Ye, Guang Dai, Yi Qian, and Ivor Tsang. Second-order fine-tuning
+without pain for LLMs: A Hessian informed zeroth-order optimizer. In International Conference
+on Learning Representations, volume 2025, pp. 43496–43520, 2025.
+13
+
+Preprint. Under review.
+APPENDIX TABLE OF CONTENTS
+A Additional related work 16
+B Mean-field and finite-rank theory 16
+B.1 Proof of Theorem 2.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+B.2 Proof of Theorem 2.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+B.3 Proof of Corollary 2.3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+B.4 Proofs and examples for conservativity . . . . . . . . . . . . . . . . . . . . . . . . 18
+B.4.1 Proof of Theorem 3.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+B.4.2 An explicit nonconservative mode . . . . . . . . . . . . . . . . . . . . . . 19
+B.4.3 Proof of Proposition 3.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+B.5 Proofs and bounds near quadratic objectives . . . . . . . . . . . . . . . . . . . . . 20
+B.5.1 Proof of Proposition 3.3 . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+B.5.2 Proof of Proposition 3.4 . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+B.5.3 Nonasymptotic bounds under standard smoothness . . . . . . . . . . . . . 21
+B.6 Complete covariance calculation . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+B.7 Fixed-radius rank expansion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+B.8 Proof of Theorem 4.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+C Proofs for LOO-ROLL 25
+C.1 Proof of Proposition 5.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+C.2 Proof of Proposition 5.2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+D Additional LLM comparisons 25
+E Network extensions and further theoretical results 27
+E.1 Secondary corrections suggested by the analysis . . . . . . . . . . . . . . . . . . . 28
+E.1.1 Rank extrapolation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+E.1.2 Variance reduction with a reference point . . . . . . . . . . . . . . . . . . 29
+E.2 Convergence consequences of the field bounds . . . . . . . . . . . . . . . . . . . . 29
+E.2.1 Finite-population convergence . . . . . . . . . . . . . . . . . . . . . . . . 30
+E.3 Fourth moments of the Gaussian-product law . . . . . . . . . . . . . . . . . . . . 32
+F Complete empirical results 33
+F.1 Training budgets . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+F.2 Paired statistical comparisons . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+F.3 Rank comparisons and transformer audits . . . . . . . . . . . . . . . . . . . . . . 33
+F.4 Controlled numerical experiments . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+G Population centering and standardization 37
+14
+
+Preprint. Under review.
+G.1 Transformer-block audit . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+15
+
+Preprint. Under review.
+A ADDITIONAL RELATED WORK
+Random-direction finite differences and simultaneous perturbation are classical gradient-free methods
+(Spall, 1992; Nesterov & Spokoiny, 2017; Duchi et al., 2015). Their nonconvex analyses make
+the dependence on dimension and smoothing radius explicit (Balasubramanian & Ghadimi, 2022).
+MeZO shows that an in-place two-forward-pass implementation can fine-tune large language models
+with inference-level memory, and subsequent work adds stochastic variance reduction (Malladi et al.,
+2023; Gautam et al., 2024). Residual feedback uses a stored function value to obtain a one-query
+estimator for online zeroth-order optimization (Zhang et al., 2024). These methods use dense or
+coordinatewise perturbations. EGGROLL instead constructs each matrix perturbation as a low-rank
+Gaussian product and batches the resulting population during inference, giving rise to the finite-rank
+population field analyzed here.
+Baselines have long been used to reduce the variance of score-function and policy-gradient estimators
+without changing their expectation (Williams, 1992). In REINFORCE leave-one-out, the reward
+of each sampled response is compared with the average reward of the other responses generated
+from the same prompt (Ahmadian et al., 2024). LOREN also uses REINFORCE leave-one-out in
+curvature-aware zeroth-order LLM tuning (Seung et al., 2026). LOO-ROLL specializes the baseline
+to EGGROLL’s Gaussian-product population and evaluates the resulting alternative to its antithetic
+training estimator.
+The original EGGROLL analysis proves a fixed-rank, high-dimensional vanishing-radius guarantee
+and convergence of its Gaussian-score update to dense Gaussian ES at rate O(1/r) under regularity
+assumptions (Sarkar et al., 2026). Our results concern the complementary regime of finite dimension,
+finite radius, and finite population. Recent work compares full Gaussian ES with gradient-based
+LLM post-training and studies its behavior in flat, linear, and quadratic geometries (Hoy et al., 2026;
+Levi et al., 2026).
+Orthogonal and structured perturbations can reduce estimator variance or the cost of applying a
+direction, while structured control variates use additional problem information (Choromanski et al.,
+2018; Tang et al., 2020). Guided and active-subspace ES concentrate exploration in learned subspaces
+(Maheswaranathan et al., 2019; Choromanski et al., 2019). Natural ES and CMA-ES adapt a Gaussian
+search law (Wierstra et al., 2014; Hansen, 2016). EGGROLL makes a different choice, where the
+Gaussian-product law is fixed by the desired matrix computation. We analyze the mean field and
+sampling error that follow from that choice.
+Stein operators for scalar products of independent normal variables, and for sums and broader
+products built from such variables, are well established (Gaunt, 2018b;a). These identities act on one
+scalar product-normal variable. The entries of AB⊤ instead share row and column factors, so the
+matrix law couples different coordinates. Our operator identity keeps this dependence, produces a
+matrix differential operator acting on the population field, and connects its resolvent to finite-rank
+optimization dynamics.
+Wang et al. (2020) show that convergence can fail for structured zeroth-order perturbations and
+proposed mixing them with isotropic Gaussian directions. Their use of isotropy concerns an ambient
+Gaussian component. EGGROLL already has identity covariance, yet its law is not spherically
+symmetric in the vectorized matrix space. Our conservativity theorem isolates this stronger distribu-
+tional requirement. Exact spherical symmetry cannot be achieved by a nondegenerate law supported
+entirely on rank-deficient matrices when m, n ≥ 2, since a uniformly rotated nonzero matrix is full
+rank almost surely after reshaping. Occasional dense directions could supply an ambient isotropic
+component, though those evaluations would no longer have the purely low-rank cost of EGGROLL.
+B MEAN-FIELD AND FINITE-RANK THEORY
+B.1 PROOF OF THEOREM 2.1
+Proof of Theorem 2.1. For a pair (a, b) ∈ Rm × Rn, condition on a:
+Eb
+
+ei⟨T, ab⊤ ⟩F /√r  = Eb  ei tr(T ⊤ ab⊤ )/√r  = Eb  eib⊤ T ⊤ a/√r  . (26)
+16
+
+Preprint. Under review.
+Because we have conditioned on a, c := T ⊤a ∈ Rn is fixed. Furthermore, since b ∼ N (0, In), b⊤c
+is a one-dimensional Gaussian, i.e.,
+b⊤c ∼ N (0, ∥c∥2). (27)
+Hence,
+Eb
+
+eib⊤ T ⊤ a/√r  = Eb  eib⊤ c/√r  = exp  − 1 2r ∥c∥2  = exp  − 1 2r ∥T ⊤a∥2  , (28)
+by the Gaussian characteristic function. We have thus obtained the expectation conditional on a. To
+have the full expectation, we now evaluate
+Ea
+h
+exp
+
+− 1 2r ∥T ⊤a∥2 i = Ea h exp  − 1 2r a⊤T T ⊤a i . (29)
+By the Gaussian quadratic-form identity (Muirhead, 2009), this is
+det
+
+Im + T T ⊤ r −1/2 . (30)
+This means that one rank-one term contributes
+E
+
+ei⟨T, ab⊤ ⟩F /√r  = det  Im + T T ⊤ r −1/2 . (31)
+Now,
+Er = 1√r
+rX
+s=1
+asb⊤ s , (32)
+so
+Φr (T ) = E
+
+ei⟨T, Er ⟩F  = rY
+s=1
+E
+
+ei⟨T, as b⊤ s ⟩F /√r  = det  Im + T T ⊤ r −r/2 , (33)
+since all r pairs (as, bs) are independent. We finish by computing the gradient of the resulting
+determinant. Write S = Im + T T ⊤/r. Since log Φr (T ) = −(r/2) log det S, its differential is
+d log Φr (T ) = − r 2 tr(S−1dS), dS = (dT )T ⊤ + T (dT )⊤ r . (34)
+Substituting dS cancels the factor r and gives
+d log Φr (T ) = − 1 2 tr   S−1(dT )T ⊤ + S−1T (dT )⊤ . (35)
+The matrix S−1 is symmetric. Cyclicity of the trace and tr(A(dT )⊤) = tr(A⊤dT ) therefore make
+the two terms equal, so
+d log Φr (T ) = − tr
+ 
+T ⊤S−1dT  = ⟨−S−1T, dT ⟩F . (36)
+By the defining identity dh(T ) = ⟨∇T h(T ), dT ⟩F for the Frobenius gradient, ∇T log Φr (T ) =
+−S−1T . Finally, ∇T Φr (T ) = Φr (T )∇T log Φr (T ), which proves Equation (8).
+B.2 PROOF OF THEOREM 2.2
+When both fields are square-integrable and gf r,σ belongs to the domain of L, taking the L2 inner
+product of Equation (13) with gf r,σ gives the energy identity
+
+gf r,σ , ∇Fr,σ  L2 = ∥gf r,σ ∥2 L2 + σ2 r ∥L1/2gf r,σ ∥2 L2 . (37)
+Proof of Theorem 2.2. For a tempered distribution f , averaging its translations against the perturba-
+tion law gives
+bFr,σ (T ) = Φr (σT ) bf (T ), bgf r,σ (T ) = iΦr (σT )
+
+Im + σ2T T ⊤ r −1 T bf (T ) (38)
+17
+
+Preprint. Under review.
+in the distributional sense. The Fourier multiplier of I + (σ2/r)L is left multiplication by Im +
+σ2T T ⊤/r. Applying it to the second expression gives iT bFr,σ (T ), the Fourier transform of ∇Fr,σ .
+This proves Equation (13) as an identity of tempered distributions.
+Under the stated Fourier moment condition, substituting the Fourier representation of f into Equa-
+tion (4), interchanging expectation and integration, and using Equation (8) gives the classical formula
+gf r,σ (W ) =
+Z
+iΦr (σT )
+
+Im + σ2T T ⊤ r −1 T ei⟨T, W ⟩F µf (dT ), (39)
+whereas
+∇Fr,σ (W ) =
+Z
+iΦr (σT )T ei⟨T, W ⟩F µf (dT ). (40)
+The moment condition justifies these operations and makes the identity pointwise. At each frequency
+T , the multiplier Im + σ2T T ⊤/r is symmetric with eigenvalues at least one, making its inverse
+positive, contractive, and firmly nonexpansive. Parseval’s identity equates L2 inner products of fields
+in parameter space with the corresponding inner products of their Fourier coefficients (Folland, 1999).
+Applying this identity to (I + (σ2/r)L)g = ∇F gives Equation (37).
+B.3 PROOF OF COROLLARY 2.3
+Proof of Theorem 2.3. Set α = σ2/r and write J = Jr,σ = (I + αL)−1. On the domain of L, the
+resolvent identity gives
+J − I = −αJ L. (41)
+To see this directly, take any matrix vector field h for which Lh is defined. Since J is the inverse of
+I + αL,
+J (h + αLh) = h. (42)
+Linearity of J then gives J h − h = −αJ Lh. Applying this equality with h = ∇Fr,σ and using
+gf r,σ = J ∇Fr,σ yields
+gf r,σ − ∇Fr,σ = − σ2 r Jr,σ L∇Fr,σ , (43)
+which proves the exact formula. The Fourier calculation in Theorem 2.2 also shows that J multiplies
+every eigendirection at every frequency by a number in [0, 1]. Parseval’s identity therefore gives
+∥J h∥L2 ≤ ∥h∥L2 for every square-integrable field h. Taking L2 norms in the exact formula and
+applying this inequality to h = L∇Fr,σ proves Equation (14).
+B.4 PROOFS AND EXAMPLES FOR CONSERVATIVITY
+B.4.1 PROOF OF THEOREM 3.1
+For the proof, write Φ(t) = E[eit⊤ Z ] and define
+(TZ,σ f )(x) = 1 σ E[Zf (x + σZ)]. (44)
+We prove the equivalence of the following statements:
+(i) for every σ > 0 and every real trigonometric polynomial f, the field TZ,σ f is conservative;
+(ii) for every t ∈ Rd, ∇Φ(t) = λ(t)t for some complex scalar λ(t);
+(iii) Φ is radial;
+(iv) the law of Z is spherically symmetric.
+Proof of Theorem 3.1. We first prove the equivalence of (i) and (ii). Fix t ∈ Rd and consider the
+complex Fourier mode ft(x) = eit⊤ x. The real and imaginary parts of this mode are cos(t⊤x) and
+sin(t⊤x), so applying TZ,σ to ft records its action on both real modes. From the definition of Φ,
+∇Φ(σt) = iE
+h
+Zeiσt⊤ Z i . (45)
+18
+
+Preprint. Under review.
+Consequently,
+(TZ,σ ft)(x) = eit⊤ x σ E h Zeiσt⊤ Z i = 1 iσ ∇Φ(σt)eit⊤ x. (46)
+A vector field of the form ceit⊤ x is a gradient field if and only if its coefficient c ∈ Cd is parallel to t.
+Indeed, if c = γt, then
+ceit⊤ x = ∇  γ i eit⊤ x  . (47)
+Conversely, the Jacobian of ceit⊤ x is ict⊤eit⊤ x. Any continuously differentiable gradient field has a
+symmetric Jacobian because its Jacobian is the Hessian of its potential. For t ̸= 0, symmetry of the
+present Jacobian is equivalent to ct⊤ = tc⊤. Choose an index j for which tj ̸= 0. Comparing the
+(i, j) entries gives citj = ticj for every i, and hence c = (cj /tj )t. Thus the Jacobian is symmetric
+only when c and t are parallel. Equation (46) is therefore conservative precisely when ∇Φ(σt) is
+parallel to t. Since σ > 0 and t are arbitrary, this condition is equivalent to (ii). Linearity then extends
+the conclusion from individual sine and cosine modes to every trigonometric polynomial, proving
+(i)⇔(ii). The zero-frequency mode causes no exception because ∇Φ(0) = iE[Z] = 0.
+We next prove (ii)⇔(iii). Suppose (ii) holds. If v⊤t = 0, then v is tangent at t to the sphere of radius
+∥t∥, and
+v⊤∇Φ(t) = λ(t)v⊤t = 0. (48)
+Thus Φ has zero directional derivative along every tangent direction to each sphere. Spheres are
+connected when d ≥ 2, so Φ is constant on every sphere and hence depends only on ∥t∥. This is
+precisely radiality. Conversely, if Φ is radial, then it is constant in every direction tangent to a sphere.
+The gradient is therefore orthogonal to every tangent direction and must be parallel to the radial
+direction t, which gives (ii).
+Finally, (iii)⇔(iv) is the standard characteristic-function characterization of spherical symmetry
+(Muirhead, 2009). If the law of Z is spherically symmetric, then QZ and Z have the same law
+for every orthogonal matrix Q, and hence Φ(Q⊤t) = Φ(t). Therefore Φ depends only on ∥t∥.
+Conversely, if Φ is radial, the characteristic function of QZ is
+E
+h
+eit⊤ QZ i = Φ(Q⊤t) = Φ(t). (49)
+Uniqueness of characteristic functions then implies that QZ and Z have the same law, so the law
+is spherically symmetric. The assumption d ≥ 2 is necessary because in one dimension every
+continuous scalar field is conservative, regardless of whether the perturbation law is symmetric.
+B.4.2 AN EXPLICIT NONCONSERVATIVE MODE
+For the Gaussian-product law, spherical symmetry fails because different singular directions are
+attenuated by different amounts. A single diagonal Fourier mode is enough to display the resulting
+nonconservativity.
+Corollary B.1 (A bounded smooth nonconservative example). Let m = n = 2, T = diag(1, 2), and
+f (W ) = cos⟨T, W ⟩F . Then
+gf r,σ (W ) = −Φr (σT )
+
+I + σ2T T ⊤
+r
+−1
+T sin⟨T, W ⟩F . (50)
+For every finite r and σ > 0, its Jacobian is nonsymmetric at W = 0 and at every W with
+cos⟨T, W ⟩F ̸= 0. Hence, the field is not conservative.
+Proof. Recall that J (T ) = (I + σ2T T ⊤/r)−1T . After vectorization, differentiating Equation (50)
+gives
+Dgf r,σ (W ) = −Φr (σT ) cos⟨T, W ⟩F vec(J (T )) vec(T )⊤. (51)
+A nonzero rank-one matrix uv⊤ is symmetric only if u and v are parallel, since its column and row
+spaces are spanned by u and v, respectively, and these spaces coincide for a symmetric matrix. Here,
+J (T ) = diag
+ 1
+1 + σ2/r , 2 1 + 4σ2/r  , (52)
+which is not a scalar multiple of T = diag(1, 2) for finite r and σ > 0. The displayed Jacobian is
+therefore nonsymmetric whenever cos⟨T, W ⟩F ̸= 0.
+19
+
+Preprint. Under review.
+B.4.3 PROOF OF PROPOSITION 3.2
+Proof of Theorem 3.2. Let tq = vec(Tq ). The Hessian of f at zero is
+−t1t⊤ 1 − 1 4 t2t⊤ 2 − εI4 ≺ 0. (53)
+Smoothing multiplies the first two cosine coefficients by Φ1(T1) = Φ1(T2) = 1/(3
+√
+2) and every
+coordinate cosine by Φ1(eij ) = 1/
+√
+2:
+∇2F1,1(0) = − 1 3 √ 2  t1t⊤ 1 + 1 4 t2t⊤ 2  − ε√ 2 I4 ≺ 0. (54)
+Hence, the origin remains a strict local maximum after smoothing.
+We next compute the Jacobian of the population field. For a cosine mode with frequency T , Equa-
+tion (50) gives the contribution
+−Φ1(T ) vec(J (T )) vec(T )⊤ (55)
+at the origin. We have
+J (T1) =
+
+0 −1/3
+−1/3 1/6
+
+, J (T2) =
+
+0 1/3
+1/3 1/6
+
+. (56)
+Therefore, the contribution of the first two cosine modes is
+A0 = − 1 3 √ 2  vec(J (T1))t⊤ 1 + 1 4 vec(J (T2))t⊤ 2  . (57)
+Substituting the displayed matrices and expanding the determinant gives
+det(λI4 − A0) = λ2
+ 
+λ2 + 35
+√
+2
+144 λ − 1 81
+!
+. (58)
+The positive root of the quadratic factor is
+λ+(A0) =
+√
+1737 − 35
+144
+√
+2 . (59)
+For a coordinate mode T = eij , we have J (eij ) = eij /2 and Φ1(eij ) = 1/
+√
+2. The correspond-
+ing Jacobian contribution is −ε vec(eij ) vec(eij )⊤/(2 √ 2). Summing over the four coordinates
+gives −εI4/(2
+√
+2). This scalar shift subtracts ε/(2
+√
+2) from every eigenvalue of A0, so the larger
+eigenvalue of the full Jacobian is
+√
+1737 − 35
+144
+√
+2 − ε 2 √ 2 , (60)
+which is positive at ε = 0.01.
+B.5 PROOFS AND BOUNDS NEAR QUADRATIC OBJECTIVES
+B.5.1 PROOF OF PROPOSITION 3.3
+Proof of Theorem 3.3. Applying the antithetic identity gives
+gf r,σ (W ) = E [Er ⟨∇f (W ), Er ⟩F ] = ∇f (W ), (61)
+where the last equality follows from E[vec(Er ) vec(Er )⊤] = I.
+20
+
+Preprint. Under review.
+B.5.2 PROOF OF PROPOSITION 3.4
+Proof of Theorem 3.4. Taylor expansion of the antithetic update gives
+gf r,σ (W ) = ∇f (W ) + σ2 6 E  Er D3f (W )[Er , Er , Er ]  + Rr,σ (W ), (62)
+where identity covariance was used for the first term. The order-σ2 expectation is
+E
+
+Er D3f (W )[Er , Er , Er ]  = 3∇∆f (W ) + 6 r Df (W ). (63)
+This identity follows by writing Er = r−1/2 Pr q=1 aq b⊤ q and applying the Gaussian fourth-moment
+formula (Isserlis, 1918) separately to the independent row and column factors. The terms that also
+occur for a dense Gaussian matrix give 3∇∆f . The remaining product-law contribution gives 6Df /r.
+Substitution into Equation (62) yields the two order-σ2 terms in Equation (19). Appendix E.3 provides
+a more in-depth version of this calculation, including the provenance of the coefficient 1/r.
+Finally, let M5 = supW ∥D5f (W )∥op. Taylor’s theorem bounds the matrix-valued remainder in
+Equation (62) by
+∥Rr,σ (W )∥F ≤ σ4M5 120 E[∥Er ∥6 F ]. (64)
+B.5.3 NONASYMPTOTIC BOUNDS UNDER STANDARD SMOOTHNESS
+For d = mn, the exact fourth moment of the perturbation norm is
+µ4(r) := E[∥Er ∥4 F ] = d(d + 2) + 2d(m + n + 1) r . (65)
+Lemma B.2 (Field error under standard smoothness). Suppose h is L-smooth. Then, for every W ,
+∥gh r,σ (W ) − ∇h(W )∥F ≤ Lσ 2 µ4(r)3/4. (66)
+If, in addition, the Hessian is M -Lipschitz as an operator, meaning that ∥∇2h(W ) − ∇2h(V )∥op ≤
+M ∥W − V ∥F for all W, V , then
+∥gh r,σ (W ) − ∇h(W )∥F ≤ M σ2 6 µ4(r). (67)
+Proof. For any matrix E, L-smoothness gives
+ h(W + σE) − h(W − σE) 2σ − ⟨∇h(W ), E⟩F  ≤ Lσ 2 ∥E∥2 F . (68)
+Multiplying by E = Er , taking expectations, and using identity covariance yields Equation (66),
+since E[∥Er ∥3 F ] ≤ µ4(r)3/4. If the Hessian is M -Lipschitz, the second-order Taylor remainders
+at W ± σE are bounded by M σ3∥E∥3 F /6. The quadratic terms cancel in the antithetic difference,
+leaving  h(W + σE) − h(W − σE) 2σ − ⟨∇h(W ), E⟩F  ≤ M σ2 6 ∥E∥3 F . (69)
+Averaging after multiplication by Er gives Equation (67).
+B.6 COMPLETE COVARIANCE CALCULATION
+The total-variance formula in Theorem 4.1 follows from the complete entrywise covariance below.
+Theorem B.3 (Exact finite-rank covariance). For all indices i, k ∈ [m] and j, ℓ ∈ [n],
+Cov(Xij , Xkℓ) = ∥G∥2 F δikδjℓ + Gij Gkℓ + 2 r  δik(G⊤G)jℓ + δjℓ(GG⊤)ik + GiℓGkj  . (70)
+21
+
+Preprint. Under review.
+Table 3: Rank-one variance increase over dense Gaussian ES for square attention-output matrices at
+Qwen3 hidden widths.
+Model Width w Relative increase
+Qwen3-0.6B 1024 0.391%
+Qwen3-1.7B 2048 0.195%
+Qwen3-4B 2560 0.156%
+Qwen3-8B 4096 0.098%
+Qwen3-14B 5120 0.078%
+Define the variance factor
+κr := mn + 1 + 2(m + n + 1) r . (71)
+Then
+E[∥X − G∥2 F ] = κr ∥G∥2 F . (72)
+For independent copies X1, . . . , XN and their average bGN = 1 N PN s=1 Xs,
+E[∥ bGN − G∥2 F ] = 1 N E[∥X − G∥2 F ] = κr N ∥G∥2 F . (73)
+Proof. Substitute Er = r−1/2 Pr q=1 aq b⊤ q into E[Xij Xkℓ] and apply the Gaussian fourth-moment
+identity to the independent factors aq and bq . Summing the resulting fourth-moment terms against
+the entries of G gives
+E[Xij Xkℓ] = ∥G∥2 F δikδjℓ + 2Gij Gkℓ + 2 r  δik(G⊤G)jℓ + δjℓ(GG⊤)ik + GiℓGkj  . (74)
+Since E[X] = G, subtracting Gij Gkℓ proves Equation (70). Taking i = k, j = ℓ, and summing
+yields
+tr Cov(X) = mn∥G∥2 F + ∥G∥2 F + 2 r  m∥G∥2 F + n∥G∥2 F + ∥G∥2 F  , (75)
+which is Equation (72). Independence gives the factor 1/N in Equation (20).
+Dense Gaussian directions and Gaussian-product directions share the variance factor mn + 1. Finite
+rank adds only the product-law correction 2(m+n+1)/r. The relative variance increase of finite-rank
+EGGROLL over dense Gaussian ES in the affine model is therefore
+ρm,n,r = 2(m + n + 1) r(mn + 1) . (76)
+For a square matrix of width w, the rank-one relative increase is 2(2w + 1)/(w2 + 1) = O(1/w).
+Table 3 evaluates this quantity at the hidden widths of the Qwen3 models used in this work (Yang
+et al., 2025). These widths describe, for example, their square attention-output matrices. The 16 × 16
+matrices in the transformer audit are extracted sub-blocks chosen to make the finite-rank surcharge
+measurable, not complete model weight matrices.
+A conclusion to draw is that a rank-one law can be singular with respect to a dense Gaussian law while
+having nearly the same affine-model variance. Singularity describes the support of the perturbation
+law, whereas estimator variance depends on a particular combination of its fourth moments. The
+rank-dependent contribution grows as m + n, while the shared dense-Gaussian contribution grows as
+mn.
+For a network, independence confines the additional finite-rank variance to within-block terms.
+Appendix E gives the exact formula and shows how each block is weighted by its local gradient
+energy.
+22
+
+Preprint. Under review.
+B.7 FIXED-RADIUS RANK EXPANSION
+This appendix proves the fixed-radius expansion stated in Theorem 4.2. We hold σ fixed and expand
+the finite-rank mean field around its dense-Gaussian limit as r → ∞, identifying both the leading
+1/r correction and the O(r−2) remainder.
+For a fixed frequency T , expanding the exact characteristic function as r → ∞ using the matrix-
+logarithm series (Higham, 2008) gives
+log Φr (T ) = − 1 2 ∥T ∥2 F + 1 4r tr   (T T ⊤)2 − 1 6r2 tr   (T T ⊤)3 + O(r−3). (77)
+The leading term is the logarithm of the characteristic function of a dense Gaussian and depends only
+on ∥T ∥F . The first finite-rank correction also depends on how this norm is distributed across singular
+directions through tr((T T ⊤)2). Thus, the same anisotropy that produced the resolvent in Section 2
+appears as the leading 1/r error at fixed radius.
+The frequency-wise expansion must be strengthened before it can be integrated against a general
+objective. We therefore expand the score-weighted perturbation law itself and control its remainder
+in a polynomially weighted integral norm. This yields a uniform field bound for objectives of
+polynomial growth without requiring a Fourier density for f . For a matrix displacement Z, define the
+matrix-valued measure
+νr,σ (dZ) := Z σ2 P(σEr ∈ dZ). (78)
+The population field can then be written as
+gf r,σ (W ) =
+Z
+f (W + Z) νr,σ (dZ). (79)
+Thus, an expansion of νr,σ immediately becomes an expansion of the update field. For these kernels,
+write bν(T ) =
+R
+ei⟨T, Z⟩F ν(dZ), with a positive sign because the field evaluates f (W + Z). The
+transform of the update measure is then the multiplier derived in Section 2:
+bνr,σ (T ) = iΦr (σT )
+
+Im + σ2 r T T ⊤ −1 T. (80)
+Recall from Section 2 that Φr (σT ) = det(Im + σ2T T ⊤/r)−r/2. We expand both rank-dependent
+factors in powers of 1/r:
+Φr (σT ) = e−σ2 ∥T ∥2 F /2
+
+1 + σ4
+4r tr
+ 
+(T T ⊤)2 + O(r−2)  ,
+
+Im + σ2 r T T ⊤ −1 = Im − σ2 r T T ⊤ + O(r−2). (81)
+Consequently,
+bνr,σ (T ) = ie−σ2 ∥T ∥2 F /2T + 1 r bβσ (T ) + O(r−2), (82)
+where the matrix-valued correction kernel βσ is defined by
+bβσ (T ) = ie−σ2 ∥T ∥2 F /2
+ σ4
+4 tr
+ 
+(T T ⊤)2 T − σ2T T ⊤T  , (83)
+and its operation on the objective is denoted by
+Bσ f (W ) :=
+Z
+f (W + Z) βσ (dZ). (84)
+The two terms in Equation (83) have distinct origins. The term containing tr((T T ⊤)2)T records
+the difference between finite-rank and dense-Gaussian smoothing, while the term containing T T ⊤T
+records the score mismatch identified in Section 2. The main text states the resulting uniform rank
+expansion. The constants may depend on m, n, p, σ, and Cf .
+23
+
+Preprint. Under review.
+B.8 PROOF OF THEOREM 4.2
+Proof of Theorem 4.2. We expand the update kernel in the reciprocal rank t = 1/r and bound the
+remainder before integrating against f. First set σ = 1 and write D = mn. For t > 0, define
+ϕt(T ) = det(Im + tT T ⊤)−1/(2t), At(T ) = (Im + tT T ⊤)−1, mt(T ) = iϕt(T )At(T )T.
+(85)
+At t = 0, set ϕ0(T ) = e−∥T ∥2 F /2 and A0(T ) = Im. Then m1/r = bνr,1, m0 = bν∞,1, and ∂tm0 = bβ1.
+These functions are smooth at t = 0 because
+ℓt(T ) := log ϕt(T ) = − 1 2 Z 1 0 tr  T T ⊤(Im + utT T ⊤)−1 du. (86)
+In particular, ∂tℓ0 = tr((T T ⊤)2)/4 and ∂tA0 = −T T ⊤, recovering the two terms in Equation (83).
+To control the remainder, let α be a multi-index for the D entries of T , so that ∂α T has total derivative
+order |α|. For every fixed order k, there are constants Ck and an integer Kk, independent of 0 ≤ t ≤ 1,
+such that
+∥∂α T ∂2 t mt(T )∥F ≤ Ck(1 + ∥T ∥F )Kk ϕt(T ), |α| ≤ k. (87)
+To verify this bound, differentiate Equation (86) under the integral. Every derivative of an inverse
+matrix is obtained from ∂B−1 = −B−1(∂B)B−1. All inverse factors here have operator norm at
+most one, while derivatives of T T ⊤ are polynomial in T . Thus every fixed mixed derivative of ℓt and
+At has a polynomial bound, uniformly for 0 ≤ t ≤ 1. Repeated differentiation of eℓt leaves the factor
+ϕt multiplied by products of these bounded derivatives. Applying the product rule to mt = iϕtAtT
+proves Equation (87).
+The determinant supplies a common decay bound. For 0 < t ≤ t0 ≤ 1,
+ϕt(T ) ≤ (1 + t∥T ∥2 F )−1/(2t) ≤ (1 + t0∥T ∥2 F )−1/(2t0 ). (88)
+The first inequality follows by expanding the product of 1 + ts2 j , where sj are the singular values
+of T . The second follows because log(1 + ta)/t decreases with t for a ≥ 0. The bound also holds
+at t = 0 by continuity. Choose t0 so that 1/t0 > Kk + D/2. The right-hand side of Equation (87),
+with Equation (88), is then square-integrable in T , uniformly over 0 ≤ t ≤ t0.
+Taylor’s formula with an integral remainder therefore gives
+∂α T (mt −m0 −t∂tm0) = t2
+Z 1
+0
+(1−v)∂α T ∂2 t mvt dv, ∥∂α T (mt −m0 −t∂tm0)∥L2 ≤ C ′ kt2. (89)
+For general fixed σ > 0, the update multiplier is σ−1mt(σT ). Rescaling T and taking t = 1/r
+therefore proves, for r ≥ r0 := ⌈1/t0⌉,∂α T  bνr,σ − bν∞,σ − 1 r bβσ  L2 ≤ Cσ,k r2 , |α| ≤ k. (90)
+Finally choose an integer q > D/2 and take k = p + q. Let ρr,σ be the inverse transform of
+the remainder, using the positive-sign kernel convention of Equation (80). Cauchy–Schwarz and
+Plancherel’s identity (Folland, 1999) implyZ
+(1 + ∥Z∥F )p∥ρr,σ (Z)∥F dZ ≤ CD,p,q X
+|α|≤p+q
+∥∂α T bρr,σ ∥L2 ≤ Cσ,p r2 . (91)
+Indeed, apply Cauchy–Schwarz with the square-integrable weight (1 + ∥Z∥F )−q , then bound the
+weighted L2 norm by the finitely many monomials Z αρr,σ of degree at most p + q. Plancherel
+converts those monomials into Fourier derivatives. The correction kernel βσ has a Schwartz density
+because its transform is a polynomial times a Gaussian. Uniqueness of Fourier transforms of finite
+measures identifies ρr,σ (Z) dZ with νr,σ − ν∞,σ − βσ /r.
+Since |f (W + Z)| ≤ 2Cf (1 + ∥W ∥F )p(1 + ∥Z∥F )p, integration against this remainder gives
+∥gf r,σ (W ) − gf ∞,σ (W ) − 1 r Bσ f (W )∥F ≤ 2Cf Cσ,p r2 (1 + ∥W ∥F )p, (92)
+which proves Equation (21). Multiplying the expansion by r shows that r(gf r,σ − gf ∞,σ ) converges to
+Bσ f in ∥·∥∞,p. If this limit is nonzero, the difference cannot decay faster than 1/r.
+24
+
+Preprint. Under review.
+The expansion identifies the dense-Gaussian limit and the leading finite-rank error Bσ f /r. The two
+terms in Equation (83) respectively arise from the change in smoothing law and the score mismatch,
+while the remaining error is O(r−2).
+Since gf ∞,σ = ∇F∞,σ , both fields in this comparison use the same fixed perturbation radius. Their
+difference therefore isolates the effect of finite rank rather than the smoothing shared with dense
+Gaussian ES. In particular,
+∥gf r,σ − ∇F∞,σ ∥∞,p ≤ Kσ,p r + Rσ,p r2 , Kσ,p := ∥Bσ f ∥∞,p. (93)
+For bounded f , this is an ordinary uniform bound. For polynomially growing f , the denominator in
+∥·∥∞,p allows the field error to grow at the same polynomial rate with W . When Bσ f is nonzero, the
+leading term does not vanish, so the 1/r rate cannot be improved in this norm. This strengthens the
+O(1/r) comparison of Sarkar et al. (2026): their Edgeworth argument establishes the rate, whereas
+the kernel expansion identifies its coefficient and leaves an O(r−2) residual. Appendix E.2 combines
+the field-error bounds with the finite-population variance from Section 4 to derive finite-iteration
+guarantees for approaching stationary points of the original objective, and, at fixed perturbation
+radius, of the dense-Gaussian-smoothed objective.
+C PROOFS FOR LOO-ROLL
+C.1 PROOF OF PROPOSITION 5.1
+Proof of Theorem 5.1. Conditional on Ft, the term Et,sFt,s/σ has expectation gf r,σ (Wt). The base-
+line F t,−s depends only on the other directions and is therefore conditionally independent of Et,s.
+Centering gives E[Et,sF t,−s | Ft] = 0. Averaging over s proves the claim.
+C.2 PROOF OF PROPOSITION 5.2
+Proof of Theorem 5.2. In the affine model, the constant fitness cancels from every centered score.
+Write zi = vec(Ei), v = vec(G), and yi = z⊤ i v. The vectors zi are independent, centered, and
+have identity covariance. With ¯z = N −1 P i zi and ¯y = N −1 P i yi, the vectorized estimator is the sample covariance applied to v:
+vec(bgLOO(W ; N )) = 1 N − 1
+NX
+i=1
+(zi − ¯z)(yi − ¯y). (94)
+Expanding the two means gives the following centered decomposition:
+vec(bgLOO(W ; N )) − v = 1 N X i (ziyi − v) − 1 N (N − 1) X i<j (ziyj + zj yi). (95)
+Every cross-pair summand has conditional mean zero given either of its two directions. Consequently,
+these summands are uncorrelated with the first sum and with one another, including when two pairs
+share an index. By Theorem 4.1, E[∥ziyi − v∥2] = κr ∥v∥2. Independence and identity covariance
+also give
+E[∥ziyj + zj yi∥2] = 2E[∥zi∥2]E[y2 j ] + 2∥E[ziyi]∥2 = 2(d + 1)∥v∥2, i ̸= j. (96)
+There are N (N − 1)/2 unordered pairs. Adding their variances therefore proves Equation (24).
+Substituting 2N for the LOO-ROLL population and dividing by the antithetic variance κr ∥G∥2 F /N
+proves Equation (25).
+D ADDITIONAL LLM COMPARISONS
+The fixed-corpus rank comparisons are reported in Tables 4 and 5, while Table 6 reports the next-token
+prediction results.
+25
+
+Preprint. Under review.
+Table 4: Fixed-validation changes in held-out task reward from rank one to rank eight, in percentage
+points, over five matched seeds. Positive values favor rank eight and negative values favor rank
+one. The evaluation set contains 256 examples and is shared across ranks and budgets. “Matched
+evaluations” uses the same ES iterations and model evaluations. “Matched wall time” extends
+rank-one training to the measured rank-eight runtime. Brackets give paired 95% Student-t intervals.
+Model Task Matched evaluations Matched wall time
+Qwen3-0.6B Countdown −.60% [−3.28, 2.07] −1.57% [−3.29, .15]
+Qwen3-0.6B GSM8K +2.50% [−.82, 5.82] −5.70% [−14.57, 3.16]
+Qwen3-1.7B Countdown +1.50% [−.29, 3.30] +1.88% [−.25, 4.01]
+Qwen3-1.7B GSM8K +.94% [−.76, 2.64] −1.33% [−2.88, .23]
+Table 5: Percentage change in next-token prediction loss from rank one to rank eight over five paired
+seeds and 256 fixed held-out sequences. Negative values indicate lower loss at rank eight. Brackets
+give paired 95% Student-t intervals. Bold entries exclude zero.
+Model Matched evaluations Matched wall time
+Qwen3-0.6B −.58% [−.86, −.30] −.11% [−.29, .07]
+Qwen3-1.7B −2.23% [−2.53, −1.92] −.93% [−1.34, −.53]
+Qwen3-4B −1.76% [−1.95, −1.57] +1.92% [1.48, 2.35]
+Qwen3-8B −2.18% [−2.60, −1.77] +2.14% [1.95, 2.33]
+Table 6: Percentage change in fixed-validation negative log likelihood from antithetic EGGROLL
+to LOO-ROLL. Values are mean ± sample standard deviation over five paired seeds, computed as
+100(LOO-ROLL − EGGROLL)/EGGROLL. Negative values indicate lower loss and favor LOO-
+ROLL, while positive values favor EGGROLL. Bold marks mean improvements for LOO-ROLL.
+Model Equal iterations Equal evaluations Equal wall time
+Qwen3-0.6B +0.20% ± 0.44 +0.11% ± 0.30 −0.55% ± 0.46
+Qwen3-1.7B +0.21% ± 0.58 −0.10% ± 0.34 −1.20% ± 0.62
+Qwen3-8B +0.53% ± 0.57 +0.31% ± 0.49 −2.16% ± 0.81
+26
+
+Preprint. Under review.
+E NETWORK EXTENSIONS AND FURTHER THEORETICAL RESULTS
+The main results are stated for one matrix so that the finite-rank mechanism remains visible. A network
+objective couples many parameter matrices, but EGGROLL samples their perturbations independently.
+This section gives the corresponding joint resolvent, field-error, and variance statements.
+Corollary E.1 (Network resolvent). Let W = (W1, . . . , WQ), where Wq ∈ Rmq ×nq , and let the
+blocks E(q) rq be independent Gaussian-product perturbations. Define
+Fr,σ (W ) = E
+
+f (W1 + σE(1) r1 , . . . , WQ + σE(Q) rQ )  ,
+gq (W ) = 1 σ E h E(q) rq f (W1 + σE(1) r1 , . . . , WQ + σE(Q) rQ ) i . (97)
+Let Lq be the operator in Equation (12), acting on the qth vector-field component and differentiating
+with respect to Wq . If f admits the analogous Fourier representation and moment condition on the
+product parameter space, then
+
+I + σ2
+rq
+Lq
+
+gq = ∇Wq Fr,σ for every q. (98)
+Equivalently, g = Jr,σ ∇Fr,σ for Jr,σ = diagq (I + σ2Lq /rq )−1. The operator Jr,σ is self-adjoint,
+positive, contractive, and firmly nonexpansive on the direct-sum L2 space.
+Proof. Independence gives the joint characteristic function
+Φr (T1, . . . , TQ) =
+QY
+q=1
+Φrq (Tq ). (99)
+Substitution of the Fourier representation of f , followed by differentiation of the qth factor and
+application of Equation (8), gives the multiplier
+iΦr (σT )
+ 
+Imq + σ2Tq T ⊤ q rq
+!−1
+Tq . (100)
+The multiplier of ∇Wq Fr,σ is iTq Φr (σT ). The blockwise identity follows, and the remaining
+properties follow from Theorem 2.2 on each diagonal block.
+For the smoothness bounds, write dq = mq nq , D = P q dq , and E = (E(1) r1 , . . . , E(Q) rQ ). Equip
+this product space with the direct-sum Frobenius norm ∥E∥2 = P q ∥E(q) rq ∥2 F . Independence across
+blocks gives
+µ4(r) := E[∥E∥4] = D(D + 2) +
+QX
+q=1
+2dq (mq + nq + 1)
+rq
+. (101)
+Corollary E.2 (Network field error under standard smoothness). Let h be a loss on the product of
+the block spaces, and define gh r,σ using the joint perturbation E. If h is L-smooth in the direct-sum
+norm, then
+∥gh r,σ (W) − ∇h(W)∥ ≤ Lσ 2 µ4(r)3/4. (102)
+If the Hessian is M-Lipschitz in the same norm, then
+∥gh r,σ (W) − ∇h(W)∥ ≤ M σ2 6 µ4(r). (103)
+Proof. The smoothness inequalities in Theorem B.2 depend only on the norm of the full perturbation.
+Identity covariance supplies the first-order term, and Equation (101) supplies the required fourth
+moment.
+27
+
+Preprint. Under review.
+Corollary E.3 (Network-level variance). Let block q = 1, . . . , Q have shape mq × nq , rank rq ,
+independent perturbation, and gradient Gq . Write D = P q mq nq and ∥G∥2 = P q ∥Gq ∥2 F . The
+concatenated single-direction estimator satisfies
+E[∥X − G∥2] = (D + 1)∥G∥2 +
+QX
+q=1
+2(mq + nq + 1)
+rq
+∥Gq ∥2 F . (104)
+Proof. Concatenate the matrix blocks into one vector. The Gaussian part of the fourth moment pro-
+duces (D + 1)∥G∥2. Independence makes the cross-block fourth cumulants vanish, and Theorem 4.1
+gives the remaining within-block terms.
+The additional variance from block q is weighted by ∥Gq ∥2 F . Its contribution therefore depends on
+both the dimensions of the block and the amount of gradient energy concentrated there. The same
+formula supplies a network-level relative-noise constant for the convergence results in Appendix E.2.
+One valid choice is
+C 2 = D + 1 + max
+q
+2(mq + nq + 1)
+rq
+. (105)
+E.1 SECONDARY CORRECTIONS SUGGESTED BY THE ANALYSIS
+The fixed-radius expansion and variance calculation suggest two further modifications. Although both
+are theoretically valid estimators, neither improved on ordinary EGGROLL in our model-scale studies.
+We record the results in this appendix rather than presenting them as viable practical contributions.
+E.1.1 RANK EXTRAPOLATION
+The coefficient in Theorem 4.2 can be cancelled by combining two ranks. For s > r, define
+gRE r,s,σ := sgf s,σ − rgf r,σ s − r . (106)
+The resulting bias can be bounded explicitly for any chosen rank ratio.
+Corollary E.4 (Rank extrapolation at a prescribed tolerance). Under the assumptions of Theorem 4.2,
+let s = αr for some α > 1 such that s is an integer. For all sufficiently large r,
+∥gRE r,s,σ − gf ∞,σ ∥∞,p ≤ Rσ,p r2 α + 1 α(α − 1) . (107)
+If δ = εr2/Rσ,p, it is sufficient to choose
+α ≥ δ + 1 +
+p
+(δ + 1)2 + 4δ
+2δ . (108)
+Proof. Write gf k,σ = gf ∞,σ +Bσ f /k+Rk with ∥Rk∥∞,p ≤ Rσ,p/k2. Substitution into Equation (106)
+cancels Bσ f and gives Equation (107). Solving (α + 1)/(α(α − 1)) ≤ δ gives Equation (108).
+Cancellation of the mean-field term comes at the cost of estimating two fields, and the extrapolation
+weights amplify their sampling errors. If the two estimates are independent and use Nr and Ns
+directions with single-direction variances Vr and Vs, then
+E
+
+∥bgRE r,s,σ − gRE r,s,σ ∥2 F  = s2Vs/Ns + r2Vr /Nr (s − r)2 . (109)
+At a fixed budget of 256 fitness evaluations, transformer-block experiments compare ordinary rank-
+one EGGROLL with extrapolation using ranks (1, 2) and (1, 4). Across two blocks and three radii,
+the extrapolated estimator has respectively 7.63–8.67 and 2.35–2.62 times the MSE of ordinary
+EGGROLL. The leading bias is below the sampling resolution in these settings, so cancelling it does
+not repay the variance introduced by dividing the population between two ranks.
+28
+
+Preprint. Under review.
+Table 7: SVRG improvement over EGGROLL over five paired seeds. For next-token prediction,
+entries are the reduction in held-out loss, computed as EGGROLL loss minus SVRG loss. For
+GSM8K, entries are SVRG reward minus EGGROLL reward in percentage points. Positive values
+favor SVRG and negative values favor EGGROLL. Brackets give paired 95% Student-t intervals, and
+bold entries have intervals that exclude zero.
+Model Objective Difference
+Qwen3-0.6B Next-token prediction loss −.0161 [−.0488, .0166]
+Qwen3-0.6B GSM8K −6.17% [−17.43, 5.08]
+Qwen3-1.7B Next-token prediction loss −.0197 [−.0321, −.0072]
+Qwen3-1.7B GSM8K −1.25% [−2.98, .48]
+E.1.2 VARIANCE REDUCTION WITH A REFERENCE POINT
+The dominant term in Equation (72) is shared with dense Gaussian ES. Following zeroth-order
+variance reduction for language-model fine-tuning (Gautam et al., 2024), let ξ denote the sampled
+data and define
+Yr,σ (W ; ξ, E) := E ℓ(W + σE; ξ) − ℓ(W − σE; ξ) 2σ , gr,σ (W ) := E [Yr,σ (W ; ξ, E)] . (110)
+At a reference point fW , let gB (fW ) be an independent unbiased average of B updates and set
+Y VR(W, fW ) := Yr,σ (W ; ξ, E) − Yr,σ (fW ; ξ, E) + gB (fW ). (111)
+The corresponding control-variate guarantee for Gaussian-product directions is as follows.
+Proposition E.5 (Low-rank variance reduction). The estimator in Equation (111) is unbiased for
+gr,σ (W ). If
+E
+
+∥Yr,σ (W ; ξ, E) − Yr,σ (V ; ξ, E)∥2 F  ≤ L2 Y ∥W − V ∥2 F (112)
+and E[∥gB (fW ) − gr,σ (fW )∥2 F ] ≤ Vref /B, then
+E
+h
+∥Y VR(W, fW ) − gr,σ (W )∥2 F
+i
+≤ L2 Y ∥W − fW ∥2 F + Vref B . (113)
+Proof. Taking expectations in Equation (111) cancels the field at the reference point and leaves
+gr,σ (W ). Independence of the reference estimate makes the centered errors orthogonal, and the two
+assumed bounds give Equation (113).
+We tested this estimator on Qwen3-0.6B and Qwen3-1.7B with five paired seeds using next-token
+prediction loss and GSM8K rewards. Table 7 reports held-out reward relative to matched EGGROLL
+checkpoints. All four means favor ordinary EGGROLL, with the 1.7B next-token prediction loss
+difference excluding zero. These results do not establish a practical benefit from maintaining the
+reference estimate and its additional evaluations.
+E.2 CONVERGENCE CONSEQUENCES OF THE FIELD BOUNDS
+This appendix translates the mean-field error and finite-population variance bounds into standard
+stationarity guarantees under smoothness.
+Lemma E.6 (Descent with accumulated field error). Suppose h is L-smooth and bounded below by
+h⋆. Let g = ∇h + b and xt+1 = xt − ηg(xt). If 0 < η ≤ 1/L, then
+1
+T
+T −1X
+t=0
+∥∇h(xt)∥2 ≤ 2(h(x0) − h⋆) ηT + 1 T
+T −1X
+t=0
+∥b(xt)∥2. (114)
+Proof. Write at = ∇h(xt) and bt = b(xt). Smoothness and the identity −⟨at, at + bt⟩ =
+−∥at∥2/2 − ∥at + bt∥2/2 + ∥bt∥2/2 give
+h(xt+1) ≤ h(xt) − η 2 ∥at∥2 − η 2 (1 − Lη)∥at + bt∥2 + η 2 ∥bt∥2. (115)
+Summation proves the claim.
+29
+
+Preprint. Under review.
+Define
+B(L) r,σ := Lσ 2 µ4(r)3/4, B(M ) r,σ := M σ2 6 µ4(r). (116)
+Combining Theorem E.6 with Theorem B.2 gives the following direct consequence.
+Theorem E.7 (Mean-field convergence under standard smoothness). Suppose h is L-smooth and
+bounded below by h⋆. Fix ε > 0, use η = 1/L, and set H0 = h(x0) − h⋆. Either of the sufficient
+choices
+0 < σ ≤ σL(r, ε) :=
+√
+2 ε
+Lµ4(r)3/4 , (117)
+or, when the Hessian is M-Lipschitz,
+0 < σ ≤ σM (r, ε) :=
+ 
+3
+√
+2 ε
+M µ4(r)
+!1/2
+(118)
+ensures T −1 PT −1 t=0 ∥∇h(xt)∥2 ≤ ε2 for T ≥ ⌈4LH0/ε2⌉.
+Proof. The applicable radius makes the corresponding field-error bound at most ε/
+√
+2. Substitution
+into Equation (114) completes the proof.
+E.2.1 FINITE-POPULATION CONVERGENCE
+A finite-population update contains sampling noise around the mean field and systematic error
+relative to a chosen reference gradient. The next result separates these contributions, allowing either
+the original objective or dense Gaussian ES at the same radius to serve as the reference. As in
+Appendix B.5.3, we minimize a loss h through xt+1 = xt − ηbgt.
+Theorem E.8 (Nonconvex convergence under relative population noise). Suppose h is L-smooth
+and bounded below by h⋆. Let (Ft)t≥0 be the filtration generated by x0 and all perturbation and
+evaluation randomness revealed before iteration t, so that xt is Ft-measurable. At every iterate,
+assume
+E[bgt | Ft] = g(xt), (119)
+E[∥bgt − g(xt)∥2 | Ft] ≤ G2 + C 2∥g(xt)∥2 N (120)
+for C, G ≥ 0. If 0 < η ≤ [L(1 + C 2/N )]−1, then
+1
+T
+T −1X
+t=0
+E[∥∇h(xt)∥2] ≤ 2(h(x0) − h⋆) ηT + 1 T
+T −1X
+t=0
+E[∥g(xt) − ∇h(xt)∥2] + LηG2 N . (121)
+Proof. Smoothness and conditional expectation give
+Et[h(xt+1)] ≤ h(xt) − η⟨∇h(xt), g(xt)⟩ + Lη2 2  1 + C 2 N  ∥g(xt)∥2 + G2 N  . (122)
+Write g = ∇h + b and use
+−⟨∇h, g⟩ = − 1 2 ∥∇h∥2 − 1 2 ∥g∥2 + 1 2 ∥b∥2. (123)
+The step-size condition makes the total coefficient of ∥g∥2 nonpositive. Taking full expectation and
+summing over t gives Equation (121).
+We first measure stationarity with respect to the original loss h. In this comparison, the field error
+includes both smoothing and finite-rank score mismatch, and the standard smoothness bounds from
+Section 3 control them together.
+30
+
+Preprint. Under review.
+Corollary E.9 (Convergence relative to the original loss). Suppose that h is L-smooth and bounded
+below by h⋆, that the finite-population estimator satisfies Equations (119) and (120) with g = gh r,σ ,
+and set 0 < η ≤ [L(1 + C 2/N )]−1. Define Bstd r,σ = B(L) r,σ . If the Hessian is M -Lipschitz, one may
+instead take Bstd r,σ = B(M ) r,σ . Then
+1
+T
+T −1X
+t=0
+E[∥∇h(xt)∥2] ≤ 2(h(x0) − h⋆) ηT +   Bstd r,σ 2 + LηG2 N . (124)
+If σ ≤ σL(r, ε), or σ ≤ σM (r, ε) under the Lipschitz-Hessian assumption, then the middle term is at
+most ε2/2.
+Proof. Apply Theorem B.2 to the field-error term in Equation (121).
+Dividing the target tolerance among mean-field error, the finite optimization horizon, and irreducible
+population noise gives an explicit iteration complexity for a single matrix. Replacing µ4(r) by µ4(r)
+from Equation (101) gives the corresponding network statement.
+Corollary E.10 (Explicit finite-population complexity). Under the assumptions of Theorem E.9, fix
+ε > 0 and let ∆ = h(x0) − h⋆. Set η = 1/(2L) and choose
+0 < σ ≤ 2ε√ 3 Lµ4(r)3/4 . (125)
+If the Hessian is M-Lipschitz, the alternative choice
+0 < σ ≤
+ 
+2
+√
+3 ε
+M µ4(r)
+!1/2
+(126)
+is sufficient. If
+N ≥ max
+
+C 2, 3G2
+2ε2
+
+(127)
+and
+T ≥
+ 12L∆
+ε2
+
+, (128)
+then
+1
+T
+T −1X
+t=0
+E
+
+∥∇h(xt)∥2 ≤ ε2. (129)
+Proof. The radius choices make the field-error bound at most ε/
+√
+3. The requirement N ≥ C 2
+gives η ≤ [L(1 + C 2/N )]−1, while the second part of Equation (127) bounds the irreducible term
+by G2/(2N ) ≤ ε2/3. Finally, Equation (128) bounds the optimization term by 4L∆/T ≤ ε2/3.
+Substitution into Equation (124) proves the claim.
+The guarantees above concern the original loss. To compare finite-rank EGGROLL directly with
+dense Gaussian ES at the same radius, let H∞,σ (x) := E[h(x + σZ)] for Z ∼ N (0, I). Using this
+smoothed loss as the reference removes the smoothing error shared by both methods and leaves the
+finite-rank discrepancy derived in Appendix B.7.
+Corollary E.11 (Convergence relative to dense Gaussian ES). Suppose h satisfies the assumptions of
+Theorem 4.2, H∞,σ is Lσ -smooth and bounded below by H ⋆ ∞,σ , and the finite-population estimator
+satisfies Equations (119) and (120) with g = gh r,σ . For the constants Kσ,p, Rσ,p, r0 in Equation (93),
+every r ≥ r0 and 0 < η ≤ [Lσ (1 + C 2/N )]−1 satisfy
+1
+T
+T −1X
+t=0
+E
+
+∥∇H∞,σ (xt)∥2 ≤ 2(H∞,σ (x0) − H ⋆ ∞,σ ) ηT + Lσ ηG2 N
++
+ Kσ,p
+r + Rσ,p r2
+2 1
+T
+T −1X
+t=0
+E
+
+(1 + ∥xt∥)2p .
+(130)
+31
+
+Preprint. Under review.
+If the displayed parameter moments are uniformly bounded along the trajectory, the mean-field
+contribution of finite rank to the squared-stationarity guarantee is O(r−2) whenever the leading
+coefficient is nonzero. For bounded fitness, p = 0 and no trajectory-moment condition is needed.
+Proof. Equation (93) gives
+∥gh r,σ (xt) − ∇H∞,σ (xt)∥ ≤
+ Kσ,p
+r + Rσ,p r2
+
+(1 + ∥xt∥)p. (131)
+Square this bound and apply Theorem E.8 with H∞,σ as the reference loss.
+The two reference objectives should not be conflated. Relative to h, the error contains smoothing
+and finite-rank effects and must be controlled through both σ and r. Relative to dense Gaussian
+ES at the same σ, the shared smoothing disappears and the mean-field difference is O(1/r). The
+finite-population noise is the same in either comparison.
+The constants in the variance assumption can be connected to quantities that are calculable or
+measurable for EGGROLL. The constant G2 allows noise to remain when the mean update vanishes.
+The term C 2∥g(x)∥2 is relative or multiplicative noise, also called a strong-growth component
+(Vaswani et al., 2019; Wang et al., 2023). For one matrix in the exact affine model, Theorem 4.1 gives
+C 2 = mn + 1 + 2(m + n + 1)/r. Appendix E gives the corresponding network expression. Relative
+noise restricts the stable step size, but it vanishes with the mean field and creates no additional error
+floor. The additive component G2 produces the final term in Equation (121). Setting C = 0 recovers
+the usual bounded-variance assumption, while the exact affine EGGROLL model has G = 0.
+E.3 FOURTH MOMENTS OF THE GAUSSIAN-PRODUCT LAW
+This appendix supplies the fourth-moment calculation used in Theorem 3.4. The coefficient in
+Equation (63) follows from the fourth moment of four entries of Er . At rank one, (E1)ij = aibj ,
+where a and b are independent standard Gaussian vectors. For arbitrary row indices i1, . . . , i4 and
+column indices j1, . . . , j4,
+E
+" 4Y
+s=1
+(E1)is js
+#
+= (δi1 i2 δi3 i4 + δi1 i3 δi2 i4 + δi1 i4 δi2 i3 ) (δj1 j2 δj3 j4 + δj1 j3 δj2 j4 + δj1 j4 δj2 j3 ) .
+(132)
+Each parenthesis contains the three possible pairings of four Gaussian factors. Expanding their
+product gives nine terms. In three of them, the row and column indices use the same pairing. For
+example, pairing the first entry with the second and the third with the fourth in both factors gives
+δi1 i2 δj1 j2 δi3 i4 δj3 j4 . (133)
+These three terms are precisely the fourth moment of a dense Gaussian matrix with independent
+entries. The remaining six terms use different pairings for the row and column indices, such as
+δi1 i2 δi3 i4 δj1 j3 δj2 j4 , (134)
+and arise from the rank-one factorization.
+For general rank, write Er = r−1/2 Pr q=1 aq b⊤ q . A nonzero fourth-moment term either draws
+all four factors from one summand or draws two factors from each of two summands. The three
+dense-Gaussian terms receive both kinds of contributions, with total coefficient
+r
+r2 + r(r − 1) r2 = 1. (135)
+Each of the six additional terms requires all four factors to come from the same rank-one summand
+and therefore has coefficient r/r2 = 1/r. Consequently, the fourth moment of Er consists of the
+three dense-Gaussian terms plus the six additional terms scaled by 1/r. To apply this identity in
+Equation (62), write the (i0, j0) entry as
+X
+i1 ,j1 ,i2 ,j2 ,i3 ,j3
+∂i1 j1 ∂i2 j2 ∂i3 j3 f (W ) E [(Er )i0 j0 (Er )i1 j1 (Er )i2 j2 (Er )i3 j3 ] . (136)
+32
+
+Preprint. Under review.
+Table 8: Training budgets for the fourteen LOO-ROLL comparisons. N counts independent
+EGGROLL directions, B is the training batch size, TE is the EGGROLL update count, and TL
+is the mean number of LOO-ROLL updates completed at equal time. Hours are mean EGGROLL
+runtimes over five seeds. NTP denotes next-token prediction.
+Model Task N B TE TL Hours Time ratio
+Qwen3-0.6B Countdown 128 8 150 374.4 2.668 0.9970
+Qwen3-0.6B GSM8K 128 4 150 368.4 4.145 0.9978
+Qwen3-0.6B NTP 32 4 80 131.8 0.151 1.0088
+Qwen3-1.7B Countdown 128 8 200 496.0 4.187 0.9980
+Qwen3-1.7B GSM8K 128 4 200 485.6 6.190 0.9985
+Qwen3-1.7B NTP 32 4 160 268.0 0.293 1.0199
+Qwen3-1.7B MATH 128 4 200 482.8 8.838 0.9985
+Qwen3-8B GSM8K 128 4 120 303.6 8.929 1.0009
+Qwen3-8B NTP 32 4 120 203.4 0.363 1.0271
+Qwen3-8B MATH 128 4 200 484.2 18.686 0.9998
+Qwen3-14B GSM8K 128 4 120 323.4 14.544 0.9675
+Qwen3-14B MATH 128 4 200 522.8 28.948 0.9998
+SmolLM2-1.7B Countdown 128 8 200 485.0 4.521 0.9981
+SmolLM2-1.7B GSM8K 128 4 200 444.8 3.250 0.9981
+The three dense-Gaussian terms give the same quantity, ∂i0 j0 ∆f (W ), after relabeling indices. The six
+additional terms give the same quantity, (Df (W ))i0 j0 , by symmetry of the third derivative. Summing
+them proves
+E
+
+Er D3f (W )[Er , Er , Er ]  = 3∇∆f (W ) + 6 r Df (W ). (137)
+F COMPLETE EMPIRICAL RESULTS
+F.1 TRAINING BUDGETS
+Table 8 gives the direction counts, batch sizes, update budgets, runtimes, and achieved time matching
+for all fourteen primary comparisons.
+F.2 PAIRED STATISTICAL COMPARISONS
+The main text reports mean performance under matched evaluation and wall-time budgets. Here,
+we test the paired seed-level differences underlying those comparisons. Table 9 gives the individual
+two-sided tests at equal evaluation cost. Table 10 gives both the individual and Holm-adjusted
+p-values for the fourteen equal-wall-time comparisons, treating them as one family.
+F.3 RANK COMPARISONS AND TRANSFORMER AUDITS
+Tables 11 to 14 report the complete rank and radius comparisons summarized in Figure 4, including
+the stress-radius runs omitted from the main fixed-validation comparison. Rank columns give mean
+final training fitness ± standard error over three independent seeds, with higher values indicating
+better performance. The experiments use commit bcc215e of the eggroll-vLLM repository with the
+LOO-ROLL modifications described in Section 5.
+The training results combine mean-field effects, population noise, and the resulting optimization
+trajectory. The transformer-block audit isolates the first two at a fixed model state. Table 15 compares
+each finite-rank estimator with dense Gaussian ES through its single-direction MSE and compares its
+estimated mean with the backpropagated gradient through cosine similarity. The rank-one MSE is
+26–32% above the dense baseline and falls to 3–4% above it at rank eight, while the estimated mean
+retains a cosine near 0.98 at every rank. Finite-rank variance is therefore visible in these small blocks,
+whereas the mean direction changes little over the tested radii.
+33
+
+Preprint. Under review.
+Table 9: Two-sided paired tests at equal evaluation cost, with five paired seeds and full-test GSM8K
+and MATH-500 evaluation. The 14B MATH-500 comparison favors LOO-ROLL with p = 0.04591.
+The other comparisons have p ≥ 0.05.
+Model Task Individual p
+Qwen3-0.6B Countdown 0.19198
+Qwen3-0.6B GSM8K 0.09112
+Qwen3-0.6B Next-token prediction 0.46333
+Qwen3-1.7B Countdown 0.68251
+Qwen3-1.7B GSM8K 0.51541
+Qwen3-1.7B MATH-500 0.89277
+Qwen3-1.7B Next-token prediction 0.53072
+Qwen3-8B GSM8K 0.11829
+Qwen3-8B MATH-500 0.46159
+Qwen3-8B Next-token prediction 0.23088
+Qwen3-14B GSM8K 0.84124
+Qwen3-14B MATH-500 0.04591
+SmolLM2-1.7B Countdown 0.64704
+SmolLM2-1.7B GSM8K 0.53016
+Table 10: Two-sided paired tests for the fourteen equal-time LOO-ROLL comparisons. Holm
+adjustment treats all fourteen settings as one family. Bold adjusted values are below 0.05, and all
+nine corresponding effects favor LOO-ROLL.
+Model Task Individual p Holm-adjusted p
+Qwen3-0.6B GSM8K 0.000020 0.00026
+Qwen3-1.7B GSM8K 0.001532 0.0123
+Qwen3-1.7B MATH-500 0.000062 0.00074
+Qwen3-8B GSM8K 0.000004 0.00006
+Qwen3-8B MATH-500 0.000373 0.00335
+Qwen3-14B GSM8K 0.000199 0.00199
+Qwen3-14B MATH-500 0.000125 0.00137
+SmolLM2-1.7B Countdown 0.654584 1.000000
+SmolLM2-1.7B GSM8K 0.003708 0.0260
+Qwen3-0.6B Countdown 0.710583 1.000000
+Qwen3-1.7B Countdown 0.022238 0.088953
+Qwen3-0.6B Next-token prediction loss 0.055755 0.167266
+Qwen3-1.7B Next-token prediction loss 0.012190 0.060951
+Qwen3-8B Next-token prediction loss 0.003985 0.0260
+Table 11: Expanded useful-radius comparison over five matched seeds. Reward changes are rank
+eight minus rank one in percentage points, so positive values favor rank eight. Wall overhead is the
+percentage increase in mean iteration time from rank one to rank eight. Brackets give paired 95%
+Student-t intervals. The bold entry excludes zero.
+Model Task Reward change Rank-8 wall overhead
+Qwen3-0.6B Countdown −.69% [−2.73, 1.34] +12%
+Qwen3-0.6B GSM8K +2.09% [−.23, 4.41] +12%
+Qwen3-1.7B Countdown +.28% [−1.61, 2.17] +22%
+Qwen3-1.7B GSM8K +.76% [.07, 1.46] +12%
+Qwen3-4B GSM8K +.21% [−1.30, 1.73] +25%
+Qwen3-8B GSM8K −.70% [−1.58, .18] +19%
+34
+
+Preprint. Under review.
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25Final training fitness
+Qwen3-0.6B · Countdown
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+Qwen3-1.7B · Countdown
+σ = 0.001
+σ = 0.004
+1 2 4 8
+Perturbation rank
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30Final training fitness
+Qwen3-0.6B · GSM8K
+1 8
+Perturbation rank
+0.2
+0.4
+0.6
+0.8
+1.0
+Qwen3-1.7B · GSM8K
+Figure 4: Mean final training fitness for the 0.6B and 1.7B rank studies. Bars are standard errors over
+three seeds. At σ = 10−3, rank differences are small relative to seed variation. Increasing the radius
+to σ = 4 × 10−3 produces a much larger decline in fitness across ranks.
+Table 12: Complete Qwen3-0.6B rank study. Entries are mean final training fitness ± standard error
+over three seeds. Higher values are better.
+Task σ Rank 1 Rank 2 Rank 4 Rank 8
+Countdown .001 .195 ± .047 .200 ± .053 .202 ± .049 .190 ± .048
+Countdown .004 .0081 ± .0007 .0082 ± .0007 .0069 ± .0007 .0086 ± .0004
+GSM8K .001 .268 ± .006 .264 ± .020 .272 ± .021 .278 ± .013
+GSM8K .004 .0003 ± .0003 .0000 ± .0000 .0000 ± .0000 .0000 ± .0000
+Table 13: Paired rank-eight minus rank-one reward changes over three matched seeds, in percentage
+points. Positive values favor rank eight. Brackets give two-sided 95% Student-t intervals, and bold
+entries exclude zero.
+Model Task σ = .001 σ = .004
+Qwen3-0.6B Countdown −.51% [−5.83, 4.82] +.04% [−.42, .51]
+Qwen3-0.6B GSM8K +1.04% [−5.42, 7.50] −.03% [−.17, .11]
+Qwen3-1.7B Countdown +1.75% [−.15, 3.66] −3.06% [−5.18, −.94]
+Qwen3-1.7B GSM8K +.39% [−1.50, 2.29] −4.07% [−4.44, −3.70]
+Table 14: Complete Qwen3-1.7B rank study. Rank columns give mean final training fitness ±
+standard error over three seeds. Higher fitness is better. The final column gives the paired rank-eight
+minus rank-one reward change in percentage points.
+Task σ Rank 1 Rank 8 Reward change
+Countdown .001 .539 ± .014 .556 ± .017 +1.75%
+Countdown .004 .073 ± .005 .042 ± .004 −3.06%
+GSM8K .001 .962 ± .013 .966 ± .011 +.39%
+GSM8K .004 .283 ± .025 .243 ± .025 −4.07%
+35
+
+Preprint. Under review.
+Table 15: Comparison of finite-rank and dense-Gaussian ES updates in two Qwen3-0.6B transformer
+blocks. Relative MSE is the single-direction squared error about the backpropagated block gradient,
+divided by the corresponding dense-Gaussian MSE, so 1 denotes equal sampling error and lower
+values are better. Mean-field cosine is the cosine similarity between the average of 8,192 antithetic
+updates and the backpropagated block gradient, so 1 denotes perfect directional agreement. Values
+average four perturbation radii within each of three independent perturbation seeds and are reported
+as means ± standard errors over seeds.
+Quantity Block Rank 1 Rank 2 Rank 4 Rank 8
+Relative MSE MLP 1.319 ± .036 1.168 ± .009 1.090 ± .009 1.040 ± .002
+Relative MSE Attention 1.264 ± .018 1.127 ± .018 1.089 ± .025 1.028 ± .015
+Mean-field cosine MLP .9817 ± .0013 .9830 ± .0011 .9837 ± .0003 .9827 ± .0007
+Mean-field cosine Attention .9800 ± .0011 .9832 ± .0009 .9836 ± .0006 .9842 ± .0012
+Table 16: Monte Carlo verification of the exact single-direction variance in Equation (72). Results
+use 100,000 independent sampled directions for a normalized 3 × 5 affine gradient.
+Rank r Exact variance Monte Carlo variance Relative error
+1 34.00 34.24 0.70%
+2 25.00 25.21 0.86%
+4 20.50 20.62 0.57%
+8 18.25 18.19 0.35%
+F.4 CONTROLLED NUMERICAL EXPERIMENTS
+These experiments examine the parts of the theory that have exact numerical answers. Comput-
+ing the covariance directly from sampled perturbation entries reproduces the tensor predicted by
+Equation (70), without evaluating the formula itself. Independent calculations also reproduce the
+resolvent multiplier at individual frequencies, the two Hessians in Theorem 3.2, the cubic identity in
+Theorem 3.4, and the 1/r rank expansion in Theorem 4.2. Together, these calculations verify the
+algebra before any model or optimization effects enter.
+The finite-sampling experiment asks whether Monte Carlo estimates reproduce those exact quantities.
+Table 16 uses 100,000 directions for a 3 × 5 affine problem. The empirical single-direction variance
+is within 0.9% of Equation (72) at every rank. The same calculation recovers the stability transition
+in Figure 2: the largest Jacobian real part is 0.02925 at rank one and −0.00444 at rank two.
+The quadratic case provides an exact test of the finite-population dynamics. Let h(W ) = ∥W ∥2 F /2,
+so that the exact population field is W by Theorem 3.3. If bGN averages N directions, unbiasedness
+and Equation (20) give
+E
+h
+∥W − η bGN ∥2 F | W i = h 1 − 2η + η2  1 + κr N i ∥W ∥2 F . (138)
+Drawing a fresh independent population at every step and iterating this identity yields
+E[∥WT ∥2 F ]
+∥W0∥2 F =
+h
+1 − 2η + η2
+
+1 + κr
+N
+iT
+. (139)
+We test an 8 × 8 problem at η = 0.3 using 4,000 independent one-step trials per rank–population pair
+and 5,000 independent 25-step trajectories.
+The synthetic result makes the finite-population prediction visible in a controlled setting. With few
+directions, the term κr /N can move the iteration across the stability boundary. Increasing N removes
+this difference, while increasing the matrix width makes the rank-one contribution small relative to
+the common mn + 1 term. The transformer experiments in Section 6 examine these predictions in a
+nonlinear model.
+36
+
+Preprint. Under review.
+16 32 64 128 256
+Population size N
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0Expected loss / initial loss
+Population-size dependence
+Rank 1
+Rank 2
+Rank 4
+Rank 8
+Dense Gaussian
+0 5 10 15 20 25
+Iteration
+10−1
+100
+Expected loss / initial loss
+Finite-sample dynamics (N = 16)
+Rank 1 (MC)
+Rank 1 (exact)
+Rank 8 (MC)
+Rank 8 (exact)
+Dense Gaussian (MC)
+Dense Gaussian (exact)
+Figure 5: Finite-sample validation of Equation (139). Left: Monte Carlo one-step ratios agree with
+the exact curves across populations and ranks. The horizontal line marks stability. Right: at N = 16,
+the formula predicts the full mean-square trajectory. Rank one is unstable, whereas rank eight and
+dense Gaussian ES contract. Marked curves are Monte Carlo means and dashed curves are exact.
+G POPULATION CENTERING AND STANDARDIZATION
+The operator analysis concerns the uncentered and unstandardized antithetic estimator, while the
+end-to-end experiments retain the population centering and standardization specified by EGGROLL.
+We therefore distinguish the direction of one realized update from the expectation of the normalized
+estimator. The proposition shows that prompt-wise centering and one common scale do not rotate
+a realized update. The corollary nevertheless shows that a scale computed from the same random
+population can change the expected field.
+Proposition G.1 (Population centering and common standardization preserve each realized direction).
+Let pair j use perturbations +Ej and −Ej , with prompt-level fitnesses Yj,+,p and Yj,−,p. For
+arbitrary prompt offsets cp, define
+Zj,± = 1 P
+PX
+p=1
+(Yj,±,p − cp). (140)
+Then Zj,+ − Zj,− = P −1 P p(Yj,+,p − Yj,−,p) exactly. If all Zj,± are subsequently divided by
+the same random scalar S > 0, the ES update is exactly S−1 times the unstandardized update.
+Consequently, per-prompt population centering has no effect on the update, and standardization
+changes only its realized magnitude.
+Proof. The offsets cancel algebraically in every pair difference. The ES update is linear in those
+differences, so dividing every score by the same positive S multiplies their weighted sum by S−1 and
+cannot change its realized direction.
+Corollary G.2 (Bias induced by a same-population normalizer). At a fixed iterate, let bg = g + ξ with
+deterministic g and E[ξ] = 0, and let α = S−1 have finite second moment. Then
+∥E[αbg] − E[α]g∥ ≤
+p
+Var(α)E[∥ξ∥2]. (141)
+If α is measurable with respect to a sigma-field G and E[ξ | G] = 0, the left side is zero. Independence
+of α and ξ is sufficient. A same-population normalizer can otherwise change the expected field.
+Proof. Since E[ξ] = 0,
+E[αbg] − E[α]g = E[(α − E[α])ξ]. (142)
+Cauchy–Schwarz gives Equation (141). If α is G-measurable and E[ξ | G] = 0, then E[αξ] =
+E[αE[ξ | G]] = 0.
+The bound becomes explicit in the population size once the update mean and empirical scale satisfy
+concentration bounds.
+37
+
+Preprint. Under review.
+Table 17: Comparison of mean updates before and after population score standardization, averaged
+over two transformer blocks, four perturbation radii, and three seeds. Cosine measures directional
+agreement between the raw and standardized means, with 1 indicating identical directions. Residual
+is the component of the standardized mean that cannot be explained by rescaling the raw mean,
+expressed as a percentage of the standardized mean’s norm. Higher cosine and lower residual indicate
+a smaller directional effect.
+N Dense cosine Dense residual Rank-one cosine Rank-one residual
+32 .99954 3.03% .99858 5.28%
+64 .99979 2.04% .99924 3.87%
+128 .99990 1.44% .99970 2.42%
+Proposition G.3 (N -dependent standardization bias). For each population size N , write bgN = g+ξN
+and αN = S−1 N . Suppose that, for constants V, A < ∞ independent of N,
+E[∥ξN ∥2] ≤ V N , Var(αN ) ≤ A N . (143)
+Then
+∥E[αN bgN ] − E[αN ]g∥ ≤
+√
+AV
+N . (144)
+Consequently, same-population standardization changes the raw population field by an O(N −1)
+term, apart from the scalar factor E[αN ].
+Proof. Apply Equation (141) and substitute the two bounds in Equation (143).
+The first condition in Equation (143) is the ordinary N −1 variance reduction from averaging indepen-
+dent member updates. The second follows, for example, when the empirical scale concentrates at rate
+N −1/2 around a positive population scale and its inverse has uniformly controlled second moments.
+A deterministic floor on the empirical scale supplies a direct sufficient condition. More precisely, if
+SN ≥ s0 > 0 almost surely, the population scale is s > 0, and E[(SN − s)2] ≤ CS /N, then
+Var(S−1 N ) ≤ E[(S−1 N − s−1)2] ≤ CS s2 0s2N , (145)
+so Equation (144) holds with A = CS /(s2 0s2). Thus, the raw resolvent field remains the leading
+expected direction as the population grows.
+G.1 TRANSFORMER-BLOCK AUDIT
+The released EGGROLL implementation divides all member scores by one standard deviation
+computed from the same population. We test the resulting finite-population effect with 4,096 coupled
+directions for each of two Qwen3-0.6B blocks, four radii from 10−3 to 8 × 10−3, and three seeds.
+For each block, radius, and seed, the directions are partitioned into independent populations of size
+N . After fitting the best scalar multiple of the raw field, the directional residual is the norm of the
+remaining orthogonal component divided by the norm of the standardized field.
+Table 17 shows that the normalized and raw fields remain closely aligned, and that their difference
+decreases with population size. At the training value N = 128, the rank-one cosine is 0.99970 with a
+2.42% directional residual. The dense control gives 0.99990 and 1.44%. Fits across ranks 1, 2, 4, 8
+do not produce a coefficient whose direction and magnitude remain stable under the predicted σ2
+scaling, leaving that correction below the resolution of this audit.
+38

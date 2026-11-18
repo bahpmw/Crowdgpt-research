@@ -1,0 +1,16 @@
+[r1-dust32] start eval 8.3665
+[r1-dust32] it 1 t    5.9s tok   0.001M eval 8.3655 up/step 14.687MB {'gradNorm': 10.8679, 'forwards': 126}
+[r1-dust32] it 2 t   11.9s tok   0.002M eval 8.3636 up/step 14.687MB {'gradNorm': 10.6201, 'forwards': 126}
+[r1-dust32] it 3 t   17.9s tok   0.003M eval 8.3612 up/step 14.687MB {'gradNorm': 10.6444, 'forwards': 126}
+[r1-dust32] it 5 t   30.1s tok   0.005M eval 8.3541 up/step 14.687MB {'gradNorm': 10.8891, 'forwards': 126}
+[r1-dust32] it 7 t   42.0s tok   0.007M eval 8.3443 up/step 14.687MB {'gradNorm': 10.5017, 'forwards': 126}
+[r1-dust32] it 9 t   54.0s tok   0.009M eval 8.3311 up/step 14.687MB {'gradNorm': 10.3842, 'forwards': 126}
+[r1-dust32] it 10 t   60.0s tok   0.010M eval 8.3232 up/step 14.687MB {'gradNorm': 10.1221, 'forwards': 126}
+[r1-dust32] it 11 t   65.9s tok   0.011M eval 8.3150 up/step 14.687MB {'gradNorm': 10.4738, 'forwards': 126}
+[r1-dust32] it 13 t   77.8s tok   0.013M eval 8.2954 up/step 14.687MB {'gradNorm': 11.1838, 'forwards': 126}
+[r1-dust32] it 15 t   89.7s tok   0.015M eval 8.2709 up/step 14.687MB {'gradNorm': 10.821, 'forwards': 126}
+[r1-dust32] it 17 t  101.5s tok   0.017M eval 8.2391 up/step 14.687MB {'gradNorm': 10.7288, 'forwards': 126}
+[r1-dust32] it 19 t  113.4s tok   0.019M eval 8.1994 up/step 14.687MB {'gradNorm': 10.3409, 'forwards': 126}
+[r1-dust32] it 20 t  119.3s tok   0.020M eval 8.1767 up/step 14.687MB {'gradNorm': 11.602, 'forwards': 126}
+[r1-dust32] it 21 t  125.1s tok   0.022M eval 8.1522 up/step 14.687MB {'gradNorm': 10.6943, 'forwards': 126}
+{"label": "r1-dust32", "steps": 21, "startLoss": 8.366497993469238, "finalLoss": 8.15223479270935, "bestLoss": 8.15223479270935, "diverged": false, "upBytesPerStep": 14686720.0, "tokens": 21504}

@@ -1,0 +1,6 @@
+[x3-q3-units] start eval 8.3665
+[x3-q3-units] it 1 t   34.5s tok   0.426M eval 7.8046 up/step 11.155MB {'simTime': 30.0, 'innerLoss': 7.1988, 'upKB': 697.2, 'downKB': 10458.2, 'msgNorm': 11.2984}
+[x3-q3-units] it 2 t   68.2s tok   0.852M eval 7.3173 up/step 11.155MB {'simTime': 60.0, 'innerLoss': 7.0989, 'upKB': 697.2, 'downKB': 10458.2, 'msgNorm': 17.2193}
+[x3-q3-units] it 3 t  101.7s tok   1.278M eval 7.0619 up/step 11.155MB {'simTime': 90.0, 'innerLoss': 7.0234, 'upKB': 697.2, 'downKB': 10458.2, 'msgNorm': 18.0405}
+[x3-q3-units] it 5 t  166.2s tok   2.130M eval 6.7874 up/step 11.155MB {'simTime': 150.0, 'innerLoss': 6.8391, 'upKB': 697.2, 'downKB': 10458.2, 'msgNorm': 17.7728}
+[x3-q3-units] it 7 t  235.5s tok   2.982M eval 6.5905 up/step 11.155MB {'simTime': 210.0, 'innerLoss': 6.6516, 'upKB': 697.2, 'downKB': 10458.2, 'msgNorm': 17.7776}

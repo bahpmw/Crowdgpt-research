@@ -1,0 +1,13 @@
+[x3-q1-flat32] start eval 8.3665
+[x3-q1-flat32] it 1 t   10.6s tok   0.492M eval 7.9886 up/step 6.865MB {'simTime': 30.0, 'innerLoss': 7.2384, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 17.0199}
+[x3-q1-flat32] it 2 t   23.5s tok   0.983M eval 7.4675 up/step 6.865MB {'simTime': 60.0, 'innerLoss': 7.0967, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 22.7158}
+[x3-q1-flat32] it 3 t   37.8s tok   1.475M eval 8.4351 up/step 6.865MB {'simTime': 90.0, 'innerLoss': 7.0353, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 25.4793}
+[x3-q1-flat32] it 5 t   64.3s tok   2.458M eval 7.0903 up/step 6.865MB {'simTime': 150.0, 'innerLoss': 6.9031, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 26.5791}
+[x3-q1-flat32] it 6 t   79.3s tok   2.949M eval 7.0572 up/step 6.865MB {'simTime': 180.0, 'innerLoss': 6.811, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 26.994}
+[x3-q1-flat32] it 9 t  151.2s tok   4.424M eval 6.5694 up/step 6.865MB {'simTime': 270.0, 'innerLoss': 6.5954, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.2951}
+[x3-q1-flat32] it 11 t  178.8s tok   5.407M eval 6.4397 up/step 6.865MB {'simTime': 330.0, 'innerLoss': 6.4873, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.9321}
+[x3-q1-flat32] it 13 t  235.1s tok   6.390M eval 6.3339 up/step 6.865MB {'simTime': 390.0, 'innerLoss': 6.487, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 29.2321}
+[x3-q1-flat32] it 16 t  320.6s tok   7.864M eval 6.2127 up/step 6.865MB {'simTime': 480.0, 'innerLoss': 6.4098, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 29.1162}
+[x3-q1-flat32] it 19 t  391.9s tok   9.339M eval 6.1335 up/step 6.865MB {'simTime': 570.0, 'innerLoss': 6.3262, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.9427}
+[x3-q1-flat32] it 20 t  414.5s tok   9.830M eval 6.1126 up/step 6.865MB {'simTime': 600.0, 'innerLoss': 6.3851, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.8307}
+{"label": "x3-q1-flat32", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 6.112604141235352, "bestLoss": 6.112604141235352, "diverged": false, "upBytesPerStep": 6864896.0, "tokens": 9830400}

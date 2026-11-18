@@ -1,0 +1,33 @@
+[rl-100m-full] start eval 8.4753
+[rl-100m-full] it 1 t    1.0s tok   0.001M eval 8.4706 up/step 465.645MB {'lr': 1e-05, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 2 t    1.3s tok   0.002M eval 8.4592 up/step 465.645MB {'lr': 2e-05, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 5 t    2.3s tok   0.005M eval 8.3889 up/step 465.645MB {'lr': 5e-05, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 10 t    3.8s tok   0.010M eval 8.0033 up/step 465.645MB {'lr': 0.0001, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 20 t    6.9s tok   0.020M eval 7.3011 up/step 465.645MB {'lr': 0.0002, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 49 t   16.0s tok   0.050M eval 7.0661 up/step 465.645MB {'lr': 0.00049, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 98 t   29.7s tok   0.100M eval 6.7778 up/step 465.645MB {'lr': 0.000979, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 196 t   56.8s tok   0.201M eval 6.2888 up/step 465.645MB {'lr': 0.000994, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 212 t   61.1s tok   0.217M eval 6.2531 up/step 465.645MB {'lr': 0.000994, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 434 t  121.3s tok   0.444M eval 5.9737 up/step 465.645MB {'lr': 0.000973, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 489 t  136.0s tok   0.501M eval 5.9529 up/step 465.645MB {'lr': 0.000966, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 662 t  181.5s tok   0.678M eval 5.8122 up/step 465.645MB {'lr': 0.000938, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 896 t  241.7s tok   0.918M eval 5.7314 up/step 465.645MB {'lr': 0.000888, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 977 t  263.8s tok   1.000M eval 5.6679 up/step 465.645MB {'lr': 0.000868, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 1119 t  301.8s tok   1.146M eval 5.6335 up/step 465.645MB {'lr': 0.00083, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 1359 t  362.0s tok   1.392M eval 5.5133 up/step 465.645MB {'lr': 0.000757, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 1586 t  422.0s tok   1.624M eval 5.4715 up/step 465.645MB {'lr': 0.000681, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 1826 t  482.2s tok   1.870M eval 5.4105 up/step 465.645MB {'lr': 0.000596, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 1954 t  526.5s tok   2.001M eval 5.3807 up/step 465.645MB {'lr': 0.00055, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 1999 t  542.4s tok   2.047M eval 5.3626 up/step 465.645MB {'lr': 0.000534, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 2172 t  602.7s tok   2.224M eval 5.3173 up/step 465.645MB {'lr': 0.000472, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 2346 t  662.8s tok   2.402M eval 5.2703 up/step 465.645MB {'lr': 0.00041, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 2525 t  723.2s tok   2.586M eval 5.2395 up/step 465.645MB {'lr': 0.000351, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 2699 t  783.4s tok   2.764M eval 5.1957 up/step 465.645MB {'lr': 0.000296, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 2874 t  843.7s tok   2.943M eval 5.1738 up/step 465.645MB {'lr': 0.000247, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 3054 t  903.9s tok   3.127M eval 5.1311 up/step 465.645MB {'lr': 0.000202, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 3251 t  964.2s tok   3.329M eval 5.1120 up/step 465.645MB {'lr': 0.000161, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 3453 t 1024.3s tok   3.536M eval 5.0929 up/step 465.645MB {'lr': 0.00013, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 3661 t 1084.4s tok   3.749M eval 5.0793 up/step 465.645MB {'lr': 0.000109, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 3867 t 1144.4s tok   3.960M eval 5.0646 up/step 465.645MB {'lr': 0.0001, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-full] it 3907 t 1156.2s tok   4.001M eval 5.0672 up/step 465.645MB {'lr': 0.0001, 'trainFrac': 1.0, 'lora': 0}
+{"label": "rl-100m-full", "steps": 3907, "startLoss": 8.47532033920288, "finalLoss": 5.0671820640563965, "bestLoss": 5.064626455307007, "diverged": false, "upBytesPerStep": 465644544.0, "tokens": 4000768}

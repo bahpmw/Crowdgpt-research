@@ -1,0 +1,14 @@
+[x3-q1-hier32-mdir] start eval 8.3665
+[x3-q1-hier32-mdir] it 1 t   45.1s tok   0.492M eval 7.8829 up/step 7.681MB {'simTime': 30.0, 'innerLoss': 7.2387, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 17.0178, 'node0Loss': 7.8845, 'spread': 0.12352}
+[x3-q1-hier32-mdir] it 2 t   95.0s tok   0.983M eval 7.4923 up/step 7.681MB {'simTime': 60.0, 'innerLoss': 7.0501, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 21.908, 'node0Loss': 7.5035, 'spread': 0.1804}
+[x3-q1-hier32-mdir] it 3 t  136.7s tok   1.475M eval 7.2227 up/step 7.681MB {'simTime': 90.0, 'innerLoss': 7.0003, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 23.7438, 'node0Loss': 7.2356, 'spread': 0.21248}
+[x3-q1-hier32-mdir] it 5 t  224.1s tok   2.458M eval 6.8344 up/step 7.681MB {'simTime': 150.0, 'innerLoss': 6.8189, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 24.0351, 'node0Loss': 6.8292, 'spread': 0.24154}
+[x3-q1-hier32-mdir] it 7 t  311.2s tok   3.441M eval 6.6091 up/step 7.681MB {'simTime': 210.0, 'innerLoss': 6.622, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 24.4413, 'node0Loss': 6.6183, 'spread': 0.25561}
+[x3-q1-hier32-mdir] it 9 t  396.1s tok   4.424M eval 6.4477 up/step 7.681MB {'simTime': 270.0, 'innerLoss': 6.5121, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 26.046, 'node0Loss': 6.4408, 'spread': 0.27015}
+[x3-q1-hier32-mdir] it 11 t  480.3s tok   5.407M eval 6.3503 up/step 7.681MB {'simTime': 330.0, 'innerLoss': 6.4104, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 27.3092, 'node0Loss': 6.3359, 'spread': 0.28127}
+[x3-q1-hier32-mdir] it 13 t  565.1s tok   6.390M eval 6.2499 up/step 7.681MB {'simTime': 390.0, 'innerLoss': 6.3999, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.3963, 'node0Loss': 6.244, 'spread': 0.28477}
+[x3-q1-hier32-mdir] it 15 t  647.1s tok   7.373M eval 6.1755 up/step 7.681MB {'simTime': 450.0, 'innerLoss': 6.3267, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 29.2617, 'node0Loss': 6.1703, 'spread': 0.28498}
+[x3-q1-hier32-mdir] it 17 t  727.7s tok   8.356M eval 6.1173 up/step 7.681MB {'simTime': 510.0, 'innerLoss': 6.2932, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 29.1516, 'node0Loss': 6.1093, 'spread': 0.28707}
+[x3-q1-hier32-mdir] it 19 t  803.0s tok   9.339M eval 6.0712 up/step 7.681MB {'simTime': 570.0, 'innerLoss': 6.234, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 29.1456, 'node0Loss': 6.0588, 'spread': 0.2882}
+[x3-q1-hier32-mdir] it 20 t  845.7s tok   9.830M eval 6.0520 up/step 7.681MB {'simTime': 600.0, 'innerLoss': 6.3074, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 29.1552, 'node0Loss': 6.0412, 'spread': 0.28838}
+{"label": "x3-q1-hier32-mdir", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 6.051979184150696, "bestLoss": 6.051979184150696, "diverged": false, "upBytesPerStep": 7681024.0, "tokens": 9830400}

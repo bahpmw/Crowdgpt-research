@@ -1,0 +1,8 @@
+[x5-g2a1-neg] start eval 8.3682
+[x5-g2a1-neg] it 1 t    1.1s tok   0.004M eval 8.3654 up/step 0.000MB {'train': 8.368492126464844, 'lr': 3e-05}
+[x5-g2a1-neg] it 2 t    1.3s tok   0.008M eval 8.3597 up/step 0.000MB {'train': 8.371064186096191, 'lr': 6e-05}
+[x5-g2a1-neg] it 3 t    1.5s tok   0.012M eval 8.3508 up/step 0.000MB {'train': 8.34943675994873, 'lr': 8.999999999999999e-05}
+[x5-g2a1-neg] it 5 t    1.9s tok   0.020M eval 8.3189 up/step 0.000MB {'train': 8.335283279418945, 'lr': 0.00015000000000000001}
+[x5-g2a1-neg] it 13 t    3.4s tok   0.053M eval nan up/step 0.000MB {'train': 7.938970565795898, 'lr': 0.00039000000000000005}
+[x5-g2a1-neg] diverged
+{"label": "x5-g2a1-neg", "steps": 13, "startLoss": 8.368195533752441, "finalLoss": NaN, "bestLoss": 8.31894302368164, "diverged": true, "upBytesPerStep": 0.0, "tokens": 53248}

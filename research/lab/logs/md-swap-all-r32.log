@@ -1,0 +1,25 @@
+[md-swap-all-r32] start eval 8.3665
+Traceback (most recent call last):
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/harness.py", line 222, in <module>
+    main()
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/harness.py", line 212, in main
+    r = run(a.method, parse_cfg(a.cfg), preset=a.preset, seconds=a.seconds, seq=a.seq,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/harness.py", line 136, in run
+    c = method.step(it)
+        ^^^^^^^^^^^^^^^
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/mosaic_dust.py", line 113, in step
+    c = super().step(it)
+        ^^^^^^^^^^^^^^^^
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/mosaic_relora.py", line 134, in step
+    c = super().step(it)
+        ^^^^^^^^^^^^^^^^
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/mosaic.py", line 176, in step
+    t, loss = self._inner(w, steps[w])
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/mosaic_dust.py", line 90, in _inner
+    grads, stats = dust_gradients(self.dm, self.dcfg, idx, tgt, base_seed=w,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/archived/crowd-v1.5/crowd_v15/dust.py", line 184, in dust_gradients
+    raise ValueError('layers= needs mode="layer"')
+ValueError: layers= needs mode="layer"

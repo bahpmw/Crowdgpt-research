@@ -1,0 +1,13 @@
+[x3-q3-budget-eq] start eval 8.3665
+[x3-q3-budget-eq] it 1 t   19.8s tok   0.401M eval 8.0020 up/step 3.432MB {'simTime': 30.0, 'innerLoss': 7.1475, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 13.8968}
+[x3-q3-budget-eq] it 2 t   39.7s tok   0.803M eval 7.4954 up/step 3.432MB {'simTime': 60.0, 'innerLoss': 7.0771, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 18.4562}
+[x3-q3-budget-eq] it 3 t   59.4s tok   1.204M eval 7.7451 up/step 3.432MB {'simTime': 90.0, 'innerLoss': 6.9469, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 20.6869}
+[x3-q3-budget-eq] it 5 t   98.7s tok   2.007M eval 7.0454 up/step 3.432MB {'simTime': 150.0, 'innerLoss': 6.7392, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 22.8545}
+[x3-q3-budget-eq] it 8 t  160.4s tok   3.211M eval 6.4845 up/step 3.432MB {'simTime': 240.0, 'innerLoss': 6.4567, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 23.9559}
+[x3-q3-budget-eq] it 11 t  220.6s tok   4.415M eval 6.2361 up/step 3.432MB {'simTime': 330.0, 'innerLoss': 6.3449, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.5866}
+[x3-q3-budget-eq] it 13 t  260.1s tok   5.218M eval 6.1336 up/step 3.432MB {'simTime': 390.0, 'innerLoss': 6.246, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.8166}
+[x3-q3-budget-eq] it 15 t  297.0s tok   6.021M eval 6.0520 up/step 3.432MB {'simTime': 450.0, 'innerLoss': 6.184, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.8912}
+[x3-q3-budget-eq] it 19 t  374.5s tok   7.627M eval 5.9382 up/step 3.432MB {'simTime': 570.0, 'innerLoss': 6.0901, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.7021}
+[x3-q3-budget-eq] it 23 t  453.2s tok   9.232M eval 5.8438 up/step 3.432MB {'simTime': 690.0, 'innerLoss': 5.9881, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.6224}
+[x3-q3-budget-eq] it 25 t  498.5s tok  10.035M eval 5.8051 up/step 3.432MB {'simTime': 750.0, 'innerLoss': 5.9785, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.5909}
+{"label": "x3-q3-budget-eq", "steps": 25, "startLoss": 8.366497993469238, "finalLoss": 5.805086016654968, "bestLoss": 5.805086016654968, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 10035200}

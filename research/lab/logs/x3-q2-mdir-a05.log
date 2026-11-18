@@ -1,0 +1,15 @@
+[x3-q2-mdir-a05] start eval 8.3665
+[x3-q2-mdir-a05] it 1 t   26.8s tok   0.492M eval 8.0129 up/step 3.432MB {'simTime': 30.0, 'innerLoss': 7.0921, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 16.2531}
+[x3-q2-mdir-a05] it 2 t   50.9s tok   0.983M eval 7.6258 up/step 3.432MB {'simTime': 60.0, 'innerLoss': 6.9389, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 20.76}
+[x3-q2-mdir-a05] it 3 t   77.5s tok   1.475M eval 7.3063 up/step 3.432MB {'simTime': 90.0, 'innerLoss': 6.943, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 22.7939}
+[x3-q2-mdir-a05] it 4 t  104.3s tok   1.966M eval 7.1322 up/step 3.432MB {'simTime': 120.0, 'innerLoss': 6.8212, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 23.9937}
+[x3-q2-mdir-a05] it 5 t  130.9s tok   2.458M eval 6.9392 up/step 3.432MB {'simTime': 150.0, 'innerLoss': 6.6197, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 25.2178}
+[x3-q2-mdir-a05] it 7 t  183.5s tok   3.441M eval 6.5971 up/step 3.432MB {'simTime': 210.0, 'innerLoss': 6.4772, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 27.0651}
+[x3-q2-mdir-a05] it 9 t  244.6s tok   4.424M eval 6.3592 up/step 3.432MB {'simTime': 270.0, 'innerLoss': 6.3854, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.4403}
+[x3-q2-mdir-a05] it 11 t  311.5s tok   5.407M eval 6.2058 up/step 3.432MB {'simTime': 330.0, 'innerLoss': 6.2996, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 29.3805}
+[x3-q2-mdir-a05] it 13 t  375.7s tok   6.390M eval 6.1031 up/step 3.432MB {'simTime': 390.0, 'innerLoss': 6.2623, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 29.9877}
+[x3-q2-mdir-a05] it 15 t  439.7s tok   7.373M eval 6.0298 up/step 3.432MB {'simTime': 450.0, 'innerLoss': 6.1989, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 30.2613}
+[x3-q2-mdir-a05] it 17 t  505.7s tok   8.356M eval 5.9713 up/step 3.432MB {'simTime': 510.0, 'innerLoss': 6.1498, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 30.3175}
+[x3-q2-mdir-a05] it 19 t  573.5s tok   9.339M eval 5.9141 up/step 3.432MB {'simTime': 570.0, 'innerLoss': 6.1523, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 30.1676}
+[x3-q2-mdir-a05] it 20 t  604.9s tok   9.830M eval 5.8878 up/step 3.432MB {'simTime': 600.0, 'innerLoss': 6.1104, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 30.1844}
+{"label": "x3-q2-mdir-a05", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 5.887849926948547, "bestLoss": 5.887849926948547, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 9830400}

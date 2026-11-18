@@ -1,0 +1,59 @@
+=== s-10m-k1-10m 12:01:05
+[s-10m-k1-10m] it 2442 t  113.3s tok  10.002M eval 4.9650 up/step 0.000MB {'loss0': 4.9453}
+{"label": "s-10m-k1-10m", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.965031147003174, "bestLoss": 4.965031147003174, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== s-10m-k2-st0 12:03:08
+[s-10m-k2-st0] it 2442 t  150.5s tok  10.002M eval 4.9614 up/step 2.097MB {'loss0': 4.9737, 'loss1': 4.9393, 'tau0': 0.656}
+{"label": "s-10m-k2-st0", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.961378455162048, "bestLoss": 4.961378455162048, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 10002432}
+=== s-10m-k2-st1 12:05:47
+[s-10m-k2-st1] it 2442 t  145.9s tok  10.002M eval 4.9700 up/step 2.097MB {'loss0': 4.9919, 'loss1': 5.0163, 'tau0': 0.661}
+{"label": "s-10m-k2-st1", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.970040559768677, "bestLoss": 4.970040559768677, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 10002432}
+=== s-10m-k2-st2 12:08:18
+[s-10m-k2-st2] it 2442 t  150.3s tok  10.002M eval 4.9711 up/step 2.097MB {'loss0': 4.9813, 'loss1': 5.033, 'tau0': 0.663}
+{"label": "s-10m-k2-st2", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.9710986614227295, "bestLoss": 4.9710986614227295, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 10002432}
+=== s-10m-k2-st4 12:10:54
+[s-10m-k2-st4] it 2442 t  147.1s tok  10.002M eval 4.9542 up/step 2.097MB {'loss0': 4.9762, 'loss1': 4.9931, 'tau0': 0.656}
+{"label": "s-10m-k2-st4", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.954243183135986, "bestLoss": 4.954243183135986, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 10002432}
+=== s-10m-k2-st8 12:13:28
+skip s-10m-k1-10m
+skip s-10m-k2-st0
+skip s-10m-k2-st1
+skip s-10m-k2-st2
+skip s-10m-k2-st4
+=== s-10m-k2-st8 12:54:59
+[s-10m-k2-st8] it 2442 t  469.4s tok  10.002M eval 4.9788 up/step 2.097MB {'loss0': 5.0109, 'loss1': 5.0505, 'tau0': 0.641}
+{"label": "s-10m-k2-st8", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.978849411010742, "bestLoss": 4.974667906761169, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 10002432}
+=== s-10m-k3-st4 13:03:13
+[s-10m-k3-st4] it 2442 t  468.5s tok  10.002M eval 4.9766 up/step 4.194MB {'loss0': 4.9848, 'loss1': 5.0159, 'loss2': 5.0284, 'tau0': 0.647, 'tau1': 0.648}
+{"label": "s-10m-k3-st4", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.976615905761719, "bestLoss": 4.976615905761719, "diverged": false, "upBytesPerStep": 4194304.0, "tokens": 10002432}
+=== s-10m-k1-seed1 13:11:38
+[s-10m-k1-seed1] it 977 t  124.3s tok   4.002M eval 5.3008 up/step 0.000MB {'loss0': 5.3528}
+{"label": "s-10m-k1-seed1", "steps": 977, "startLoss": 8.369165420532227, "finalLoss": 5.3007892370224, "bestLoss": 5.3007892370224, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}
+=== s-10m-k2-seed1 13:13:59
+[s-10m-k2-seed1] it 977 t  161.5s tok   4.002M eval 5.2180 up/step 2.097MB {'loss0': 5.2782, 'loss1': 5.2695, 'tau0': 0.747}
+{"label": "s-10m-k2-seed1", "steps": 977, "startLoss": 8.369165420532227, "finalLoss": 5.217988848686218, "bestLoss": 5.217988848686218, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 4001792}
+=== s-10m-k3-seed1 13:16:50
+[s-10m-k3-seed1] it 977 t  211.0s tok   4.002M eval 5.2167 up/step 4.194MB {'loss0': 5.2628, 'loss1': 5.2465, 'loss2': 5.2625, 'tau0': 0.757, 'tau1': 0.751}
+{"label": "s-10m-k3-seed1", "steps": 977, "startLoss": 8.369165420532227, "finalLoss": 5.216723680496216, "bestLoss": 5.216723680496216, "diverged": false, "upBytesPerStep": 4194304.0, "tokens": 4001792}
+=== s-10m-k1-seed2 13:20:31
+[s-10m-k1-seed2] it 977 t  142.6s tok   4.002M eval 5.2343 up/step 0.000MB {'loss0': 5.1355}
+{"label": "s-10m-k1-seed2", "steps": 977, "startLoss": 8.375710487365723, "finalLoss": 5.2343361377716064, "bestLoss": 5.2343361377716064, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}
+=== s-10m-k2-seed2 13:23:05
+[s-10m-k2-seed2] it 977 t  225.2s tok   4.002M eval 5.2736 up/step 2.097MB {'loss0': 5.1654, 'loss1': 5.1703, 'tau0': 0.747}
+{"label": "s-10m-k2-seed2", "steps": 977, "startLoss": 8.375710487365723, "finalLoss": 5.273629188537598, "bestLoss": 5.273629188537598, "diverged": false, "upBytesPerStep": 2097152.0, "tokens": 4001792}
+=== s-10m-k3-seed2 13:27:06
+[s-10m-k3-seed2] it 977 t  260.9s tok   4.002M eval 5.2511 up/step 4.194MB {'loss0': 5.1538, 'loss1': 5.1409, 'loss2': 5.1511, 'tau0': 0.753, 'tau1': 0.75}
+{"label": "s-10m-k3-seed2", "steps": 977, "startLoss": 8.375710487365723, "finalLoss": 5.251131892204285, "bestLoss": 5.251131892204285, "diverged": false, "upBytesPerStep": 4194304.0, "tokens": 4001792}
+round1 done 13:31:44
+=== s-mo-k1w8 13:31:45
+[s-mo-k1w8] it 41 t  591.2s tok  10.076M eval 5.5671 up/step 1.954MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 30.6463, 'workerParamFrac': 1.0, 'upPerWorkerMB': 0.244, 'inner0': 5.7298}
+{"label": "s-mo-k1w8", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.567107915878296, "bestLoss": 5.567107915878296, "diverged": false, "upBytesPerStep": 1953792.0, "tokens": 10076160}
+=== s-mo-k2w8 13:41:49
+[s-mo-k2w8] it 41 t  364.2s tok  10.076M eval 5.4742 up/step 1.102MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 25.2961, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.5482, 'inner1': 5.5544}
+{"label": "s-mo-k2w8", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.474193334579468, "bestLoss": 5.474193334579468, "diverged": false, "upBytesPerStep": 1101832.0, "tokens": 10076160}
+=== s-mo-k3w6 13:47:59
+[s-mo-k3w6] it 55 t  458.1s tok  10.138M eval 5.3214 up/step 0.613MB {'simTime': 1650.0, 'kept': 6, 'msgNorm': 22.486, 'workerParamFrac': 0.4, 'upPerWorkerMB': 0.102, 'inner0': 5.3569, 'inner1': 5.2947, 'inner2': 5.4032}
+{"label": "s-mo-k3w6", "steps": 55, "startLoss": 8.366497993469238, "finalLoss": 5.321412444114685, "bestLoss": 5.321412444114685, "diverged": false, "upBytesPerStep": 613384.0, "tokens": 10137600}
+=== s-mo-k6w6 13:55:50
+[s-mo-k6w6] it 55 t  423.1s tok  10.138M eval 5.4396 up/step 0.400MB {'simTime': 1650.0, 'kept': 6, 'msgNorm': 19.6331, 'workerParamFrac': 0.231, 'upPerWorkerMB': 0.067, 'inner0': 5.4786, 'inner1': 5.5536, 'inner2': 5.4227, 'inner3': 5.3164, 'inner4': 5.2212, 'inner5': 5.5072}
+{"label": "s-mo-k6w6", "steps": 55, "startLoss": 8.366497993469238, "finalLoss": 5.439591407775879, "bestLoss": 5.439591407775879, "diverged": false, "upBytesPerStep": 400394.0, "tokens": 10137600}
+=== s-mo-k2w4 14:03:02

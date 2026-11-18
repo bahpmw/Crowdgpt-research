@@ -1,0 +1,13 @@
+[x3-q3-sync] start eval 8.3665
+[x3-q3-sync] it 1 t   31.3s tok   0.492M eval 7.9424 up/step 3.432MB {'simTime': 120.0, 'innerLoss': 7.0921, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 16.2531}
+[x3-q3-sync] it 2 t   63.3s tok   0.983M eval 7.4094 up/step 3.432MB {'simTime': 240.0, 'innerLoss': 6.9748, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 21.07}
+[x3-q3-sync] it 3 t   93.3s tok   1.475M eval 7.8402 up/step 3.432MB {'simTime': 360.0, 'innerLoss': 6.9389, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 23.058}
+[x3-q3-sync] it 5 t  153.7s tok   2.458M eval 6.8588 up/step 3.432MB {'simTime': 600.0, 'innerLoss': 6.6373, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 25.8287}
+[x3-q3-sync] it 7 t  214.5s tok   3.441M eval 6.5338 up/step 3.432MB {'simTime': 840.0, 'innerLoss': 6.4567, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 26.7224}
+[x3-q3-sync] it 10 t  301.4s tok   4.915M eval 6.2303 up/step 3.432MB {'simTime': 1200.0, 'innerLoss': 6.3101, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 27.9148}
+[x3-q3-sync] it 11 t  330.7s tok   5.407M eval 6.1622 up/step 3.432MB {'simTime': 1320.0, 'innerLoss': 6.271, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.1787}
+[x3-q3-sync] it 13 t  389.2s tok   6.390M eval 6.0566 up/step 3.432MB {'simTime': 1560.0, 'innerLoss': 6.2384, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.4139}
+[x3-q3-sync] it 16 t  472.7s tok   7.864M eval 5.9601 up/step 3.432MB {'simTime': 1920.0, 'innerLoss': 6.1364, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.3018}
+[x3-q3-sync] it 19 t  555.5s tok   9.339M eval 5.8931 up/step 3.432MB {'simTime': 2280.0, 'innerLoss': 6.1436, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.3902}
+[x3-q3-sync] it 20 t  584.3s tok   9.830M eval 5.8704 up/step 3.432MB {'simTime': 2400.0, 'innerLoss': 6.0905, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.4096}
+{"label": "x3-q3-sync", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 5.8703789710998535, "bestLoss": 5.8703789710998535, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 9830400}

@@ -1,0 +1,12 @@
+[x3-q1-goss64] start eval 8.3665
+[x3-q1-goss64] it 1 t   80.2s tok   0.983M eval 7.9705 up/step 52.232MB {'simTime': 30.0, 'innerLoss': 7.2322, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 7.1747, 'spread': 0.6444}
+[x3-q1-goss64] it 2 t  159.8s tok   1.966M eval 7.9711 up/step 52.232MB {'simTime': 60.0, 'innerLoss': 7.1087, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 7.059, 'spread': 0.75748}
+[x3-q1-goss64] it 3 t  236.4s tok   2.949M eval 7.7689 up/step 52.232MB {'simTime': 90.0, 'innerLoss': 6.9661, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.9633, 'spread': 0.82614}
+[x3-q1-goss64] it 4 t  313.7s tok   3.932M eval 7.5707 up/step 52.232MB {'simTime': 120.0, 'innerLoss': 6.8666, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.8555, 'spread': 0.8917}
+[x3-q1-goss64] it 5 t  397.3s tok   4.915M eval 7.3844 up/step 52.232MB {'simTime': 150.0, 'innerLoss': 6.7951, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.7546, 'spread': 0.9587}
+[x3-q1-goss64] it 6 t  474.1s tok   5.898M eval 7.1800 up/step 52.232MB {'simTime': 180.0, 'innerLoss': 6.6911, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.6608, 'spread': 1.02872}
+[x3-q1-goss64] it 7 t  582.3s tok   6.881M eval 7.0351 up/step 52.232MB {'simTime': 210.0, 'innerLoss': 6.6403, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.5699, 'spread': 1.09792}
+[x3-q1-goss64] it 8 t  694.4s tok   7.864M eval 6.9634 up/step 52.232MB {'simTime': 240.0, 'innerLoss': 6.5714, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.5263, 'spread': 1.16201}
+[x3-q1-goss64] it 9 t  814.5s tok   8.847M eval 6.9183 up/step 52.232MB {'simTime': 270.0, 'innerLoss': 6.5381, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.4988, 'spread': 1.21902}
+[x3-q1-goss64] it 10 t  938.7s tok   9.830M eval 6.9000 up/step 52.232MB {'simTime': 300.0, 'innerLoss': 6.5307, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.4525, 'spread': 1.2685}
+{"label": "x3-q1-goss64", "steps": 10, "startLoss": 8.366497993469238, "finalLoss": 6.900015473365784, "bestLoss": 6.900015473365784, "diverged": false, "upBytesPerStep": 52232192.0, "tokens": 9830400}

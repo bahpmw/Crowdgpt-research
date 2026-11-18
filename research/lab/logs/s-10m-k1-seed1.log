@@ -1,0 +1,28 @@
+[s-10m-k1-seed1] start eval 8.3692
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[s-10m-k1-seed1] it 1 t    0.3s tok   0.004M eval 8.1901 up/step 0.000MB {'loss0': 8.3749}
+[s-10m-k1-seed1] it 2 t    0.5s tok   0.008M eval 7.6560 up/step 0.000MB {'loss0': 8.2149}
+[s-10m-k1-seed1] it 3 t    0.6s tok   0.012M eval 7.3646 up/step 0.000MB {'loss0': 7.6773}
+[s-10m-k1-seed1] it 5 t    0.8s tok   0.020M eval 7.0980 up/step 0.000MB {'loss0': 7.1846}
+[s-10m-k1-seed1] it 13 t    1.8s tok   0.053M eval 7.0514 up/step 0.000MB {'loss0': 7.0952}
+[s-10m-k1-seed1] it 25 t    3.4s tok   0.102M eval 7.0231 up/step 0.000MB {'loss0': 7.0093}
+[s-10m-k1-seed1] it 49 t    6.3s tok   0.201M eval 6.8527 up/step 0.000MB {'loss0': 6.8534}
+[s-10m-k1-seed1] it 81 t   10.4s tok   0.332M eval 6.6206 up/step 0.000MB {'loss0': 6.6271}
+[s-10m-k1-seed1] it 123 t   15.8s tok   0.504M eval 6.3343 up/step 0.000MB {'loss0': 6.4012}
+[s-10m-k1-seed1] it 160 t   20.5s tok   0.655M eval 6.2036 up/step 0.000MB {'loss0': 6.2832}
+[s-10m-k1-seed1] it 240 t   30.6s tok   0.983M eval 5.9826 up/step 0.000MB {'loss0': 6.0451}
+[s-10m-k1-seed1] it 245 t   31.3s tok   1.004M eval 5.9726 up/step 0.000MB {'loss0': 6.0714}
+[s-10m-k1-seed1] it 321 t   40.8s tok   1.315M eval 5.8339 up/step 0.000MB {'loss0': 5.743}
+[s-10m-k1-seed1] it 401 t   50.8s tok   1.642M eval 5.7487 up/step 0.000MB {'loss0': 5.8871}
+[s-10m-k1-seed1] it 479 t   60.9s tok   1.962M eval 5.6722 up/step 0.000MB {'loss0': 5.6133}
+[s-10m-k1-seed1] it 489 t   62.2s tok   2.003M eval 5.6470 up/step 0.000MB {'loss0': 5.6997}
+[s-10m-k1-seed1] it 560 t   71.1s tok   2.294M eval 5.5851 up/step 0.000MB {'loss0': 5.6192}
+[s-10m-k1-seed1] it 639 t   81.1s tok   2.617M eval 5.5139 up/step 0.000MB {'loss0': 5.5239}
+[s-10m-k1-seed1] it 718 t   91.1s tok   2.941M eval 5.4636 up/step 0.000MB {'loss0': 5.5024}
+[s-10m-k1-seed1] it 796 t  101.3s tok   3.260M eval 5.4020 up/step 0.000MB {'loss0': 5.4517}
+[s-10m-k1-seed1] it 875 t  111.3s tok   3.584M eval 5.3549 up/step 0.000MB {'loss0': 5.4069}
+[s-10m-k1-seed1] it 954 t  121.4s tok   3.908M eval 5.3112 up/step 0.000MB {'loss0': 5.2985}
+[s-10m-k1-seed1] it 977 t  124.3s tok   4.002M eval 5.3008 up/step 0.000MB {'loss0': 5.3528}
+{"label": "s-10m-k1-seed1", "steps": 977, "startLoss": 8.369165420532227, "finalLoss": 5.3007892370224, "bestLoss": 5.3007892370224, "diverged": false, "upBytesPerStep": 0.0, "tokens": 4001792}

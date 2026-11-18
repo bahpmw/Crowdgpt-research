@@ -1,0 +1,7 @@
+=== x5-rope 13:23:21
+[x5-rope] it 2442 t  420.7s tok  10.002M eval 4.2461 up/step 0.000MB {'train': 4.2517595291137695, 'lr': 0.0002999999999999999}
+{"label": "x5-rope", "steps": 2442, "startLoss": 8.361310958862305, "finalLoss": 4.246064066886902, "bestLoss": 4.246064066886902, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2r1 13:30:36
+[x5-g2r1] it 2442 t  549.3s tok  10.002M eval 3.9176 up/step 0.000MB {'train': 3.9015471935272217, 'lr': 0.0002999999999999999}
+{"label": "x5-g2r1", "steps": 2442, "startLoss": 8.368205070495605, "finalLoss": 3.9176050424575806, "bestLoss": 3.9176050424575806, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+round1 done 13:40:05

@@ -1,0 +1,22 @@
+[x5-g2a1] start eval 8.3682
+[x5-g2a1] it 1 t    1.2s tok   0.004M eval 8.3639 up/step 0.000MB {'train': 8.372032165527344, 'lr': 3e-05}
+[x5-g2a1] it 2 t    1.3s tok   0.008M eval 8.3549 up/step 0.000MB {'train': 8.368156433105469, 'lr': 6e-05}
+[x5-g2a1] it 3 t    1.4s tok   0.012M eval 8.3411 up/step 0.000MB {'train': 8.356593132019043, 'lr': 8.999999999999999e-05}
+[x5-g2a1] it 5 t    1.6s tok   0.020M eval 8.2915 up/step 0.000MB {'train': 8.311431884765625, 'lr': 0.00015000000000000001}
+[x5-g2a1] it 13 t    2.4s tok   0.053M eval 7.8495 up/step 0.000MB {'train': 7.878959655761719, 'lr': 0.00039000000000000005}
+[x5-g2a1] it 25 t    3.6s tok   0.102M eval 7.1235 up/step 0.000MB {'train': 7.142049789428711, 'lr': 0.00075}
+[x5-g2a1] it 49 t    6.0s tok   0.201M eval 6.8124 up/step 0.000MB {'train': 6.849457740783691, 'lr': 0.00147}
+[x5-g2a1] it 123 t   13.5s tok   0.504M eval 6.0212 up/step 0.000MB {'train': 6.0920000076293945, 'lr': 0.003}
+[x5-g2a1] it 245 t   25.4s tok   1.004M eval 5.4248 up/step 0.000MB {'train': 5.525088787078857, 'lr': 0.003}
+[x5-g2a1] it 304 t   31.2s tok   1.245M eval 5.1998 up/step 0.000MB {'train': 5.239744186401367, 'lr': 0.003}
+[x5-g2a1] it 489 t   49.8s tok   2.003M eval 4.8266 up/step 0.000MB {'train': 4.784372806549072, 'lr': 0.003}
+[x5-g2a1] it 619 t   61.2s tok   2.535M eval 4.6810 up/step 0.000MB {'train': 4.809856414794922, 'lr': 0.003}
+[x5-g2a1] it 918 t   91.2s tok   3.760M eval 4.4791 up/step 0.000MB {'train': 4.539608001708984, 'lr': 0.003}
+[x5-g2a1] it 1221 t  121.3s tok   5.001M eval 4.3540 up/step 0.000MB {'train': 4.299102783203125, 'lr': 0.003}
+[x5-g2a1] it 1519 t  151.4s tok   6.222M eval 4.2532 up/step 0.000MB {'train': 4.160858154296875, 'lr': 0.003}
+[x5-g2a1] it 1822 t  181.5s tok   7.463M eval 4.1851 up/step 0.000MB {'train': 4.412128448486328, 'lr': 0.003}
+[x5-g2a1] it 2061 t  211.6s tok   8.442M eval 4.0989 up/step 0.000MB {'train': 4.096755027770996, 'lr': 0.002403680981595092}
+[x5-g2a1] it 2250 t  241.7s tok   9.216M eval 4.0028 up/step 0.000MB {'train': 4.098927021026611, 'lr': 0.001360122699386503}
+[x5-g2a1] it 2438 t  271.8s tok   9.986M eval 3.9207 up/step 0.000MB {'train': 3.890836715698242, 'lr': 0.0003220858895705523}
+[x5-g2a1] it 2442 t  272.5s tok  10.002M eval 3.9202 up/step 0.000MB {'train': 3.928858518600464, 'lr': 0.0002999999999999999}
+{"label": "x5-g2a1", "steps": 2442, "startLoss": 8.368226528167725, "finalLoss": 3.920166790485382, "bestLoss": 3.920166790485382, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}

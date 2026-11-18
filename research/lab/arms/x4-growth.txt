@@ -1,0 +1,16 @@
+# X4: MoE growth by expert copying, 10m dims, experts hidden 512 top-2 (active = dense 10m), 10M tokens
+moe_grow E=0 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-dense
+moe_grow E=8 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-moe8
+moe_grow E=4 grow=0.25:2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-g4to8-25
+moe_grow E=1 grow=0.25:4,0.5:2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-up1to4to8
+moe_grow E=2 grow=0.25:4 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-g2to8-x4
+moe_grow E=2 grow=0.25:2,0.5:2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-g2to4to8
+moe_grow E=4 grow=0.5:2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-g4to8-50
+moe_grow E=4 grow=0.25:2 offset=2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-g4to8-25-off
+moe_grow E=8 doc=4 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-doc8-g4
+moe_grow E=4 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-moe4
+moe_grow E=8 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --seed 1 --label x4-moe8-s1
+moe_grow E=4 grow=0.25:2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --seed 1 --label x4-g4to8-25-s1
+moe_grow E=1 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-dense512
+moe_grow E=8 doc=2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-doc8-g2
+moe_grow E=2 grow=0.25:2,0.35:2 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x4-g2to4to8-tight

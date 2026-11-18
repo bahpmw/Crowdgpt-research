@@ -1,0 +1,14 @@
+[x3-q2-mdir-lazy] start eval 8.3665
+[x3-q2-mdir-lazy] it 1 t   23.4s tok   0.492M eval 7.9688 up/step 3.432MB {'simTime': 30.0, 'innerLoss': 7.0921, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 12.2401}
+[x3-q2-mdir-lazy] it 2 t   45.9s tok   0.983M eval 7.4319 up/step 3.432MB {'simTime': 60.0, 'innerLoss': 6.9625, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 15.2476}
+[x3-q2-mdir-lazy] it 3 t   72.5s tok   1.475M eval 7.2349 up/step 3.432MB {'simTime': 90.0, 'innerLoss': 6.936, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 16.3574}
+[x3-q2-mdir-lazy] it 4 t   98.6s tok   1.966M eval 7.0507 up/step 3.432MB {'simTime': 120.0, 'innerLoss': 6.7935, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 17.2539}
+[x3-q2-mdir-lazy] it 5 t  125.9s tok   2.458M eval 6.8554 up/step 3.432MB {'simTime': 150.0, 'innerLoss': 6.6301, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 17.7838}
+[x3-q2-mdir-lazy] it 7 t  175.0s tok   3.441M eval 6.4934 up/step 3.432MB {'simTime': 210.0, 'innerLoss': 6.4674, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 18.8925}
+[x3-q2-mdir-lazy] it 10 t  253.6s tok   4.915M eval 6.1907 up/step 3.432MB {'simTime': 300.0, 'innerLoss': 6.3063, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 20.2553}
+[x3-q2-mdir-lazy] it 11 t  281.2s tok   5.407M eval 6.1266 up/step 3.432MB {'simTime': 330.0, 'innerLoss': 6.2595, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 20.8233}
+[x3-q2-mdir-lazy] it 13 t  335.1s tok   6.390M eval 6.0412 up/step 3.432MB {'simTime': 390.0, 'innerLoss': 6.215, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 21.516}
+[x3-q2-mdir-lazy] it 16 t  414.4s tok   7.864M eval 5.9302 up/step 3.432MB {'simTime': 480.0, 'innerLoss': 6.1042, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 22.1466}
+[x3-q2-mdir-lazy] it 19 t  493.9s tok   9.339M eval 5.8480 up/step 3.432MB {'simTime': 570.0, 'innerLoss': 6.0859, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 22.2924}
+[x3-q2-mdir-lazy] it 20 t  520.9s tok   9.830M eval 5.8254 up/step 3.432MB {'simTime': 600.0, 'innerLoss': 6.0475, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 22.3942}
+{"label": "x3-q2-mdir-lazy", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 5.825425148010254, "bestLoss": 5.825425148010254, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 9830400}

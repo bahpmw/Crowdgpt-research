@@ -27,7 +27,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-ROOT = Path(__file__).resolve().parents[2]
+# The v1.5 code and token files moved to archived/crowd-v1.5 on 2026-11-18.
+ROOT = Path(__file__).resolve().parents[2] / "archived" / "crowd-v1.5"
 sys.path.insert(0, str(ROOT))
 
 from crowd_v15.model import GPT, ModelConfig  # noqa: E402

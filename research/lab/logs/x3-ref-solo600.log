@@ -1,0 +1,12 @@
+[x3-ref-solo600] start eval 8.3665
+[x3-ref-solo600] it 1 t    0.2s tok   0.001M eval 8.2192 up/step 29.373MB {}
+[x3-ref-solo600] it 2 t    0.2s tok   0.001M eval 7.7887 up/step 29.373MB {}
+[x3-ref-solo600] it 4 t    0.2s tok   0.002M eval 7.3639 up/step 29.373MB {}
+[x3-ref-solo600] it 10 t    0.4s tok   0.005M eval 7.2719 up/step 29.373MB {}
+[x3-ref-solo600] it 20 t    0.7s tok   0.010M eval 7.2200 up/step 29.373MB {}
+[x3-ref-solo600] it 40 t    1.4s tok   0.020M eval 7.1430 up/step 29.373MB {}
+[x3-ref-solo600] it 98 t    3.2s tok   0.050M eval 6.9740 up/step 29.373MB {}
+[x3-ref-solo600] it 196 t    6.4s tok   0.100M eval 6.7056 up/step 29.373MB {}
+[x3-ref-solo600] it 391 t   12.6s tok   0.200M eval 6.3793 up/step 29.373MB {}
+[x3-ref-solo600] it 600 t   19.2s tok   0.307M eval 6.2509 up/step 29.373MB {}
+{"label": "x3-ref-solo600", "steps": 600, "startLoss": 8.366497993469238, "finalLoss": 6.250922083854675, "bestLoss": 6.250922083854675, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 307200}

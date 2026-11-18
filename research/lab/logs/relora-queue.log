@@ -1,0 +1,33 @@
+=== rl-full 12:23:03
+[rl-full] it 9766 t  247.5s tok  10.000M eval 4.9327 up/step 29.373MB {'lr': 0.0003, 'trainFrac': 1.0, 'lora': 0}
+{"label": "rl-full", "steps": 9766, "startLoss": 8.366497993469238, "finalLoss": 4.932671666145325, "bestLoss": 4.932671666145325, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 10000384}
+=== rl-r32 12:27:23
+[rl-r32] it 9766 t  370.4s tok  10.000M eval 5.1126 up/step 8.336MB {'lr': 0.0003, 'trainFrac': 0.2838, 'lora': 1}
+{"label": "rl-r32", "steps": 9766, "startLoss": 8.366497993469238, "finalLoss": 5.112643361091614, "bestLoss": 5.112643361091614, "diverged": false, "upBytesPerStep": 10440951.244726602, "tokens": 10000384}
+=== rl-r128 12:33:44
+round1.sh: line 16: 38769 Terminated: 15          $PY harness.py --seconds 120 $arm > "logs/$label.log" 2>&1
+FAILED rl-r128
+[rl-r128] it 5217 t  270.9s tok   5.342M eval 5.7648 up/step 20.723MB {'lr': 0.001506, 'trainFrac': 0.7055, 'lora': 1}
+[rl-r128] it 5406 t  281.0s tok   5.536M eval 5.7496 up/step 20.723MB {'lr': 0.001424, 'trainFrac': 0.7055, 'lora': 1}
+=== rl-mo-k2w8-r32-prod 12:38:42
+[rl-mo-k2w8-r32-prod] it 41 t  293.4s tok  10.076M eval 5.6360 up/step 1.102MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 14.3642, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.6831, 'inner1': 5.7134, 'lora': 1, 'upMode': 'product'}
+{"label": "rl-mo-k2w8-r32-prod", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.635992407798767, "bestLoss": 5.635992407798767, "diverged": false, "upBytesPerStep": 1101832.0, "tokens": 10076160}
+=== rl-mo-k2w8-r32-fac 12:43:52
+[rl-mo-k2w8-r32-fac] it 41 t  409.0s tok  10.076M eval 5.1518 up/step 9.904MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 14.9494, 'workerParamFrac': 0.556, 'upPerWorkerMB': 1.238, 'inner0': 5.2484, 'inner1': 5.2575, 'lora': 1, 'upMode': 'factors'}
+{"label": "rl-mo-k2w8-r32-fac", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.1517966985702515, "bestLoss": 5.1517966985702515, "diverged": false, "upBytesPerStep": 9045374.634146342, "tokens": 10076160}
+=== rl-mo-k2w8-r128-prod 12:50:50
+[rl-mo-k2w8-r128-prod] it 41 t  455.0s tok  10.076M eval 5.6087 up/step 1.102MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 13.507, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.6495, 'inner1': 5.678, 'lora': 1, 'upMode': 'product'}
+{"label": "rl-mo-k2w8-r128-prod", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.608737230300903, "bestLoss": 5.608737230300903, "diverged": false, "upBytesPerStep": 1101832.0, "tokens": 10076160}
+=== rl-mo-k2w8-r128-fac 12:58:47
+[rl-mo-k2w8-r128-fac] it 41 t  509.2s tok  10.076M eval 5.1175 up/step 38.806MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 12.8515, 'workerParamFrac': 0.556, 'upPerWorkerMB': 4.851, 'inner0': 5.2243, 'inner1': 5.2162, 'lora': 1, 'upMode': 'factors'}
+{"label": "rl-mo-k2w8-r128-fac", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.1175230741500854, "bestLoss": 5.1175230741500854, "diverged": false, "upBytesPerStep": 35127104.19512195, "tokens": 10076160}
+=== rl-mo-k2w8-r32-favg 13:07:31
+[rl-mo-k2w8-r32-favg] it 41 t  435.4s tok  10.076M eval 5.2286 up/step 9.904MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 12.0946, 'workerParamFrac': 0.556, 'upPerWorkerMB': 1.238, 'inner0': 5.323, 'inner1': 5.3233, 'lora': 1, 'upMode': 'factoravg'}
+{"label": "rl-mo-k2w8-r32-favg", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.228585124015808, "bestLoss": 5.228585124015808, "diverged": false, "upBytesPerStep": 9045374.634146342, "tokens": 10076160}
+=== rl-100m-full 13:15:02
+[rl-100m-full] it 3907 t 1156.2s tok   4.001M eval 5.0672 up/step 465.645MB {'lr': 0.0001, 'trainFrac': 1.0, 'lora': 0}
+{"label": "rl-100m-full", "steps": 3907, "startLoss": 8.47532033920288, "finalLoss": 5.0671820640563965, "bestLoss": 5.064626455307007, "diverged": false, "upBytesPerStep": 465644544.0, "tokens": 4000768}
+=== rl-100m-r128 13:34:51
+[rl-100m-r128] it 3907 t 1327.8s tok   4.001M eval 5.2331 up/step 111.750MB {'lr': 3.2e-05, 'trainFrac': 0.24, 'lora': 1}
+{"label": "rl-100m-r128", "steps": 3907, "startLoss": 8.47532033920288, "finalLoss": 5.233107328414917, "bestLoss": 5.233107328414917, "diverged": false, "upBytesPerStep": 147166757.87253648, "tokens": 4000768}
+round1 done 13:57:35

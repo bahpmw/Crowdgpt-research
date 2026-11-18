@@ -1,0 +1,41 @@
+[s-10m-k3-seed2] start eval 8.3757
+/Users/patwoodward/Documents/docker/opencode/projects/Crowd-v1.5/research/lab/methods/solo.py:146: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /Users/runner/work/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:821.)
+  extra = {f"loss{k}": round(float(v), 4) for k, v in enumerate(losses)}
+[s-10m-k3-seed2] it 1 t    0.5s tok   0.004M eval 8.3951 up/step 4.194MB {'loss0': 8.3813, 'loss1': 8.3825, 'loss2': 8.382, 'tau0': 1.0, 'tau1': 1.0}
+[s-10m-k3-seed2] it 2 t    0.8s tok   0.008M eval 7.8824 up/step 4.194MB {'loss0': 8.2326, 'loss1': 8.3131, 'loss2': 8.4064, 'tau0': 0.997, 'tau1': 0.997}
+[s-10m-k3-seed2] it 3 t    1.1s tok   0.012M eval 7.5235 up/step 4.194MB {'loss0': 8.0919, 'loss1': 8.096, 'loss2': 7.8719, 'tau0': 0.996, 'tau1': 0.995}
+[s-10m-k3-seed2] it 5 t    1.7s tok   0.020M eval 7.1462 up/step 4.194MB {'loss0': 8.0834, 'loss1': 8.0885, 'loss2': 7.3114, 'tau0': 0.999, 'tau1': 0.996}
+[s-10m-k3-seed2] it 13 t    3.9s tok   0.053M eval 7.0644 up/step 4.194MB {'loss0': 8.0458, 'loss1': 8.0472, 'loss2': 7.0788, 'tau0': 1.02, 'tau1': 1.016}
+[s-10m-k3-seed2] it 25 t    7.2s tok   0.102M eval 7.0057 up/step 4.194MB {'loss0': 7.112, 'loss1': 7.1142, 'loss2': 7.0644, 'tau0': 1.043, 'tau1': 1.039}
+[s-10m-k3-seed2] it 38 t   10.7s tok   0.156M eval 6.8141 up/step 4.194MB {'loss0': 6.9248, 'loss1': 6.9297, 'loss2': 6.8901, 'tau0': 1.037, 'tau1': 1.032}
+[s-10m-k3-seed2] it 49 t   13.6s tok   0.201M eval 6.7064 up/step 4.194MB {'loss0': 6.7947, 'loss1': 6.796, 'loss2': 6.7898, 'tau0': 1.025, 'tau1': 1.021}
+[s-10m-k3-seed2] it 75 t   20.9s tok   0.307M eval 6.4449 up/step 4.194MB {'loss0': 6.4764, 'loss1': 6.4781, 'loss2': 6.4151, 'tau0': 0.993, 'tau1': 0.991}
+[s-10m-k3-seed2] it 111 t   31.0s tok   0.455M eval 6.2297 up/step 4.194MB {'loss0': 6.295, 'loss1': 6.2961, 'loss2': 6.2951, 'tau0': 0.953, 'tau1': 0.954}
+[s-10m-k3-seed2] it 123 t   34.3s tok   0.504M eval 6.1760 up/step 4.194MB {'loss0': 6.1852, 'loss1': 6.1864, 'loss2': 6.1862, 'tau0': 0.943, 'tau1': 0.945}
+[s-10m-k3-seed2] it 148 t   41.2s tok   0.606M eval 6.0827 up/step 4.194MB {'loss0': 6.1251, 'loss1': 6.1254, 'loss2': 6.1313, 'tau0': 0.922, 'tau1': 0.923}
+[s-10m-k3-seed2] it 185 t   51.3s tok   0.758M eval 5.9892 up/step 4.194MB {'loss0': 5.983, 'loss1': 5.9835, 'loss2': 5.9773, 'tau0': 0.903, 'tau1': 0.904}
+[s-10m-k3-seed2] it 222 t   61.5s tok   0.909M eval 5.9177 up/step 4.194MB {'loss0': 6.0074, 'loss1': 6.0085, 'loss2': 5.9997, 'tau0': 0.888, 'tau1': 0.889}
+[s-10m-k3-seed2] it 245 t   67.9s tok   1.004M eval 5.8719 up/step 4.194MB {'loss0': 5.894, 'loss1': 5.8937, 'loss2': 5.9003, 'tau0': 0.872, 'tau1': 0.873}
+[s-10m-k3-seed2] it 259 t   71.8s tok   1.061M eval 5.8560 up/step 4.194MB {'loss0': 5.8173, 'loss1': 5.8177, 'loss2': 5.8163, 'tau0': 0.871, 'tau1': 0.872}
+[s-10m-k3-seed2] it 295 t   82.0s tok   1.208M eval 5.7874 up/step 4.194MB {'loss0': 5.7693, 'loss1': 5.7674, 'loss2': 5.7731, 'tau0': 0.857, 'tau1': 0.858}
+[s-10m-k3-seed2] it 331 t   92.3s tok   1.356M eval 5.7488 up/step 4.194MB {'loss0': 5.766, 'loss1': 5.7652, 'loss2': 5.7624, 'tau0': 0.843, 'tau1': 0.845}
+[s-10m-k3-seed2] it 368 t  102.5s tok   1.507M eval 5.7130 up/step 4.194MB {'loss0': 5.696, 'loss1': 5.6962, 'loss2': 5.7055, 'tau0': 0.834, 'tau1': 0.835}
+[s-10m-k3-seed2] it 405 t  112.6s tok   1.659M eval 5.6574 up/step 4.194MB {'loss0': 5.6818, 'loss1': 5.6811, 'loss2': 5.6886, 'tau0': 0.829, 'tau1': 0.831}
+[s-10m-k3-seed2] it 441 t  122.8s tok   1.806M eval 5.6100 up/step 4.194MB {'loss0': 5.6642, 'loss1': 5.6616, 'loss2': 5.6535, 'tau0': 0.825, 'tau1': 0.825}
+[s-10m-k3-seed2] it 478 t  132.9s tok   1.958M eval 5.5822 up/step 4.194MB {'loss0': 5.5744, 'loss1': 5.5679, 'loss2': 5.5722, 'tau0': 0.813, 'tau1': 0.813}
+[s-10m-k3-seed2] it 489 t  136.1s tok   2.003M eval 5.5649 up/step 4.194MB {'loss0': 5.6078, 'loss1': 5.6056, 'loss2': 5.6025, 'tau0': 0.809, 'tau1': 0.809}
+[s-10m-k3-seed2] it 514 t  142.9s tok   2.105M eval 5.5428 up/step 4.194MB {'loss0': 5.4501, 'loss1': 5.4452, 'loss2': 5.442, 'tau0': 0.808, 'tau1': 0.809}
+[s-10m-k3-seed2] it 555 t  153.0s tok   2.273M eval 5.5109 up/step 4.194MB {'loss0': 5.4962, 'loss1': 5.4937, 'loss2': 5.5007, 'tau0': 0.805, 'tau1': 0.803}
+[s-10m-k3-seed2] it 592 t  163.1s tok   2.425M eval 5.4847 up/step 4.194MB {'loss0': 5.4529, 'loss1': 5.4437, 'loss2': 5.4501, 'tau0': 0.797, 'tau1': 0.796}
+[s-10m-k3-seed2] it 630 t  173.2s tok   2.580M eval 5.4489 up/step 4.194MB {'loss0': 5.511, 'loss1': 5.5073, 'loss2': 5.5139, 'tau0': 0.795, 'tau1': 0.793}
+[s-10m-k3-seed2] it 670 t  183.4s tok   2.744M eval 5.4211 up/step 4.194MB {'loss0': 5.3789, 'loss1': 5.3752, 'loss2': 5.3794, 'tau0': 0.786, 'tau1': 0.785}
+[s-10m-k3-seed2] it 707 t  193.5s tok   2.896M eval 5.4008 up/step 4.194MB {'loss0': 5.4996, 'loss1': 5.4932, 'loss2': 5.4885, 'tau0': 0.781, 'tau1': 0.78}
+[s-10m-k3-seed2] it 754 t  203.6s tok   3.088M eval 5.3609 up/step 4.194MB {'loss0': 5.325, 'loss1': 5.3175, 'loss2': 5.3277, 'tau0': 0.781, 'tau1': 0.778}
+[s-10m-k3-seed2] it 796 t  213.8s tok   3.260M eval 5.3375 up/step 4.194MB {'loss0': 5.3602, 'loss1': 5.3442, 'loss2': 5.3689, 'tau0': 0.768, 'tau1': 0.765}
+[s-10m-k3-seed2] it 835 t  223.8s tok   3.420M eval 5.2993 up/step 4.194MB {'loss0': 5.3248, 'loss1': 5.3168, 'loss2': 5.3154, 'tau0': 0.765, 'tau1': 0.761}
+[s-10m-k3-seed2] it 874 t  234.0s tok   3.580M eval 5.3003 up/step 4.194MB {'loss0': 5.3965, 'loss1': 5.3848, 'loss2': 5.3804, 'tau0': 0.764, 'tau1': 0.76}
+[s-10m-k3-seed2] it 913 t  244.1s tok   3.740M eval 5.2925 up/step 4.194MB {'loss0': 5.3545, 'loss1': 5.3432, 'loss2': 5.3489, 'tau0': 0.753, 'tau1': 0.75}
+[s-10m-k3-seed2] it 951 t  254.2s tok   3.895M eval 5.2805 up/step 4.194MB {'loss0': 5.2827, 'loss1': 5.2681, 'loss2': 5.2766, 'tau0': 0.755, 'tau1': 0.751}
+[s-10m-k3-seed2] it 977 t  260.9s tok   4.002M eval 5.2511 up/step 4.194MB {'loss0': 5.1538, 'loss1': 5.1409, 'loss2': 5.1511, 'tau0': 0.753, 'tau1': 0.75}
+{"label": "s-10m-k3-seed2", "steps": 977, "startLoss": 8.375710487365723, "finalLoss": 5.251131892204285, "bestLoss": 5.251131892204285, "diverged": false, "upBytesPerStep": 4194304.0, "tokens": 4001792}

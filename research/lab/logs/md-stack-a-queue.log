@@ -1,0 +1,5 @@
+=== md-swap-all-r32 13:49:34
+FAILED md-swap-all-r32
+    raise ValueError('layers= needs mode="layer"')
+ValueError: layers= needs mode="layer"
+=== md-swap-r32 13:49:41

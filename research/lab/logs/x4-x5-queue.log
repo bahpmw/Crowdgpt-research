@@ -1,0 +1,44 @@
+=== x5-attn 12:25:21
+[x5-attn] it 2442 t  176.0s tok  10.002M eval 4.6744 up/step 0.000MB {'train': 4.649046897888184, 'lr': 0.0002999999999999999}
+{"label": "x5-attn", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.674422979354858, "bestLoss": 4.674422979354858, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2a1 12:28:25
+[x5-g2a1] it 2442 t  272.5s tok  10.002M eval 3.9202 up/step 0.000MB {'train': 3.928858518600464, 'lr': 0.0002999999999999999}
+{"label": "x5-g2a1", "steps": 2442, "startLoss": 8.368226528167725, "finalLoss": 3.920166790485382, "bestLoss": 3.920166790485382, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g5a1 12:33:07
+[x5-g5a1] it 2442 t  387.4s tok  10.002M eval 3.8879 up/step 0.000MB {'train': 3.883984327316284, 'lr': 0.0002999999999999999}
+{"label": "x5-g5a1", "steps": 2442, "startLoss": 8.366633176803589, "finalLoss": 3.887916326522827, "bestLoss": 3.887916326522827, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-gdn 12:39:47
+[x5-gdn] it 2442 t  376.1s tok  10.002M eval 3.8879 up/step 0.000MB {'train': 3.875910520553589, 'lr': 0.0002999999999999999}
+{"label": "x5-gdn", "steps": 2442, "startLoss": 8.366440773010254, "finalLoss": 3.8879191279411316, "bestLoss": 3.8879191279411316, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2a1-neg 12:46:13
+[x5-g2a1-neg] diverged
+{"label": "x5-g2a1-neg", "steps": 13, "startLoss": 8.368195533752441, "finalLoss": NaN, "bestLoss": 8.31894302368164, "diverged": true, "upBytesPerStep": 0.0, "tokens": 53248}
+=== x5-attn-s1 12:46:27
+[x5-attn-s1] it 2442 t  397.1s tok  10.002M eval 4.6551 up/step 0.000MB {'train': 4.626015663146973, 'lr': 0.0002999999999999999}
+{"label": "x5-attn-s1", "steps": 2442, "startLoss": 8.369165420532227, "finalLoss": 4.655122399330139, "bestLoss": 4.655122399330139, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2a1-s1 12:53:18
+[x5-g2a1-s1] it 2442 t  494.1s tok  10.002M eval 3.9099 up/step 0.000MB {'train': 3.914127826690674, 'lr': 0.0002999999999999999}
+{"label": "x5-g2a1-s1", "steps": 2442, "startLoss": 8.368769407272339, "finalLoss": 3.909875810146332, "bestLoss": 3.909875810146332, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+round1 done 13:01:46
+skip x5-attn
+=== x5-g2a1 13:01:58
+[x5-g2a1] it 2442 t  471.7s tok  10.002M eval 3.9033 up/step 0.000MB {'train': 3.9182214736938477, 'lr': 0.0002999999999999999}
+{"label": "x5-g2a1", "steps": 2442, "startLoss": 8.368226528167725, "finalLoss": 3.9033236503601074, "bestLoss": 3.9033236503601074, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g5a1 13:10:05
+[x5-g5a1] it 2442 t  511.2s tok  10.002M eval 3.8734 up/step 0.000MB {'train': 3.8898255825042725, 'lr': 0.0002999999999999999}
+{"label": "x5-g5a1", "steps": 2442, "startLoss": 8.366633415222168, "finalLoss": 3.873433828353882, "bestLoss": 3.873433828353882, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-gdn 13:18:50
+[x5-gdn] it 2442 t  642.2s tok  10.002M eval 3.8987 up/step 0.000MB {'train': 3.8969035148620605, 'lr': 0.0002999999999999999}
+{"label": "x5-gdn", "steps": 2442, "startLoss": 8.366440773010254, "finalLoss": 3.8987396359443665, "bestLoss": 3.8987396359443665, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2a1-neg 13:29:48
+[x5-g2a1-neg] it 2442 t  539.3s tok  10.002M eval 3.9520 up/step 0.000MB {'train': 3.9466304779052734, 'lr': 0.0002999999999999999}
+{"label": "x5-g2a1-neg", "steps": 2442, "startLoss": 8.368195533752441, "finalLoss": 3.952006220817566, "bestLoss": 3.952006220817566, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+skip x5-attn-s1
+skip x5-g2a1-s1
+=== x5-cattn 13:39:03
+[x5-cattn] it 2442 t  317.0s tok  10.002M eval 4.0791 up/step 0.000MB {'train': 4.0542755126953125, 'lr': 0.0002999999999999999}
+{"label": "x5-cattn", "steps": 2442, "startLoss": 8.373674869537354, "finalLoss": 4.079062581062317, "bestLoss": 4.079062581062317, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2a1-noconv 13:44:31
+[x5-g2a1-noconv] it 2442 t  453.2s tok  10.002M eval 4.0103 up/step 0.000MB {'train': 4.014960289001465, 'lr': 0.0002999999999999999}
+{"label": "x5-g2a1-noconv", "steps": 2442, "startLoss": 8.361921072006226, "finalLoss": 4.010317802429199, "bestLoss": 4.010317802429199, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}
+=== x5-g2c1 13:52:17

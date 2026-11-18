@@ -1,0 +1,24 @@
+[s-mo-k2w8] start eval 8.3665
+[s-mo-k2w8] it 1 t    9.1s tok   0.246M eval 7.9010 up/step 1.102MB {'simTime': 30.0, 'kept': 8, 'msgNorm': 12.1549, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 7.9792, 'inner1': 7.1661}
+[s-mo-k2w8] it 3 t   27.0s tok   0.737M eval 7.8143 up/step 1.102MB {'simTime': 90.0, 'kept': 8, 'msgNorm': 18.4616, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 7.2543, 'inner1': 6.9677}
+[s-mo-k2w8] it 5 t   45.6s tok   1.229M eval 6.9611 up/step 1.102MB {'simTime': 150.0, 'kept': 8, 'msgNorm': 20.2605, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.9715, 'inner1': 6.8623}
+[s-mo-k2w8] it 7 t   63.7s tok   1.720M eval 6.6249 up/step 1.102MB {'simTime': 210.0, 'kept': 8, 'msgNorm': 21.5779, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.7033, 'inner1': 6.6703}
+[s-mo-k2w8] it 9 t   81.6s tok   2.212M eval 6.4019 up/step 1.102MB {'simTime': 270.0, 'kept': 8, 'msgNorm': 22.7396, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.451, 'inner1': 6.4616}
+[s-mo-k2w8] it 11 t   99.5s tok   2.703M eval 6.2222 up/step 1.102MB {'simTime': 330.0, 'kept': 8, 'msgNorm': 23.4587, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.3682, 'inner1': 6.3024}
+[s-mo-k2w8] it 13 t  117.1s tok   3.195M eval 6.1083 up/step 1.102MB {'simTime': 390.0, 'kept': 8, 'msgNorm': 23.9591, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.2474, 'inner1': 6.298}
+[s-mo-k2w8] it 15 t  135.0s tok   3.686M eval 6.0178 up/step 1.102MB {'simTime': 450.0, 'kept': 8, 'msgNorm': 24.2564, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.0943, 'inner1': 6.0707}
+[s-mo-k2w8] it 17 t  153.0s tok   4.178M eval 5.9528 up/step 1.102MB {'simTime': 510.0, 'kept': 8, 'msgNorm': 24.5193, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.0756, 'inner1': 6.1276}
+[s-mo-k2w8] it 19 t  168.3s tok   4.669M eval 5.8890 up/step 1.102MB {'simTime': 570.0, 'kept': 8, 'msgNorm': 24.7089, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 6.0506, 'inner1': 6.0368}
+[s-mo-k2w8] it 21 t  186.0s tok   5.161M eval 5.8345 up/step 1.102MB {'simTime': 630.0, 'kept': 8, 'msgNorm': 24.8819, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.9638, 'inner1': 5.9687}
+[s-mo-k2w8] it 23 t  203.2s tok   5.652M eval 5.7870 up/step 1.102MB {'simTime': 690.0, 'kept': 8, 'msgNorm': 24.8632, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.8851, 'inner1': 5.9875}
+[s-mo-k2w8] it 25 t  220.6s tok   6.144M eval 5.7451 up/step 1.102MB {'simTime': 750.0, 'kept': 8, 'msgNorm': 24.9801, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.8383, 'inner1': 5.8968}
+[s-mo-k2w8] it 27 t  237.8s tok   6.636M eval 5.7131 up/step 1.102MB {'simTime': 810.0, 'kept': 8, 'msgNorm': 25.3012, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.9385, 'inner1': 5.7772}
+[s-mo-k2w8] it 29 t  255.3s tok   7.127M eval 5.6747 up/step 1.102MB {'simTime': 870.0, 'kept': 8, 'msgNorm': 25.2666, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.7262, 'inner1': 5.8025}
+[s-mo-k2w8] it 31 t  272.2s tok   7.619M eval 5.6357 up/step 1.102MB {'simTime': 930.0, 'kept': 8, 'msgNorm': 25.4249, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.7854, 'inner1': 5.6924}
+[s-mo-k2w8] it 33 t  289.5s tok   8.110M eval 5.6048 up/step 1.102MB {'simTime': 990.0, 'kept': 8, 'msgNorm': 25.4453, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.7242, 'inner1': 5.7371}
+[s-mo-k2w8] it 35 t  306.9s tok   8.602M eval 5.5699 up/step 1.102MB {'simTime': 1050.0, 'kept': 8, 'msgNorm': 25.3963, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.7595, 'inner1': 5.7566}
+[s-mo-k2w8] it 37 t  324.5s tok   9.093M eval 5.5363 up/step 1.102MB {'simTime': 1110.0, 'kept': 8, 'msgNorm': 25.4655, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.6977, 'inner1': 5.636}
+[s-mo-k2w8] it 39 t  342.0s tok   9.585M eval 5.5048 up/step 1.102MB {'simTime': 1170.0, 'kept': 8, 'msgNorm': 25.356, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.5466, 'inner1': 5.7493}
+[s-mo-k2w8] it 40 t  353.8s tok   9.830M eval 5.4893 up/step 1.102MB {'simTime': 1200.0, 'kept': 8, 'msgNorm': 25.3045, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.5762, 'inner1': 5.6573}
+[s-mo-k2w8] it 41 t  364.2s tok  10.076M eval 5.4742 up/step 1.102MB {'simTime': 1230.0, 'kept': 8, 'msgNorm': 25.2961, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 5.5482, 'inner1': 5.5544}
+{"label": "s-mo-k2w8", "steps": 41, "startLoss": 8.366497993469238, "finalLoss": 5.474193334579468, "bestLoss": 5.474193334579468, "diverged": false, "upBytesPerStep": 1101832.0, "tokens": 10076160}

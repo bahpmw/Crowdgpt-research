@@ -1,0 +1,2 @@
+# Add DUST: 8 backprop ReLoRA workers + 8 DUST ReLoRA workers per round.
+mosaic_dust K=2 workers=8 dworkers=8 rank=32 warm=4 up=factors --tokens 5898240 --seconds 100000 --label md-add-r32

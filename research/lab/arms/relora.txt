@@ -1,0 +1,17 @@
+# ReLoRA study: ReLoRA alone and inside MOSAIC. 10m, 10M tokens, seq 128 x batch 8 per (worker) step,
+# matching arms/solo-crowd.txt (s-mo-k2w8 and s-bp-128x8 come from that queue, not repeated here).
+relora rank=0 total=9766 --tokens 10000000 --seconds 100000 --label rl-full
+relora rank=32 total=9766 warm=977 every=500 --tokens 10000000 --seconds 100000 --label rl-r32
+relora rank=128 total=9766 warm=977 every=500 --tokens 10000000 --seconds 100000 --label rl-r128
+mosaic_relora K=2 workers=8 rank=32 warm=4 up=product --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-r32-prod
+mosaic_relora K=2 workers=8 rank=32 warm=4 up=factors --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-r32-fac
+mosaic_relora K=2 workers=8 rank=128 warm=4 up=product --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-r128-prod
+mosaic_relora K=2 workers=8 rank=128 warm=4 up=factors --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-r128-fac
+mosaic_relora K=2 workers=8 rank=32 warm=4 up=factoravg --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-r32-favg
+# 100m pair: ReLoRA r128 vs the same-schedule full-rank control, 4M tokens
+relora rank=0 lr=0.001 total=3906 --preset 100m --tokens 4000000 --seconds 100000 --eval-every 60 --label rl-100m-full
+relora rank=128 lr=0.001 total=3906 warm=391 every=500 --preset 100m --tokens 4000000 --seconds 100000 --eval-every 60 --label rl-100m-r128
+# plain MOSAIC K=2 w8 control: the SOLO queue (solo-crowd.txt, s-mo-k2w8) was stopped before reaching it
+mosaic K=2 workers=8 --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-base
+# dense MOSAIC (topk=0, fp32 deltas): the lossless-upload reference for up=factors
+mosaic K=2 workers=8 topk=0 --tokens 10000000 --seconds 100000 --label rl-mo-k2w8-dense

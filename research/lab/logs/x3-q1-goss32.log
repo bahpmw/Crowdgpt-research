@@ -1,0 +1,13 @@
+[x3-q1-goss32] start eval 8.3665
+[x3-q1-goss32] it 1 t   39.1s tok   0.492M eval 7.9376 up/step 26.116MB {'simTime': 30.0, 'innerLoss': 7.2395, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 7.1753, 'spread': 0.63494}
+[x3-q1-goss32] it 2 t   75.1s tok   0.983M eval 7.8593 up/step 26.116MB {'simTime': 60.0, 'innerLoss': 7.0742, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 7.0423, 'spread': 0.74462}
+[x3-q1-goss32] it 3 t  108.3s tok   1.475M eval 7.6721 up/step 26.116MB {'simTime': 90.0, 'innerLoss': 7.0108, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.9541, 'spread': 0.80745}
+[x3-q1-goss32] it 5 t  180.6s tok   2.458M eval 7.3625 up/step 26.116MB {'simTime': 150.0, 'innerLoss': 6.7841, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.7709, 'spread': 0.93125}
+[x3-q1-goss32] it 7 t  249.7s tok   3.441M eval 7.0465 up/step 26.116MB {'simTime': 210.0, 'innerLoss': 6.6001, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.6347, 'spread': 1.06021}
+[x3-q1-goss32] it 9 t  323.2s tok   4.424M eval 6.9251 up/step 26.116MB {'simTime': 270.0, 'innerLoss': 6.5135, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.5111, 'spread': 1.16938}
+[x3-q1-goss32] it 11 t  397.1s tok   5.407M eval 6.9131 up/step 26.116MB {'simTime': 330.0, 'innerLoss': 6.3999, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.4492, 'spread': 1.2476}
+[x3-q1-goss32] it 13 t  464.4s tok   6.390M eval 6.9107 up/step 26.116MB {'simTime': 390.0, 'innerLoss': 6.4074, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.3697, 'spread': 1.30298}
+[x3-q1-goss32] it 16 t  553.4s tok   7.864M eval 6.9705 up/step 26.116MB {'simTime': 480.0, 'innerLoss': 6.3474, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.2913, 'spread': 1.35455}
+[x3-q1-goss32] it 19 t  634.4s tok   9.339M eval 7.0089 up/step 26.116MB {'simTime': 570.0, 'innerLoss': 6.2852, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.2756, 'spread': 1.38112}
+[x3-q1-goss32] it 20 t  660.0s tok   9.830M eval 7.0334 up/step 26.116MB {'simTime': 600.0, 'innerLoss': 6.3425, 'upKB': 816.1, 'downKB': 816.1, 'msgNorm': 0.0, 'node0Loss': 6.2457, 'spread': 1.38573}
+{"label": "x3-q1-goss32", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 7.033393144607544, "bestLoss": 6.910748720169067, "diverged": false, "upBytesPerStep": 26116096.0, "tokens": 9830400}

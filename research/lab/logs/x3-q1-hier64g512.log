@@ -1,0 +1,12 @@
+[x3-q1-hier64g512] start eval 8.3665
+[x3-q1-hier64g512] it 1 t  102.8s tok   0.983M eval 7.9150 up/step 26.601MB {'simTime': 30.0, 'innerLoss': 7.2322, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 17.0831, 'node0Loss': 7.9085, 'spread': 0.04038}
+[x3-q1-hier64g512] it 2 t  210.4s tok   1.966M eval 7.4587 up/step 26.601MB {'simTime': 60.0, 'innerLoss': 7.1322, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 22.7141, 'node0Loss': 7.4787, 'spread': 0.06155}
+[x3-q1-hier64g512] it 3 t  317.0s tok   2.949M eval 8.8687 up/step 26.601MB {'simTime': 90.0, 'innerLoss': 6.9962, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 25.3086, 'node0Loss': 8.5155, 'spread': 0.07887}
+[x3-q1-hier64g512] it 4 t  416.0s tok   3.932M eval 7.4292 up/step 26.601MB {'simTime': 120.0, 'innerLoss': 7.0002, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 26.2892, 'node0Loss': 7.3475, 'spread': 0.09718}
+[x3-q1-hier64g512] it 5 t  518.3s tok   4.915M eval 7.1197 up/step 26.601MB {'simTime': 150.0, 'innerLoss': 6.9366, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 26.4856, 'node0Loss': 7.1029, 'spread': 0.10341}
+[x3-q1-hier64g512] it 6 t  611.6s tok   5.898M eval 6.9914 up/step 26.601MB {'simTime': 180.0, 'innerLoss': 6.8438, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 26.732, 'node0Loss': 6.9648, 'spread': 0.109}
+[x3-q1-hier64g512] it 7 t  705.2s tok   6.881M eval 6.8503 up/step 26.601MB {'simTime': 210.0, 'innerLoss': 6.8144, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 27.0024, 'node0Loss': 6.8404, 'spread': 0.11393}
+[x3-q1-hier64g512] it 8 t  791.7s tok   7.864M eval 6.7591 up/step 26.601MB {'simTime': 240.0, 'innerLoss': 6.7251, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 27.4329, 'node0Loss': 6.7467, 'spread': 0.11995}
+[x3-q1-hier64g512] it 9 t  878.4s tok   8.847M eval 6.6669 up/step 26.601MB {'simTime': 270.0, 'innerLoss': 6.6456, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 27.9744, 'node0Loss': 6.6412, 'spread': 0.12981}
+[x3-q1-hier64g512] it 10 t  957.3s tok   9.830M eval 6.5798 up/step 26.601MB {'simTime': 300.0, 'innerLoss': 6.6431, 'upKB': 415.6, 'downKB': 6435.8, 'msgNorm': 28.3262, 'node0Loss': 6.5651, 'spread': 0.12894}
+{"label": "x3-q1-hier64g512", "steps": 10, "startLoss": 8.366497993469238, "finalLoss": 6.579786062240601, "bestLoss": 6.579786062240601, "diverged": false, "upBytesPerStep": 26601472.0, "tokens": 9830400}

@@ -1,0 +1,15 @@
+[x3-q1-hier32] start eval 8.3665
+[x3-q1-hier32] it 1 t   22.4s tok   0.492M eval 7.9512 up/step 7.681MB {'simTime': 30.0, 'innerLoss': 7.239, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 17.0189, 'node0Loss': 7.9452, 'spread': 0.03221}
+[x3-q1-hier32] it 2 t   47.0s tok   0.983M eval 7.4753 up/step 7.681MB {'simTime': 60.0, 'innerLoss': 7.0927, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 22.6183, 'node0Loss': 7.4972, 'spread': 0.05152}
+[x3-q1-hier32] it 3 t   69.2s tok   1.475M eval 8.3133 up/step 7.681MB {'simTime': 90.0, 'innerLoss': 7.0287, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 25.1895, 'node0Loss': 8.3323, 'spread': 0.06759}
+[x3-q1-hier32] it 4 t   91.7s tok   1.966M eval 7.2544 up/step 7.681MB {'simTime': 120.0, 'innerLoss': 7.0324, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 25.9206, 'node0Loss': 7.2731, 'spread': 0.07944}
+[x3-q1-hier32] it 5 t  116.6s tok   2.458M eval 7.0360 up/step 7.681MB {'simTime': 150.0, 'innerLoss': 6.8941, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 26.3725, 'node0Loss': 7.0405, 'spread': 0.08927}
+[x3-q1-hier32] it 7 t  178.3s tok   3.441M eval 6.7780 up/step 7.681MB {'simTime': 210.0, 'innerLoss': 6.6775, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 27.1736, 'node0Loss': 6.7726, 'spread': 0.10494}
+[x3-q1-hier32] it 9 t  245.9s tok   4.424M eval 6.5404 up/step 7.681MB {'simTime': 270.0, 'innerLoss': 6.5744, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 27.9358, 'node0Loss': 6.5369, 'spread': 0.1173}
+[x3-q1-hier32] it 11 t  316.4s tok   5.407M eval 6.4067 up/step 7.681MB {'simTime': 330.0, 'innerLoss': 6.4697, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.4142, 'node0Loss': 6.4014, 'spread': 0.12709}
+[x3-q1-hier32] it 13 t  384.4s tok   6.390M eval 6.3076 up/step 7.681MB {'simTime': 390.0, 'innerLoss': 6.4672, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.7284, 'node0Loss': 6.3062, 'spread': 0.13418}
+[x3-q1-hier32] it 15 t  455.0s tok   7.373M eval 6.2303 up/step 7.681MB {'simTime': 450.0, 'innerLoss': 6.3978, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.9297, 'node0Loss': 6.231, 'spread': 0.1393}
+[x3-q1-hier32] it 17 t  527.9s tok   8.356M eval 6.1704 up/step 7.681MB {'simTime': 510.0, 'innerLoss': 6.3581, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.7892, 'node0Loss': 6.1713, 'spread': 0.14289}
+[x3-q1-hier32] it 19 t  594.5s tok   9.339M eval 6.1229 up/step 7.681MB {'simTime': 570.0, 'innerLoss': 6.3134, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.6629, 'node0Loss': 6.122, 'spread': 0.14553}
+[x3-q1-hier32] it 20 t  625.0s tok   9.830M eval 6.1020 up/step 7.681MB {'simTime': 600.0, 'innerLoss': 6.3809, 'upKB': 240.0, 'downKB': 3626.0, 'msgNorm': 28.5593, 'node0Loss': 6.1019, 'spread': 0.14648}
+{"label": "x3-q1-hier32", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 6.102019667625427, "bestLoss": 6.102019667625427, "diverged": false, "upBytesPerStep": 7681024.0, "tokens": 9830400}

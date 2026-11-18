@@ -1,0 +1,11 @@
+[x3-q2-mdir-byz] start eval 8.3665
+[x3-q2-mdir-byz] it 1 t   20.3s tok   0.492M eval 7.9645 up/step 3.432MB {'simTime': 30.0, 'innerLoss': 7.0921, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.3994}
+[x3-q2-mdir-byz] it 2 t   40.8s tok   0.983M eval 7.4760 up/step 3.432MB {'simTime': 60.0, 'innerLoss': 6.9143, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 30.6974}
+[x3-q2-mdir-byz] it 3 t   59.9s tok   1.475M eval 7.2175 up/step 3.432MB {'simTime': 90.0, 'innerLoss': 6.9276, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 33.007}
+[x3-q2-mdir-byz] it 5 t   97.8s tok   2.458M eval 6.8102 up/step 3.432MB {'simTime': 150.0, 'innerLoss': 6.6326, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 35.4327}
+[x3-q2-mdir-byz] it 8 t  165.8s tok   3.932M eval 6.3898 up/step 3.432MB {'simTime': 240.0, 'innerLoss': 6.4057, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 39.7134}
+[x3-q2-mdir-byz] it 11 t  252.7s tok   5.407M eval 6.1612 up/step 3.432MB {'simTime': 330.0, 'innerLoss': 6.2731, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 42.5436}
+[x3-q2-mdir-byz] it 14 t  337.8s tok   6.881M eval 6.0241 up/step 3.432MB {'simTime': 420.0, 'innerLoss': 6.1937, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 44.2309}
+[x3-q2-mdir-byz] it 17 t  426.0s tok   8.356M eval 5.9212 up/step 3.432MB {'simTime': 510.0, 'innerLoss': 6.1059, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 44.6882}
+[x3-q2-mdir-byz] it 20 t  514.4s tok   9.830M eval 5.8429 up/step 3.432MB {'simTime': 600.0, 'innerLoss': 6.0607, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 44.7462}
+{"label": "x3-q2-mdir-byz", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 5.842867493629456, "bestLoss": 5.842867493629456, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 9830400}

@@ -1,0 +1,36 @@
+[rl-100m-r128] start eval 8.4753
+[rl-100m-r128] it 1 t    1.0s tok   0.001M eval 8.4706 up/step 465.645MB {'lr': 1e-05, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 2 t    1.3s tok   0.002M eval 8.4592 up/step 465.645MB {'lr': 2e-05, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 5 t    2.2s tok   0.005M eval 8.3889 up/step 465.645MB {'lr': 5e-05, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 10 t    3.7s tok   0.010M eval 8.0033 up/step 465.645MB {'lr': 0.0001, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 20 t    6.8s tok   0.020M eval 7.3011 up/step 465.645MB {'lr': 0.0002, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 49 t   15.8s tok   0.050M eval 7.0661 up/step 465.645MB {'lr': 0.00049, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 98 t   30.9s tok   0.100M eval 6.7778 up/step 465.645MB {'lr': 0.000979, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 196 t   60.4s tok   0.201M eval 6.2839 up/step 465.645MB {'lr': 0.000994, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 199 t   61.3s tok   0.204M eval 6.2918 up/step 465.645MB {'lr': 0.000994, 'trainFrac': 1.0, 'lora': 0}
+[rl-100m-r128] it 398 t  121.5s tok   0.408M eval 6.0100 up/step 111.750MB {'lr': 0.000137, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 489 t  152.0s tok   0.501M eval 5.9353 up/step 111.750MB {'lr': 0.000966, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 575 t  181.7s tok   0.589M eval 5.8888 up/step 111.750MB {'lr': 0.000953, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 755 t  242.0s tok   0.773M eval 5.7787 up/step 111.750MB {'lr': 0.00092, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 933 t  302.2s tok   0.955M eval 5.6636 up/step 111.750MB {'lr': 0.000739, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 977 t  314.7s tok   1.000M eval 5.6753 up/step 111.750MB {'lr': 0.000868, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 1145 t  362.4s tok   1.172M eval 5.6303 up/step 111.750MB {'lr': 0.000823, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 1370 t  422.6s tok   1.403M eval 5.5502 up/step 111.750MB {'lr': 0.000754, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 1587 t  482.7s tok   1.625M eval 5.4935 up/step 111.750MB {'lr': 0.000681, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 1807 t  542.8s tok   1.850M eval 5.4678 up/step 111.750MB {'lr': 0.000603, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 1954 t  579.1s tok   2.001M eval 5.4131 up/step 111.750MB {'lr': 0.00055, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 2049 t  602.9s tok   2.098M eval 5.3978 up/step 111.750MB {'lr': 0.000516, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 2289 t  663.1s tok   2.344M eval 5.3629 up/step 111.750MB {'lr': 0.00043, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 2528 t  723.3s tok   2.589M eval 5.3319 up/step 111.750MB {'lr': 0.00035, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 2724 t  783.3s tok   2.789M eval 5.3081 up/step 111.750MB {'lr': 0.000289, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 2955 t  843.4s tok   3.026M eval 5.2737 up/step 111.750MB {'lr': 0.000226, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3127 t  903.7s tok   3.202M eval 5.2662 up/step 111.750MB {'lr': 0.000186, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3254 t  963.9s tok   3.332M eval 5.2563 up/step 111.750MB {'lr': 0.000161, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3380 t 1024.3s tok   3.461M eval 5.2557 up/step 111.750MB {'lr': 0.00014, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3496 t 1084.6s tok   3.580M eval 5.2506 up/step 111.750MB {'lr': 0.000124, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3600 t 1145.3s tok   3.686M eval 5.2420 up/step 111.750MB {'lr': 0.000114, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3702 t 1205.4s tok   3.791M eval 5.2402 up/step 111.750MB {'lr': 0.000106, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3802 t 1265.5s tok   3.893M eval 5.2358 up/step 111.750MB {'lr': 0.000102, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3903 t 1325.7s tok   3.997M eval 5.2335 up/step 111.750MB {'lr': 2.4e-05, 'trainFrac': 0.24, 'lora': 1}
+[rl-100m-r128] it 3907 t 1327.8s tok   4.001M eval 5.2331 up/step 111.750MB {'lr': 3.2e-05, 'trainFrac': 0.24, 'lora': 1}
+{"label": "rl-100m-r128", "steps": 3907, "startLoss": 8.47532033920288, "finalLoss": 5.233107328414917, "bestLoss": 5.233107328414917, "diverged": false, "upBytesPerStep": 147166757.87253648, "tokens": 4000768}

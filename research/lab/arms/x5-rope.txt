@@ -1,0 +1,2 @@
+gdn_hybrid pattern=RRRRRR tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-rope
+gdn_hybrid pattern=GGRGGR tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-g2r1

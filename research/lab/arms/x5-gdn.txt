@@ -1,0 +1,14 @@
+# X5: Gated DeltaNet hybrid vs plain transformer, 10m preset, 10M tokens, equal params (GDN H=2 dk=64 dv=128)
+gdn_hybrid pattern=AAAAAA tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-attn
+gdn_hybrid pattern=GGAGGA tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-g2a1
+gdn_hybrid pattern=GGGGGA tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-g5a1
+gdn_hybrid pattern=GGGGGG tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-gdn
+gdn_hybrid pattern=GGAGGA neg=1 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-g2a1-neg
+gdn_hybrid pattern=AAAAAA tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --seed 1 --label x5-attn-s1
+gdn_hybrid pattern=GGAGGA tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --seed 1 --label x5-g2a1-s1
+# controls added after the first hybrid result (3.92 vs 4.67): is the gain the delta rule or the short conv (NoPE model)?
+gdn_hybrid pattern=CCCCCC tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-cattn
+gdn_hybrid pattern=GGAGGA conv=0 tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-g2a1-noconv
+gdn_hybrid pattern=GGCGGC tokens=10000000 --preset 10m --seq 256 --batch 16 --tokens 10000000 --seconds 100000 --eval-every 30 --label x5-g2c1
+# equal wall time: x5-g2a1 trained 272 s for 10M tokens; x5-attn ran 56.8k tok/s, so ~15.45M tokens in 272 s
+gdn_hybrid pattern=AAAAAA tokens=15450000 --preset 10m --seq 256 --batch 16 --tokens 15450000 --seconds 100000 --eval-every 30 --label x5-attn-wall

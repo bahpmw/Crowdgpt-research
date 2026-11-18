@@ -1,0 +1,19 @@
+[x5-attn] start eval 8.3612
+[x5-attn] it 1 t    0.1s tok   0.004M eval 8.3487 up/step 0.000MB {'train': 8.35093879699707, 'lr': 3e-05}
+[x5-attn] it 2 t    0.2s tok   0.008M eval 8.3240 up/step 0.000MB {'train': 8.352243423461914, 'lr': 6e-05}
+[x5-attn] it 3 t    0.3s tok   0.012M eval 8.2849 up/step 0.000MB {'train': 8.321273803710938, 'lr': 8.999999999999999e-05}
+[x5-attn] it 5 t    0.4s tok   0.020M eval 8.1636 up/step 0.000MB {'train': 8.240455627441406, 'lr': 0.00015000000000000001}
+[x5-attn] it 13 t    1.0s tok   0.053M eval 7.7255 up/step 0.000MB {'train': 7.768492698669434, 'lr': 0.00039000000000000005}
+[x5-attn] it 25 t    1.8s tok   0.102M eval 7.0324 up/step 0.000MB {'train': 7.017670631408691, 'lr': 0.00075}
+[x5-attn] it 49 t    3.6s tok   0.201M eval 6.9303 up/step 0.000MB {'train': 6.969734191894531, 'lr': 0.00147}
+[x5-attn] it 123 t    9.0s tok   0.504M eval 6.1701 up/step 0.000MB {'train': 6.223994731903076, 'lr': 0.003}
+[x5-attn] it 245 t   18.0s tok   1.004M eval 5.8112 up/step 0.000MB {'train': 5.883617401123047, 'lr': 0.003}
+[x5-attn] it 403 t   30.1s tok   1.651M eval 5.5993 up/step 0.000MB {'train': 5.604536533355713, 'lr': 0.003}
+[x5-attn] it 489 t   36.6s tok   2.003M eval 5.4894 up/step 0.000MB {'train': 5.452035903930664, 'lr': 0.003}
+[x5-attn] it 803 t   60.2s tok   3.289M eval 5.2543 up/step 0.000MB {'train': 5.244638442993164, 'lr': 0.003}
+[x5-attn] it 1212 t   90.3s tok   4.964M eval 5.1061 up/step 0.000MB {'train': 5.140252113342285, 'lr': 0.003}
+[x5-attn] it 1221 t   90.9s tok   5.001M eval 5.1107 up/step 0.000MB {'train': 5.092618465423584, 'lr': 0.003}
+[x5-attn] it 1653 t  120.3s tok   6.771M eval 4.9879 up/step 0.000MB {'train': 4.92637300491333, 'lr': 0.003}
+[x5-attn] it 2075 t  150.3s tok   8.499M eval 4.8397 up/step 0.000MB {'train': 4.803246974945068, 'lr': 0.0023263803680981594}
+[x5-attn] it 2442 t  176.0s tok  10.002M eval 4.6744 up/step 0.000MB {'train': 4.649046897888184, 'lr': 0.0002999999999999999}
+{"label": "x5-attn", "steps": 2442, "startLoss": 8.361234903335571, "finalLoss": 4.674422979354858, "bestLoss": 4.674422979354858, "diverged": false, "upBytesPerStep": 0.0, "tokens": 10002432}

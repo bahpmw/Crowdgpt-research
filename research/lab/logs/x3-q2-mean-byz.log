@@ -1,0 +1,14 @@
+[x3-q2-mean-byz] start eval 8.3665
+[x3-q2-mean-byz] it 1 t   16.4s tok   0.492M eval 8.1611 up/step 3.432MB {'simTime': 30.0, 'innerLoss': 7.0922, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.3991}
+[x3-q2-mean-byz] it 2 t   32.3s tok   0.983M eval 7.8592 up/step 3.432MB {'simTime': 60.0, 'innerLoss': 7.0026, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 31.8642}
+[x3-q2-mean-byz] it 3 t   49.6s tok   1.475M eval 7.7461 up/step 3.432MB {'simTime': 90.0, 'innerLoss': 7.0021, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 37.0121}
+[x3-q2-mean-byz] it 5 t   84.6s tok   2.458M eval 7.5335 up/step 3.432MB {'simTime': 150.0, 'innerLoss': 6.7883, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 42.705}
+[x3-q2-mean-byz] it 8 t  146.9s tok   3.932M eval 7.1642 up/step 3.432MB {'simTime': 240.0, 'innerLoss': 6.5676, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 47.7574}
+[x3-q2-mean-byz] it 10 t  212.9s tok   4.915M eval 6.9652 up/step 3.432MB {'simTime': 300.0, 'innerLoss': 6.5146, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 50.3526}
+[x3-q2-mean-byz] it 11 t  244.6s tok   5.407M eval 6.8706 up/step 3.432MB {'simTime': 330.0, 'innerLoss': 6.4573, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 51.5688}
+[x3-q2-mean-byz] it 12 t  276.3s tok   5.898M eval 6.7727 up/step 3.432MB {'simTime': 360.0, 'innerLoss': 6.4745, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 52.5272}
+[x3-q2-mean-byz] it 14 t  341.9s tok   6.881M eval 6.6311 up/step 3.432MB {'simTime': 420.0, 'innerLoss': 6.4081, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 53.8092}
+[x3-q2-mean-byz] it 16 t  407.1s tok   7.864M eval 6.5714 up/step 3.432MB {'simTime': 480.0, 'innerLoss': 6.3512, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 54.6123}
+[x3-q2-mean-byz] it 19 t  486.4s tok   9.339M eval 6.4111 up/step 3.432MB {'simTime': 570.0, 'innerLoss': 6.3798, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 55.2365}
+[x3-q2-mean-byz] it 20 t  511.6s tok   9.830M eval 6.3630 up/step 3.432MB {'simTime': 600.0, 'innerLoss': 6.3298, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 55.2827}
+{"label": "x3-q2-mean-byz", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 6.363029956817627, "bestLoss": 6.363029956817627, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 9830400}

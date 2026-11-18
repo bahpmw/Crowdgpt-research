@@ -1,0 +1,13 @@
+=== x3-ref-solo300 12:45:10
+[x3-ref-solo300] it 300 t   10.0s tok   0.154M eval 6.4665 up/step 29.373MB {}
+{"label": "x3-ref-solo300", "steps": 300, "startLoss": 8.366497993469238, "finalLoss": 6.466462135314941, "bestLoss": 6.466462135314941, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 153600}
+=== x3-ref-solo600 12:45:27
+[x3-ref-solo600] it 600 t   19.2s tok   0.307M eval 6.2509 up/step 29.373MB {}
+{"label": "x3-ref-solo600", "steps": 600, "startLoss": 8.366497993469238, "finalLoss": 6.250922083854675, "bestLoss": 6.250922083854675, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 307200}
+=== x3-ref-solo1200 12:45:55
+[x3-ref-solo1200] it 1200 t   36.6s tok   0.614M eval 6.1162 up/step 29.373MB {}
+{"label": "x3-ref-solo1200", "steps": 1200, "startLoss": 8.366497993469238, "finalLoss": 6.11623740196228, "bestLoss": 6.11623740196228, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 614400}
+=== x3-ref-ddp16 12:46:38
+[x3-ref-ddp16] it 1200 t  288.0s tok   9.830M eval 4.7047 up/step 29.373MB {}
+{"label": "x3-ref-ddp16", "steps": 1200, "startLoss": 8.366497993469238, "finalLoss": 4.704731225967407, "bestLoss": 4.704731225967407, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 9830400}
+round1 done 12:51:37

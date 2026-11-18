@@ -1,0 +1,16 @@
+[x3-ref-ddp16] start eval 8.3665
+[x3-ref-ddp16] it 1 t    1.5s tok   0.008M eval 8.1089 up/step 29.373MB {}
+[x3-ref-ddp16] it 2 t    1.8s tok   0.016M eval 7.6297 up/step 29.373MB {}
+[x3-ref-ddp16] it 3 t    2.0s tok   0.025M eval 7.3010 up/step 29.373MB {}
+[x3-ref-ddp16] it 7 t    3.0s tok   0.057M eval 7.0551 up/step 29.373MB {}
+[x3-ref-ddp16] it 13 t    4.5s tok   0.106M eval 7.0018 up/step 29.373MB {}
+[x3-ref-ddp16] it 25 t    7.4s tok   0.205M eval 6.9670 up/step 29.373MB {}
+[x3-ref-ddp16] it 62 t   16.6s tok   0.508M eval 6.4810 up/step 29.373MB {}
+[x3-ref-ddp16] it 123 t   31.6s tok   1.008M eval 6.0715 up/step 29.373MB {}
+[x3-ref-ddp16] it 245 t   61.6s tok   2.007M eval 5.6546 up/step 29.373MB {}
+[x3-ref-ddp16] it 491 t  121.7s tok   4.022M eval 5.2018 up/step 29.373MB {}
+[x3-ref-ddp16] it 611 t  150.9s tok   5.005M eval 5.0831 up/step 29.373MB {}
+[x3-ref-ddp16] it 738 t  181.8s tok   6.046M eval 4.9674 up/step 29.373MB {}
+[x3-ref-ddp16] it 995 t  241.9s tok   8.151M eval 4.8212 up/step 29.373MB {}
+[x3-ref-ddp16] it 1200 t  288.0s tok   9.830M eval 4.7047 up/step 29.373MB {}
+{"label": "x3-ref-ddp16", "steps": 1200, "startLoss": 8.366497993469238, "finalLoss": 4.704731225967407, "bestLoss": 4.704731225967407, "diverged": false, "upBytesPerStep": 29373440.0, "tokens": 9830400}

@@ -1,0 +1,14 @@
+[x3-q1-flat32-mdir] start eval 8.3665
+[x3-q1-flat32-mdir] it 1 t   46.4s tok   0.492M eval 7.9081 up/step 6.865MB {'simTime': 30.0, 'innerLoss': 7.2401, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 17.0186}
+[x3-q1-flat32-mdir] it 2 t   97.5s tok   0.983M eval 7.5110 up/step 6.865MB {'simTime': 60.0, 'innerLoss': 7.0521, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 21.9586}
+[x3-q1-flat32-mdir] it 3 t  146.0s tok   1.475M eval 7.1989 up/step 6.865MB {'simTime': 90.0, 'innerLoss': 7.0177, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 23.9215}
+[x3-q1-flat32-mdir] it 5 t  248.7s tok   2.458M eval 6.8371 up/step 6.865MB {'simTime': 150.0, 'innerLoss': 6.833, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 24.0195}
+[x3-q1-flat32-mdir] it 7 t  344.5s tok   3.441M eval 6.6229 up/step 6.865MB {'simTime': 210.0, 'innerLoss': 6.6168, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 24.4566}
+[x3-q1-flat32-mdir] it 9 t  421.5s tok   4.424M eval 6.4428 up/step 6.865MB {'simTime': 270.0, 'innerLoss': 6.5167, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 26.0738}
+[x3-q1-flat32-mdir] it 11 t  484.3s tok   5.407M eval 6.3207 up/step 6.865MB {'simTime': 330.0, 'innerLoss': 6.3974, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 27.6901}
+[x3-q1-flat32-mdir] it 13 t  554.4s tok   6.390M eval 6.2385 up/step 6.865MB {'simTime': 390.0, 'innerLoss': 6.4037, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.5582}
+[x3-q1-flat32-mdir] it 15 t  645.2s tok   7.373M eval 6.1693 up/step 6.865MB {'simTime': 450.0, 'innerLoss': 6.3319, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.633}
+[x3-q1-flat32-mdir] it 17 t  736.1s tok   8.356M eval 6.1160 up/step 6.865MB {'simTime': 510.0, 'innerLoss': 6.3004, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.5286}
+[x3-q1-flat32-mdir] it 19 t  831.0s tok   9.339M eval 6.0727 up/step 6.865MB {'simTime': 570.0, 'innerLoss': 6.2581, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.5962}
+[x3-q1-flat32-mdir] it 20 t  880.3s tok   9.830M eval 6.0539 up/step 6.865MB {'simTime': 600.0, 'innerLoss': 6.3187, 'upKB': 214.5, 'downKB': 6650.4, 'msgNorm': 28.714}
+{"label": "x3-q1-flat32-mdir", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 6.053929567337036, "bestLoss": 6.053929567337036, "diverged": false, "upBytesPerStep": 6864896.0, "tokens": 9830400}

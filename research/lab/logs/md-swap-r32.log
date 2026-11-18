@@ -1,0 +1,2 @@
+[md-swap-r32] start eval 8.3665
+[md-swap-r32] it 1 t  812.2s tok   0.246M eval 8.2862 up/step 1.102MB {'simTime': 30.0, 'kept': 8, 'msgNorm': 0.788, 'workerParamFrac': 0.556, 'upPerWorkerMB': 0.138, 'inner0': 8.3387, 'inner1': 8.1827, 'lora': 0, 'upMode': 'factors', 'dustWorkers': 8, 'dustForwards': 61440}

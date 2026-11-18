@@ -1,0 +1,14 @@
+[x3-q2-mean] start eval 8.3665
+[x3-q2-mean] it 1 t   24.5s tok   0.492M eval 7.9424 up/step 3.432MB {'simTime': 30.0, 'innerLoss': 7.0921, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 16.2532}
+[x3-q2-mean] it 2 t   46.2s tok   0.983M eval 7.4096 up/step 3.432MB {'simTime': 60.0, 'innerLoss': 6.9795, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 21.0726}
+[x3-q2-mean] it 3 t   67.6s tok   1.475M eval 7.8756 up/step 3.432MB {'simTime': 90.0, 'innerLoss': 6.9388, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 23.0868}
+[x3-q2-mean] it 4 t   85.9s tok   1.966M eval 7.1739 up/step 3.432MB {'simTime': 120.0, 'innerLoss': 6.8375, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 24.6474}
+[x3-q2-mean] it 5 t  105.8s tok   2.458M eval 6.8649 up/step 3.432MB {'simTime': 150.0, 'innerLoss': 6.637, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 25.8117}
+[x3-q2-mean] it 7 t  146.2s tok   3.441M eval 6.5368 up/step 3.432MB {'simTime': 210.0, 'innerLoss': 6.4717, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 26.694}
+[x3-q2-mean] it 10 t  209.7s tok   4.915M eval 6.2441 up/step 3.432MB {'simTime': 300.0, 'innerLoss': 6.3201, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 27.7898}
+[x3-q2-mean] it 11 t  229.8s tok   5.407M eval 6.1787 up/step 3.432MB {'simTime': 330.0, 'innerLoss': 6.2806, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.0761}
+[x3-q2-mean] it 13 t  270.6s tok   6.390M eval 6.0770 up/step 3.432MB {'simTime': 390.0, 'innerLoss': 6.2469, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.4122}
+[x3-q2-mean] it 16 t  332.9s tok   7.864M eval 5.9701 up/step 3.432MB {'simTime': 480.0, 'innerLoss': 6.1391, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.4802}
+[x3-q2-mean] it 19 t  395.3s tok   9.339M eval 5.8988 up/step 3.432MB {'simTime': 570.0, 'innerLoss': 6.1408, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.4936}
+[x3-q2-mean] it 20 t  415.7s tok   9.830M eval 5.8782 up/step 3.432MB {'simTime': 600.0, 'innerLoss': 6.0997, 'upKB': 214.5, 'downKB': 3217.9, 'msgNorm': 28.5077}
+{"label": "x3-q2-mean", "steps": 20, "startLoss": 8.366497993469238, "finalLoss": 5.878160834312439, "bestLoss": 5.878160834312439, "diverged": false, "upBytesPerStep": 3432448.0, "tokens": 9830400}

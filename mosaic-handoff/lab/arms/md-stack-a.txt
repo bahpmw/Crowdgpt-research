@@ -1,0 +1,5 @@
+# User's stack test: MOSAIC + ReLoRA + SOLO heads, with DUST swapped in or added.
+# Reference (stack A, backprop): rl-mo-k2w8-r32-fac in arms/relora.txt; compare at equal rounds.
+mosaic_dust K=2 workers=8 rank=32 warm=4 up=factors donly=1 mode=all --tokens 2949120 --seconds 100000 --label md-swap-all-r32
+mosaic_dust K=2 workers=8 rank=32 warm=4 up=factors donly=1 --tokens 2949120 --seconds 100000 --label md-swap-r32
+mosaic_dust K=2 workers=8 rank=0 topk=0 donly=1 --tokens 2949120 --seconds 100000 --label md-swap-full

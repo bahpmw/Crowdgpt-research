@@ -1,0 +1,36 @@
+# X3 sync shapes (methods/hsync.py), 10m preset, H=30, top-64/4096 2-bit EF messages, 9,830,400 tokens per arm
+# Q1: flat vs groups-of-16 + sparse inter-group gossip vs pure gossip; seq 128 x batch 4 per replica step
+# (32 replicas = 20 rounds, 64 replicas = 10 rounds at this budget)
+hsync topo=flat workers=16 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-flat16
+hsync topo=flat workers=32 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-flat32
+hsync topo=hier workers=32 partners=1 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-hier32
+hsync topo=gossip workers=32 partners=2 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-goss32
+hsync topo=flat workers=64 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-flat64
+hsync topo=hier workers=64 partners=1 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-hier64
+hsync topo=hier workers=64 partners=2 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-hier64p2
+hsync topo=hier workers=64 partners=1 gk=512 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-hier64g512
+hsync topo=gossip workers=64 partners=2 --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-goss64
+# Q2: merge rule, flat 16 replicas, seq 128 x batch 8 (20 rounds); byz=8 -> 2 of 16 send -5x; lazy=4 -> 4 of 16 send 0.01x
+hsync workers=16 merge=mean --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mean
+hsync workers=16 merge=mdir --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mdir
+hsync workers=16 merge=mean byz=8 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mean-byz
+hsync workers=16 merge=mdir byz=8 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mdir-byz
+hsync workers=16 merge=mean lazy=4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mean-lazy
+hsync workers=16 merge=mdir lazy=4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mdir-lazy
+hsync workers=16 merge=mdir alpha=0.5 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q2-mdir-a05
+# Q3: 4 of 16 workers 4x slower; sync waits, budget = steps by speed, units = equal 8-step units
+hsync workers=16 slow=4 het=sync --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q3-sync
+hsync workers=16 slow=4 het=budget weight=equal --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q3-budget-eq
+hsync workers=16 slow=4 het=budget weight=tokens --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q3-budget-tok
+hsync workers=16 slow=4 het=units unit=8 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q3-units
+# Q4: inner AdamW beta2 rule beta2 = 0.95^(1/16) at 16 replicas (control = x3-q2-mean)
+hsync workers=16 beta2=0.9968 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q4-b2rule
+# References (plain AdamW, no crowd): one replica's own share of steps at 64/32/16 replicas (batch 4), and
+# synchronous data parallel with the 16-replica global batch every step (batch 64 = 16 x 4), same 9.83M tokens
+adam lr=0.003 --batch 4 --tokens 153600 --seconds 100000 --eval-every 60 --label x3-ref-solo300
+adam lr=0.003 --batch 4 --tokens 307200 --seconds 100000 --eval-every 60 --label x3-ref-solo600
+adam lr=0.003 --batch 4 --tokens 614400 --seconds 100000 --eval-every 60 --label x3-ref-solo1200
+adam lr=0.003 --batch 64 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-ref-ddp16
+# Q1 follow-up: the same shapes with the median-norm x mean-direction merge (Q2 winner) inside each node
+hsync topo=flat workers=32 merge=mdir --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-flat32-mdir
+hsync topo=hier workers=32 partners=1 merge=mdir --batch 4 --tokens 9830400 --seconds 100000 --eval-every 60 --label x3-q1-hier32-mdir

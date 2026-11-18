@@ -1,0 +1,22 @@
+{
+  "name": "chaos",
+  "orchestrators": 3,
+  "hyper": {"preset": "10m", "seq": 128, "H": 30, "batch": 8, "K": 2},
+  "p_audit": 0.5,
+  "calib_devices": ["mps"],
+  "timing": {"open": 4.0, "commit": 120.0, "upload": 30.0, "audit": 150.0, "propose_timeout": 8.0, "final_timeout": 15.0},
+  "rounds": 10,
+  "clients": [{"behaviour": "honest", "count": 6}],
+  "chaos": [
+    {"at_round": 3, "action": "kill_leader"},
+    {"at_round": 5, "action": "kill_leader"},
+    {"at_round": 7, "action": "restart"},
+    {"at_round": 8, "action": "restart"}
+  ],
+  "churn": [
+    {"client": 4, "leave_after": 2, "rejoin_at_round": 5},
+    {"client": 5, "leave_after": 4, "rejoin_at_round": 8}
+  ],
+  "base_port": 8721,
+  "max_minutes": 20
+}

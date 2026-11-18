@@ -1,0 +1,13 @@
+# Versions this code was run and tested with (Python 3.12.13, Apple MPS and CPU).
+torch==2.15.0
+numpy==2.5.5
+# Network MVP only
+fastapi==0.163.1
+uvicorn==0.54.0
+httpx==0.28.1
+pydantic==2.14.3
+cryptography==46.0.3
+safetensors==0.8.0
+pytest==9.2.0
+# tools/prepare_tokens.py only
+pyarrow
